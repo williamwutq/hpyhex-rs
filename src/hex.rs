@@ -92,7 +92,7 @@ use std::ops::{Add, Sub};
 /// Prefer using [`Hex::new`] or [`From<(i32, i32)>`] for construction, as these ensure correct coordinate logic.
 ///
 /// Designed by William Wu. Adapted for Rust.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Hex {
     i: i32,
     k: i32,
@@ -305,6 +305,16 @@ impl fmt::Display for Hex {
     }
 }
 
+impl fmt::Debug for Hex {
+    /// Formats Hex for debugging
+    /// 
+    /// ## Returns
+    /// A string representation of the `Hex` in the format "{i, j, k}".
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{{}, {}, {}}}", self.i, self.j(), self.k)
+    }
+}
+
 /// Represents a shape or unit made up of multiple blocks in a fixed hexagonal pattern.
 ///
 /// A `Piece` is a compact, immutable structure representing a small, self-contained hexagonal grid of up to 7 blocks.
@@ -355,7 +365,7 @@ impl fmt::Display for Hex {
 /// - The design is optimized for fast bitwise operations and compact storage.
 ///
 /// Designed by William Wu. Adapted for Rust.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Piece {
     /// Bitfield: bits 0-6 represent occupancy of each position
     /// Bit 7 is unused (pieces only have 7 blocks)
@@ -607,6 +617,25 @@ impl fmt::Display for Piece {
     }
 }
 
+impl fmt::Debug for Piece {
+    /// Formats Piece for debugging
+    /// 
+    /// The format is: `{ code: <bitfield>, count: <count>, blocks: {(i, k, occupied), ...} }`.
+    ///
+    /// ## Returns
+    /// A string representation of the `Piece` with detailed information.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{ code: {}, count: {}, blocks: [", self.states, self.count())?;
+        for (i, &pos) in Self::POSITIONS.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "({}, {}, {})", pos.i, pos.k, self.is_occupied_unsafe(i))?;
+        }
+        write!(f, "] }}")
+    }
+}
+
 impl From<u8> for Piece {
     /// Creates a Piece from a bitfield
     /// 
@@ -626,6 +655,71 @@ impl Into<u8> for Piece {
     #[inline]
     fn into(self) -> u8 {
         self.as_u8()
+    }
+}
+
+impl Into<[bool; 7]> for Piece {
+    /// Converts Piece to a boolean array
+    /// 
+    /// ## Returns
+    /// An array of 7 booleans representing block occupancy.
+    #[inline]
+    fn into(self) -> [bool; 7] {
+        let mut states = [false; 7];
+        for i in 0..7 {
+            states[i] = self.is_occupied_unsafe(i);
+        }
+        states
+    }
+}
+
+impl From <[bool; 7]> for Piece {
+    /// Creates a Piece from a boolean array
+    /// 
+    /// ## Parameters
+    /// - `states`: Array of 7 booleans representing block occupancy
+    #[inline]
+    fn from(states: [bool; 7]) -> Self {
+        Piece::from_bools(&states)
+    }
+}
+
+impl Into<Vec<Hex>> for Piece {
+    /// Converts Piece to a vector of occupied coordinates
+    /// 
+    /// ## Returns
+    /// A vector of `Hex` coordinates for occupied blocks.
+    #[inline]
+    fn into(self) -> Vec<Hex> {
+        self.coordinates()
+    }   
+}
+
+impl TryFrom<Vec<Hex>> for Piece {
+    type Error = String;
+
+    /// Creates a Piece from a vector of coordinates
+    /// 
+    /// ## Parameters
+    /// - `coords`: Vector of `Hex` coordinates representing occupied blocks
+    /// 
+    /// ## Returns
+    /// A new `Piece` instance or an error if any coordinate is invalid.
+    fn try_from(coords: Vec<Hex>) -> Result<Self, Self::Error> {
+        let mut bits = 0u8;
+        let mut seen = [false; 7];
+        for coo in coords {
+            if let Some(idx) = Piece::POSITIONS.iter().position(|&p| p == coo) {
+            if seen[idx] {
+                return Err(format!("Duplicate coordinate for piece: {}", coo));
+            }
+            seen[idx] = true;
+            bits |= 1 << (6 - idx);
+            } else {
+            return Err(format!("Invalid coordinate for piece: {}", coo));
+            }
+        }
+        Ok(Piece { states: bits })
     }
 }
 
@@ -682,7 +776,7 @@ impl Into<u8> for Piece {
 /// - See [`Hex`] for more on the coordinate system.
 ///
 /// Designed by William Wu. Adapted for Rust.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash)]
 pub struct HexEngine {
     radius: usize,
     states: Vec<bool>,
@@ -1372,6 +1466,108 @@ impl Clone for HexEngine {
     }
 }
 
+impl TryFrom<&str> for HexEngine {
+    type Error = String;
+
+    /// Creates a HexEngine from a binary string
+    /// 
+    /// ## Parameters
+    /// - `s`: String representing block occupancy
+    /// 
+    /// ## Returns
+    /// A `Result<HexEngine, String>` containing the new grid or an error if invalid.
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        HexEngine::from_string(s)
+    }
+}
+
+impl TryFrom<Vec<bool>> for HexEngine {
+    type Error = String;
+
+    /// Creates a HexEngine from a boolean vector
+    /// 
+    /// ## Parameters
+    /// - `states`: Vector of booleans representing block occupancy
+    /// 
+    /// ## Returns
+    /// A `Result<HexEngine, String>` containing the new grid or an error if invalid.
+    fn try_from(states: Vec<bool>) -> Result<Self, Self::Error> {
+        HexEngine::from_states(states)
+    }
+}
+
+impl TryFrom<Vec<Hex>> for HexEngine {
+    type Error = String;
+
+    /// Creates a HexEngine from a vector of occupied coordinates
+    /// 
+    /// ## Parameters
+    /// - `coords`: Vector of `Hex` coordinates representing occupied blocks
+    /// 
+    /// ## Returns
+    /// A `Result<HexEngine, String>` containing the new grid or an error if invalid.
+    fn try_from(coords: Vec<Hex>) -> Result<Self, Self::Error> {
+        let mut max_i = 0;
+        let mut max_k = 0;
+
+        for coo in &coords {
+            if coo.i > max_i {
+                max_i = coo.i;
+            }
+            if coo.k > max_k {
+                max_k = coo.k;
+            }
+        }
+
+        let radius = ((max_i.max(max_k) + 1) as f64 / 2.0).ceil() as usize;
+        let mut engine = HexEngine::new(radius);
+
+        for coo in coords {
+            engine.set(coo, true)?;
+        }
+
+        Ok(engine)
+    }
+}
+
+impl Into<String> for HexEngine {
+    /// Converts HexEngine to binary string
+    /// 
+    /// ## Returns
+    /// A string of '0's and '1's representing block occupancy.
+    fn into(self) -> String {
+        self.to_binary_string()
+    }
+}
+
+impl Into<Vec<bool>> for HexEngine {
+    /// Converts HexEngine to boolean vector
+    /// 
+    /// ## Returns
+    /// A vector of booleans representing block occupancy.
+    fn into(self) -> Vec<bool> {
+        self.states
+    }
+}
+
+impl Into<Vec<Hex>> for HexEngine {
+    /// Converts HexEngine to vector of occupied coordinates
+    /// 
+    /// ## Returns
+    /// A vector of `Hex` coordinates representing occupied blocks.
+    fn into(self) -> Vec<Hex> {
+        let mut coords = Vec::new();
+        for (i, &state) in self.states.iter().enumerate() {
+            if state {
+                if let Some(coo) = self.coordinate_of(i) {
+                    coords.push(coo);
+                }
+            }
+        }
+        coords
+    }
+}
+
 impl fmt::Display for HexEngine {
     /// Formats HexEngine for display
     /// 
@@ -1393,6 +1589,48 @@ impl fmt::Display for HexEngine {
     }
 }
 
+impl std::fmt::Debug for HexEngine {
+    /// Formats HexEngine for debugging
+    /// 
+    /// The format is a visual representation of the hexagonal grid, with 'X' for occupied blocks and 'O' for unoccupied blocks.
+    /// 
+    /// ## Returns
+    /// A string representation of the `HexEngine` in a hexagonal layout.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let r = self.radius;
+        let mut idx = 0;
+        // Top half
+        for i in 0..r {
+            // Leading spaces
+            for _ in 0..(r - i - 1) {
+                write!(f, " ")?;
+            }
+            // Hexagon blocks
+            for _ in 0..(r + i) {
+                let c = if self.states[idx] { 'X' } else { 'O' };
+                write!(f, "{} ", c)?;
+                idx += 1;
+            }
+            writeln!(f)?;
+        }
+        // Bottom half
+        for i in 0..(r - 1) {
+            // Leading spaces
+            for _ in 0..(i + 1) {
+                write!(f, " ")?;
+            }
+            // Hexagon blocks
+            for _ in 0..(2 * r - 2 - i) {
+                let c = if self.states[idx] { 'X' } else { 'O' };
+                write!(f, "{} ", c)?;
+                idx += 1;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1407,6 +1645,14 @@ mod tests {
         assert_eq!(h.i(), 1);
         assert_eq!(h.k(), 2);
         assert_eq!(h.j(), 1);
+    }
+
+    #[test]
+    fn print_engine_debug() {
+        let mut engine = HexEngine::new(5);
+        engine.set(Hex::new(1, 1), true).unwrap();
+        engine.set(Hex::new(2, 2), true).unwrap();
+        println!("{:?}", engine);
     }
 
     #[test]
