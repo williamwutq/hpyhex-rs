@@ -2,5 +2,10 @@
 name = "hpyhex-rs"
 version = "0.1.0"
 edition = "2024"
+description = "Simplified implementations of the HappyHex game components and hexagonal system in Rust."
+readme = "README.md"
+repository = "https://github.com/williamwutq/hpyhex-rs"
+license = "MIT"
+keywords = ["hexagonal", "grid", "game", "happyhex", "hex"]
 
 [dependencies]
