@@ -18,7 +18,6 @@
 //! - Uses primitive types and bitwise operations for efficient storage and computation.
 //! - Provides O(1) methods for coordinate-index conversions.
 //! - Optimized algorithms for piece placement, elimination, and density calculations.
-#![allow(dead_code)]
 
 use std::fmt;
 use std::ops::{Add, Sub};
