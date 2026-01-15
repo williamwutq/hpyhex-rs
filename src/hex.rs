@@ -98,6 +98,14 @@ pub struct Hex {
     k: i32,
 }
 
+impl Default for Hex {
+    /// Creates a default Hex at (0, 0)
+    #[inline]
+    fn default() -> Self {
+        Hex { i: 0, k: 0 }
+    }
+}
+
 impl Hex {
     /// Creates a new Hex at position (i, k)
     /// 
@@ -370,6 +378,14 @@ pub struct Piece {
     /// Bitfield: bits 0-6 represent occupancy of each position
     /// Bit 7 is unused (pieces only have 7 blocks)
     states: u8,
+}
+
+impl Default for Piece {
+    /// Creates a default empty Piece
+    #[inline]
+    fn default() -> Self {
+        Piece { states: 0 }
+    }
 }
 
 impl Piece {
@@ -780,6 +796,14 @@ impl TryFrom<Vec<Hex>> for Piece {
 pub struct HexEngine {
     radius: usize,
     states: Vec<bool>,
+}
+
+impl Default for HexEngine {
+    /// Creates a default empty HexEngine with radius 0
+    #[inline]
+    fn default() -> Self {
+        HexEngine::new(0)
+    }
 }
 
 impl HexEngine {
