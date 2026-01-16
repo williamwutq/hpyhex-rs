@@ -9,5 +9,5 @@ name = "hpyhex_rspy"
 crate-type = ["cdylib"]
 
 [dependencies]
-hpyhex-rs = "0.1.0"
-libc = "0.2.180"
+pyo3 = { version = "0.21", features = ["extension-module"] }
+
