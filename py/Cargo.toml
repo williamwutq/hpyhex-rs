@@ -9,3 +9,5 @@ name = "py"
 crate-type = ["cdylib"]
 
 [dependencies]
+hpyhex-rs = "0.1.0"
+libc = "0.2.180"
