@@ -76,3 +76,8 @@ docs/_build/
 
 # Pyenv
 .python-version
+
+# Sphinx
+_build/
+_static/
+_templates/
