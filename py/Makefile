@@ -1,20 +1,41 @@
-# Minimal makefile for Sphinx documentation
-#
+# Makefile for Sphinx and Maturin
 
-# You can set these variables from the command line, and also
-# from the environment for the first two.
 SPHINXOPTS    ?=
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
+PYVERSION	  ?= python3.11
 
 # Put it first so that "make" without argument is like "make help".
 help:
-	@$(SPHINXBUILD) -M help "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	@echo "Makefile for building Rust extension and Sphinx documentation"
+	@echo ""
+	@echo "Available targets:"
+	@echo "  build      Build the Rust extension module using maturin"
+	@echo "  html       Build HTML documentation"
+	@echo "  latex      Build LaTeX documentation"
+	@echo "  man		   Build man page documentation"
+	@echo "  clean      Clean up build files"
 
 .PHONY: help Makefile
 
-# Catch-all target: route all unknown targets to Sphinx using the new
-# "make mode" option.  $(O) is meant as a shortcut for $(SPHINXOPTS).
-%: Makefile
-	@$(SPHINXBUILD) -M $@ "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+# Build the Rust extension module
+build:
+	maturin build --release --interpreter "$(PYVERSION)" --out dist/
+
+# Compile docs for HTML
+html:
+	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+# Compile docs for LaTeX
+latex:
+	@$(SPHINXBUILD) -M latex "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+# Compile docs for man pages
+man:
+	@$(SPHINXBUILD) -M man "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+
+# Cleanup build files
+clean:
+	@$(SPHINXBUILD) -M clean "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	rm -rf dist/
