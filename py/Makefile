@@ -14,7 +14,7 @@ help:
 	@echo "  build      Build the Rust extension module using maturin"
 	@echo "  html       Build HTML documentation"
 	@echo "  latex      Build LaTeX documentation"
-	@echo "  man		   Build man page documentation"
+	@echo "  man		Build man page documentation"
 	@echo "  clean      Clean up build files"
 
 .PHONY: help Makefile
