@@ -767,18 +767,21 @@ where
     /// - `capacity`: The initial capacity of the queue.
     ///
     /// ## Returns
-    /// A new `PieceQueue<T>` instance.
-    pub fn new(capacity: usize) -> Self {
+    /// An `Option<PieceQueue<T>>` containing the new queue, or `None` if capacity is zero.
+    pub fn new(capacity: usize) -> Option<Self> {
+        if capacity == 0 {
+            return None;
+        }
         let mut pieces = Vec::with_capacity(capacity);
         for _ in 0..capacity {
             let piece = PieceFactory::generate_piece();
             let meta = T::random();
             pieces.push((piece, meta));
         }
-        PieceQueue {
+        Some(PieceQueue {
             pieces,
             index: 0,
-        }
+        })
     }
 
     /// Gets the next piece and its metadata from the queue
@@ -796,11 +799,266 @@ where
         (piece, meta)
     }
 
+    /// Peeks at the piece and its metadata at the given index without removing it
+    /// 
+    /// ## Returns
+    /// A tuple containing the `Piece` and its associated metadata at the current index.
+    pub fn peek(&self) -> (Piece, T) {
+        self.pieces[self.index].clone()
+    }
+
     /// Returns the length of the queue
     /// 
     /// ## Returns
     /// The length as a usize.
     pub fn len(&self) -> usize {
         self.pieces.len()
+    }
+}
+
+struct InternalExtendedGameState<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    pub engine: ExtendedHexEngine<T>,
+    pub queue: PieceQueue<T>,
+    pub score: usize,
+    pub turn: usize,
+    pub end: bool,
+}
+
+use std::sync::{Arc, Mutex};
+
+/// A thread-safe extended game state, representing the main grid engine, piece queue, score, turn, and end state.
+///
+/// The `Game` struct manages the hexagonal grid engine, a fixed-length queue of pieces, game score, turn tracking, and end-state detection.
+/// It provides methods to add pieces, make moves, and query game status, handling errors gracefully and maintaining consistent state.
+/// 
+/// The integrated game evironment, first introduced in the Python adaptation, eliminated the need for separate engine and queue management,
+/// making it easier to implement game logic and interact with the game state. Compared to the standard `Game` struct, this extended version
+/// allows each block in the grid to have associated metadata of type `T`, and offer thread-safe access to the game state.
+///
+/// # Structure
+///
+/// - **Engine**: The [`ExtendedHexEngine`] manages the hexagonal grid, block placement, and elimination logic.
+/// - **Queue**: The piece queue is a fixed-size array of [`Piece`] objects. When a piece is used, it is immediately replaced by a new
+///   randomly generated piece, ensuring the queue always remains full. The queue supports peeking and consuming elements by index, but does not allow external insertion.
+/// - **Score & Turn**: Tracks the player's score and turn count, updating after each move and elimination.
+/// - **End State**: Detects when no valid moves remain, marking the game as ended.
+///
+/// # Features
+///
+/// - Add pieces to the grid and update game state ([`add_piece`])
+/// - Make moves using custom algorithms ([`make_move`])
+/// - Query game status, score, turn, and queue ([`is_end`], [`result`], [`queue`])
+/// - Handles invalid moves and errors gracefully
+/// - Cloning and display support for game state
+///
+/// # Queue Behavior
+///
+/// The queue always maintains a fixed number of pieces. When a piece is placed, it is replaced by a new piece generated internally. The queue only stores static pieces. External addition of pieces is not supported.
+/// 
+/// # Thread Safety
+/// 
+/// The `Game` struct is designed to be thread-safe for concurrent read access via internal locking mechanisms. Mutating operations acquire exclusive locks to ensure consistent state updates.
+///
+/// # Notes
+///
+/// - All game logic is designed to be robust and error-tolerant.
+/// - The game environment is suitable for both interactive play and automated agents (e.g., reinforcement learning).
+/// - Compare to the standard `Game` struct, this extended version allows each block in the grid to have associated metadata of type `T`.
+/// - Compare to the standard `Game` struct, this extended version does not offer methods for directly manipulating the
+/// piece queue or engine from outside the struct, focusing instead on high-level game operations. This means moving data 
+/// from the game will be done by cloning the engine or queue as needed, as their results will be immediately outdated after any game action.
+/// 
+/// # Type Parameter
+/// - `T`: The metadata type associated with each block in the grid.
+///
+/// Designed by William Wu. Adapted for Rust.]
+pub struct ExtendedGame<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    internal: Arc<Mutex<InternalExtendedGameState<T>>>,
+}
+
+impl <T>ExtendedGame<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    /// Creates a new ExtendedGame with specified grid radius and piece queue capacity
+    /// 
+    /// ## Parameters
+    /// - `radius`: The radius of the hexagonal grid
+    /// - `queue_size`: The initial capacity of the piece queue
+    /// 
+    /// ## Returns
+    /// A new `ExtendedGameState<T>` instance.
+    pub fn new(radius: usize, queue_size: usize) -> Self {
+        let engine = ExtendedHexEngine::new(radius);
+        let queue = PieceQueue::new(queue_size).expect("Queue size must be at least 1");
+        let internal = InternalExtendedGameState {
+            engine,
+            queue,
+            score: 0,
+            turn: 0,
+            end: false,
+        };
+        ExtendedGame {
+            internal: Arc::new(Mutex::new(internal)),
+        }
+    }
+
+    /// Creates a new game with initial turn and score
+    /// 
+    /// # Arguments
+    /// * `radius` - The radius of the hexagonal game board (>= 2)
+    /// * `queue_size` - The number of pieces in the queue (>= 1)
+    /// * `initial_turn` - The starting turn number
+    /// * `initial_score` - The starting score
+    pub fn with_initial_state(
+        radius: usize,
+        queue_size: usize,
+        initial_turn: usize,
+        initial_score: usize,
+    ) -> Self {
+        assert!(radius >= 2, "Radius must be at least 2");
+        assert!(queue_size >= 1, "Queue size must be at least 1");
+        let engine = ExtendedHexEngine::new(radius);
+        let queue = PieceQueue::new(queue_size).unwrap();
+        let internal = InternalExtendedGameState {
+            engine,
+            queue,
+            score: initial_score,
+            turn: initial_turn,
+            end: false,
+        };
+        ExtendedGame {
+            internal: Arc::new(Mutex::new(internal)),
+        }
+    }
+
+    /// Creates a game from an existing engine
+    /// 
+    /// # Arguments
+    /// * `engine` - The HexEngine to use
+    /// * `queue_size` - The number of pieces in the queue (>= 1)
+    pub fn from_engine(engine: HexEngine, queue_size: usize) -> Self {
+        assert!(queue_size >= 1, "Queue size must be at least 1");
+        let len = engine.len();
+
+        let queue = PieceQueue::new(queue_size).unwrap();
+        let engine = ExtendedHexEngine {
+            base: engine,
+            metadata: vec![T::default(); len],
+        };
+
+        let internal = InternalExtendedGameState {
+            engine,
+            queue,
+            score: 0,
+            turn: 0,
+            end: false,
+        };
+
+        let mut game = ExtendedGame {
+            internal: Arc::new(Mutex::new(internal)),
+        };
+
+        // Check if game is already over
+        game.check_end();
+        game
+    }
+
+    fn lock_internal(&self) -> std::sync::MutexGuard<'_, InternalExtendedGameState<T>> {
+        self.internal.lock().expect("Failed to lock internal game state")
+    }
+
+    /// Checks if the game has ended (no valid moves remaining)
+    /// 
+    /// Updates the `end` field accordingly
+    fn check_end(&mut self) {
+        let mut internal = self.lock_internal();
+        for (piece, _) in &internal.queue.pieces {
+            if !internal.engine.valid_positions(*piece).is_empty() {
+                internal.end = false;
+                return;
+            }
+        }
+        internal.end = true;
+    }
+
+    /// Returns whether the game has ended
+    /// 
+    /// # Returns
+    /// `true` if the game is over, `false` otherwise
+    #[inline]
+    pub fn is_end(&self) -> bool {
+        let internal = self.lock_internal();
+        internal.end
+    }
+
+    /// Returns the current result as (turn, score)
+    /// 
+    /// # Returns
+    /// A tuple containing the current turn number and score
+    #[inline]
+    pub fn result(&self) -> (usize, usize) {
+        let internal = self.lock_internal();
+        (internal.turn, internal.score)
+    }
+
+    /// Returns the current turn number
+    /// 
+    /// # Returns
+    /// The current turn number
+    #[inline]
+    pub fn turn(&self) -> usize {
+        let internal = self.lock_internal();
+        internal.turn
+    }
+
+    /// Returns the current score
+    /// 
+    /// # Returns
+    /// The current score
+    #[inline]
+    pub fn score(&self) -> usize {
+        let internal = self.lock_internal();
+        internal.score
+    }
+
+    /// Returns the internal ExtendedHexEngine
+    /// 
+    /// # Returns
+    /// Clone of the internal ExtendedHexEngine<T>
+    #[inline]
+    pub fn engine(&self) -> ExtendedHexEngine<T> {
+        let internal = self.lock_internal();
+        internal.engine.clone()
+    }
+
+    /// Returns the current piece queue as a boxed slice
+    /// 
+    /// Note: This is a snapshot of the current queue state.
+    /// Modifying the queue directly will not affect the internal game state.
+    /// 
+    /// # Returns
+    /// A boxed slice of `Piece` representing the current queue
+    #[inline]
+    pub fn queue(&self) -> Box<[Piece]> {
+        let internal = self.lock_internal();
+        internal.queue.pieces.iter().map(|(p, _)| *p).collect::<Vec<Piece>>().into_boxed_slice()
+    }
+}
+
+impl <T>Clone for ExtendedGame<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    fn clone(&self) -> Self {
+        ExtendedGame {
+            internal: Arc::clone(&self.internal),
+        }
     }
 }
