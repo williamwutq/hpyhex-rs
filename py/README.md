@@ -23,6 +23,10 @@ pip install hpyhex-rs
    from hpyhex.hex import Hex
    from hpyhex.game import Game
    ```
+3. **Not Interoperable with Original Package**
+   Due to differences in implementation and optimizations, `hpyhex-rs` is not at all interoperable with the original `hpyhex` package. The `Hex` of `hpyhex-rs` is not compatible and cannot be converted to/from the `Hex` of `hpyhex`, for example.
+4. **Updates Can Lag Behind Original Package**
+   This package currently targets the [0.2.0](https://pypi.org/project/hpyhex/0.2.0/) version of `hpyhex`. Features from later versions may not be fully supported yet, but may be added in future releases.
 
 ## Features
 - Hexagonal grid representation
