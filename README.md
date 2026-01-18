@@ -11,6 +11,12 @@ The original HappyHex game, in Java, can be found at [HappyHex on GitHub](https:
 - Basic game mechanics for HappyHex
 - Utility functions for hexagonal calculations
 
+## Feature Flags
+- `core`: Enables core functionalities of the HappyHex engine, including hexagonal grid management and basic game mechanics.
+- `game`: Enables game-specific features, such as engine stage management, piece queue, and scoring system.
+- `default`: Enable `core` and `game` features by default.
+- `extended`: Enables extended functionalities, including extended engine with metadata, advanced piece queue, and syncronized game state management. Use this feature for extra security or for GUI applications. Historically GUI applications require more syncronized state management.
+
 ## Author
 Developed by William Wu.
 
