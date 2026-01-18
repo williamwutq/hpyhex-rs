@@ -1,6 +1,7 @@
 
 #![cfg(feature = "extended")]
 use crate::hex::{Hex, HexEngine, Piece};
+use std::fmt;
 
 /// Extended HexEngine with per-block metadata
 /// Generic over metadata type T
@@ -236,6 +237,17 @@ where
     #[inline]
     pub fn coordinate_of(&self, index: usize) -> Option<Hex> {
         self.base.coordinate_of(index)
+    }
+
+    /// Iterates over all blocks, yielding (coordinate, state, metadata)
+    /// 
+    /// ## Returns
+    /// An iterator over tuples of `(Hex, bool, T)` for each block in the
+    pub fn iter(&self) -> impl Iterator<Item = (Hex, bool, T)> + '_ {
+        self.base.iter().enumerate().filter_map(move |(i, (coo, state))| {
+            let meta = self.metadata[i].clone();
+            Some((coo, state, meta))
+        })
     }
 
     /// Searches for all coordinates with matching metadata
@@ -554,8 +566,159 @@ where
     }
 }
 
+impl <T>TryFrom<&str> for ExtendedHexEngine<T>
+where
+    T: Default + Clone + for<'a> TryFrom<&'a str>,
+    for<'a> <T as TryFrom<&'a str>>::Error: std::fmt::Debug,
+{
+    type Error = String;
+
+    /// Creates a grid from a string representation
+    /// 
+    /// ## Parameters
+    /// - `s`: String representing block occupancy and metadata
+    /// 
+    /// ## Returns
+    /// A `Result<ExtendedHexEngine<T>, String>` containing the new grid or an error if invalid.
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        // split by |
+        let parts: Vec<&str> = s.split('|').collect();
+        if parts.len() != 2 {
+            return Err("Invalid string format".to_string());
+        }
+        let engine = HexEngine::from_string(parts[0])?;
+        let len = engine.len();
+        let meta_strs: Vec<&str> = parts[1].split(',').collect();
+        if meta_strs.len() != len {
+            return Err("Metadata length does not match grid length".to_string());
+        } else {
+            let mut metas = Vec::with_capacity(len);
+            for m_str in meta_strs {
+                let meta = T::try_from(m_str).map_err(|e| format!("Metadata parse error: {:?}", e))?;
+                metas.push(meta);
+            }
+            Ok(ExtendedHexEngine {
+                base: engine,
+                metadata: metas,
+            })
+        }
+    }
+}
+
+impl <T> fmt::Display for ExtendedHexEngine<T>
+where
+    T: fmt::Display,
+{
+    /// Formats the grid as a string representation
+    /// 
+    /// ## Returns
+    /// A string representing block occupancy and metadata.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let state_str = self.base.to_string();
+        let meta_strs: Vec<String> = self.metadata.iter().map(|m| m.to_string()).collect();
+        let meta_str = meta_strs.join(",");
+        write!(f, "{}|{}", state_str, meta_str)
+    }
+}
+
 use crate::game::PieceFactory;
 
-impl PieceFactory {
+/// Trait for generating random instances of type T
+/// 
+/// ## Overview
+/// The `Randomizable<T>` trait defines a method for generating random instances of type `T`.
+/// This trait can be implemented for various types to provide a standardized way to create random values,
+/// 
+/// ## Distribution
+/// Implementations can use different random distributions as needed, such as uniform, normal, or custom
+/// distributions, depending on the requirements of the type. There is no guarantee of uniformity unless
+/// explicitly specified in the implementation.
+/// 
+/// ## Type Parameter
+/// - `T`: The type for which random instances can be generated.
+pub trait Randomizable<T> {
+    /// Generates a random instance of type T
+    /// 
+    /// ## Returns
+    /// A random instance of type T.
+    fn random() -> T;
+}
 
+impl PieceFactory {
+    /// Generates a random piece with random metadata
+    /// 
+    /// ## Returns
+    /// A tuple containing the generated `Piece` and its associated metadata.
+    pub fn generate_piece_with_metadata<T>() -> (Piece, T)
+    where
+        T: Default + Randomizable<T> + Clone
+    {
+        let piece = Self::generate_piece();
+        let meta = T::random();
+        (piece, meta)
+    }
+}
+
+use rand::Rng;
+
+impl Randomizable<u8> for u8 {
+    fn random() -> u8 {
+        let mut rng = rand::rng();
+        rng.random_range(0..=255)
+    }
+}
+
+impl Randomizable<u16> for u16 {
+    fn random() -> u16 {
+        let mut rng = rand::rng();
+        rng.random_range(0..=65535)
+    }
+}
+
+impl Randomizable<u32> for u32 {
+    fn random() -> u32 {
+        let mut rng = rand::rng();
+        rng.random_range(0..=4294967295)
+    }
+}
+
+impl Randomizable<u64> for u64 {
+    fn random() -> u64 {
+        let mut rng = rand::rng();
+        rng.random_range(0..=18446744073709551615)
+    }
+}
+
+impl Randomizable<i8> for i8 {
+    fn random() -> i8 {
+        let mut rng = rand::rng();
+        rng.random_range(i8::MIN..=i8::MAX)
+    }
+}
+
+impl Randomizable<i16> for i16 {
+    fn random() -> i16 {
+        let mut rng = rand::rng();
+        rng.random_range(i16::MIN..=i16::MAX)
+    }
+}
+
+impl Randomizable<i32> for i32 {
+    fn random() -> i32 {
+        let mut rng = rand::rng();
+        rng.random_range(i32::MIN..=i32::MAX)
+    }
+}
+
+impl Randomizable<i64> for i64 {
+    fn random() -> i64 {
+        let mut rng = rand::rng();
+        rng.random_range(i64::MIN..=i64::MAX)
+    }
+}
+
+impl Randomizable<Piece> for Piece {
+    fn random() -> Piece {
+        PieceFactory::generate_piece()
+    }
 }
