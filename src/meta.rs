@@ -816,6 +816,24 @@ where
     }
 }
 
+impl <T>std::ops::Index<usize> for PieceQueue<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    type Output = (Piece, T);
+
+    /// Indexes into the queue to get the piece and metadata at the given index
+    /// 
+    /// ## Parameters
+    /// - `index`: The index to access
+    /// 
+    /// ## Returns
+    /// A reference to the tuple containing the `Piece` and its associated metadata.
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.pieces[(index + self.index) % self.pieces.len()]
+    }
+}
+
 struct InternalExtendedGameState<T>
 where
     T: Clone + Default + Randomizable<T>,
@@ -961,7 +979,7 @@ where
             end: false,
         };
 
-        let mut game = ExtendedGame {
+        let game = ExtendedGame {
             internal: Arc::new(Mutex::new(internal)),
         };
 
@@ -977,7 +995,7 @@ where
     /// Checks if the game has ended (no valid moves remaining)
     /// 
     /// Updates the `end` field accordingly
-    fn check_end(&mut self) {
+    fn check_end(&self) {
         let mut internal = self.lock_internal();
         for (piece, _) in &internal.queue.pieces {
             if !internal.engine.valid_positions(*piece).is_empty() {
@@ -1049,6 +1067,73 @@ where
     pub fn queue(&self) -> Box<[Piece]> {
         let internal = self.lock_internal();
         internal.queue.pieces.iter().map(|(p, _)| *p).collect::<Vec<Piece>>().into_boxed_slice()
+    }
+
+    /// Adds a piece to the game at the specified coordinates
+    /// 
+    /// # Arguments
+    /// * `piece_index` - Index of the piece in the queue
+    /// * `coord` - Coordinates where the piece should be placed
+    /// 
+    /// # Returns
+    /// `true` if the piece was successfully added, `false` otherwise
+    pub fn add_piece(&self, piece_index: usize, coord: Hex) -> bool {
+        let mut internal = self.lock_internal();
+        // Validate piece index
+        if piece_index >= internal.queue.len() {
+            return false;
+        }
+
+        let (piece, meta) = internal.queue[piece_index].clone();
+
+        // Try to add piece to engine
+        if internal.engine.add_piece_with_metadata(coord, piece, meta).is_err() {
+            return false;
+        }
+
+        // Update score with piece blocks
+        internal.score += piece.count() as usize;
+
+        // Eliminate full lines and add bonus score
+        let eliminated = internal.engine.eliminate();
+        internal.score += eliminated.len() * 5;
+
+        // Increment turn
+        internal.turn += 1;
+
+        // Check if game has ended
+        for (piece, _) in &internal.queue.pieces {
+            if !internal.engine.valid_positions(*piece).is_empty() {
+                internal.end = false;
+                return true;
+            }
+        }
+        internal.end = true;
+
+        true
+    }
+
+    /// Makes a move using the specified algorithm
+    /// 
+    /// # Arguments
+    /// * `algorithm` - A function that takes the engine and queue and returns (piece_index, coordinate)
+    /// 
+    /// # Returns
+    /// `true` if the move was successfully made, `false` otherwise
+    pub fn make_move<F>(&self, algorithm: F) -> bool
+    where
+        F: FnOnce(&HexEngine, &[Piece]) -> Option<(usize, Hex)>,
+    {
+        let internal = self.lock_internal();
+
+        if internal.end {
+            return false;
+        }
+
+        match algorithm(&internal.engine.base, internal.queue.pieces.iter().map(|(p, _)| *p).collect::<Vec<Piece>>().as_slice()) {
+            Some((index, coord)) => self.add_piece(index, coord),
+            None => false,
+        }
     }
 }
 
