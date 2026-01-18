@@ -26,6 +26,19 @@ pip install hpyhex-rs
    from hpyhex.hex import Hex
    from hpyhex.game import Game
    ```
+   &nbsp;
+   For the best import compatibility, use the following pattern:
+   ```python
+   try:
+      from hpyhex import Hex, Game  # hpyhex-rs
+      hpyhex_version = "hpyhex-rs"
+   except ImportError:
+      from hpyhex.hex import Hex    # hpyhex
+      from hpyhex.game import Game   # hpyhex
+      hpyhex_version = "hpyhex"
+   ```
+   This code attempts to import from `hpyhex-rs` first, and falls back to the original `hpyhex` package if that fails, allowing your code to work with either package seamlessly.
+   &nbsp;
 3. **Not Interoperable with Original Package**
    &nbsp;
    Due to differences in the Rust implementation, `hpyhex-rs` objects cannot be mixed with the original `hpyhex` package objects. The `Hex` of `hpyhex-rs` is not compatible and cannot be converted to/from the `Hex` of `hpyhex`, for example.
