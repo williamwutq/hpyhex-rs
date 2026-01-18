@@ -722,3 +722,19 @@ impl Randomizable<Piece> for Piece {
         PieceFactory::generate_piece()
     }
 }
+
+impl Randomizable<bool> for bool {
+    fn random() -> bool {
+        let mut rng = rand::rng();
+        rng.random_bool(0.5)
+    }
+}
+
+impl Randomizable<char> for char {
+    fn random() -> char {
+        let mut rng = rand::rng();
+        let codepoint = rng.random_range(32..=126); // Printable ASCII range
+        codepoint as u8 as char
+    }
+}
+
