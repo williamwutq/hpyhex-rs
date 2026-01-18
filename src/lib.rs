@@ -52,6 +52,8 @@
 //! Designed by William Wu. Adapted for Rust.
 mod hex;
 mod game;
+mod meta;
 
 pub use hex::*;
 pub use game::*;
+pub use meta::*;
