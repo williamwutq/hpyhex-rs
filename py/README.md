@@ -9,11 +9,14 @@ pip install hpyhex-rs
 
 ## **Important Notes**
 1. **Conflicting with Native Python Package**
+   &nbsp;
    `hpyhex-rs` conflicts with the existing `hpyhex` package on PyPI. If you have `hpyhex` installed, please uninstall it first using:
    ```bash
    pip uninstall hpyhex
    ```
+   &nbsp;
 2. **Difference in Importing Modules**
+   &nbsp;
    In `hpyhex-rs`, all main classes and functions are located directly under the `hpyhex` module. For example, to import the `Hex` class, use:
    ```python
    from hpyhex import Hex, Game
@@ -24,8 +27,17 @@ pip install hpyhex-rs
    from hpyhex.game import Game
    ```
 3. **Not Interoperable with Original Package**
-   Due to differences in implementation and optimizations, `hpyhex-rs` is not at all interoperable with the original `hpyhex` package. The `Hex` of `hpyhex-rs` is not compatible and cannot be converted to/from the `Hex` of `hpyhex`, for example.
+   &nbsp;
+   Due to differences in the Rust implementation, `hpyhex-rs` objects cannot be mixed with the original `hpyhex` package objects. The `Hex` of `hpyhex-rs` is not compatible and cannot be converted to/from the `Hex` of `hpyhex`, for example.
+   &nbsp;
+   **This matters primarily in serialization scenarios**, but not in regular usage, as you would typically use either `hpyhex` or `hpyhex-rs` exclusively in a project. 
+   &nbsp;
+   If you are using built-in APIs in `hpyhex` to serialize data structures (e.g., `int(piece_value)`, `Piece(integer_value)`), you can load them back using `hpyhex-rs`, and vice versa. The byte representation of pieces is compatible between the two packages.
+   &nbsp;
+   However, if you use a python tool to serialize data structures from `hpyhex` as Python objects (e.g., `pickle`), you cannot load them back using `hpyhex-rs`, and vice versa. `hpyhex-rs` offers `serialize` and `deserialize` functions for its own data structures.
+   &nbsp;
 4. **Updates Can Lag Behind Original Package**
+   &nbsp;
    This package currently targets the [0.2.0](https://pypi.org/project/hpyhex/0.2.0/) version of `hpyhex`. Features from later versions may not be fully supported yet, but may be added in future releases.
 
 ## Features
