@@ -1,22 +1,26 @@
 //! Comprehensive game environment for Hex, including grid engine, piece factory, and game logic.
 //!
+//! ## Feature Flag: game
+//! 
+//! ## Overview
+//! 
 //! This module implements the core gameplay environment for Hex, inspired by the Python and Java versions of HappyHex.
 //! It integrates grid management, piece generation, and game state tracking into a unified, robust system suitable for both interactive play and automated agents.
 //!
-//! # Components
+//! ## Components
 //!
 //! - **PieceFactory**: Utility for creating and managing all predefined game pieces. Provides static mappings between piece names and bitfield values, reverse lookup, and random piece generation with weighted probabilities. See the original HappyHex Java and Python implementations for piece definitions and generation logic.
 //! - **Game**: Main game environment managing the hexagonal grid, piece queue, score, turn tracking, and end-state detection. Handles piece placement, move execution, and game status queries, with robust error handling and consistent state management. The queue is always full; used pieces are immediately replaced by new random pieces.
 //! - **random_engine**: Utility function for generating randomized HexEngine states for game initialization, using efficient bitfield generation and elimination logic.
 //!
-//! # Design Notes
+//! ## Design Notes
 //!
 //! - The integrated game environment (first introduced in Python) eliminates the need for separate engine and queue management, simplifying game logic and state interaction.
 //! - PieceFactory is stateless and not intended to be instantiated; all methods are static.
 //! - The game environment is designed to be robust, error-tolerant, and suitable for both human and AI agents (e.g., reinforcement learning).
 //! - Thread safety: The Game struct is thread-safe for concurrent read access; mutable operations should be externally synchronized.
 //!
-//! # Example Usage
+//! ## Example Usage
 //!
 //! ```rust
 //! use hpyhex_rs::{Game, PieceFactory, random_engine};
@@ -35,13 +39,14 @@
 //! println!("Score: {} Turn: {} End: {}", game.score(), game.turn(), game.is_end());
 //! ```
 //!
-//! # References
+//! ## References
 //!
 //! - Python: [HappyHex ML](https://github.com/williamwutq/hpyhexml)
 //! - Java: [HappyHex](https://github.com/williamwutq/game_HappyHex)
 //!
 //! Designed by William Wu. Adapted for Rust.
 
+#![cfg(any(feature = "default", feature = "game"))]
 use crate::hex::{Piece, HexEngine, Hex};
 use rand::Rng;
 use std::fmt;

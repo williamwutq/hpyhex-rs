@@ -1,3 +1,5 @@
+
+#![cfg(feature = "extended")]
 use crate::hex::{Hex, HexEngine, Piece};
 
 /// Extended HexEngine with per-block metadata
@@ -550,4 +552,10 @@ where
         }
         Some(metas)
     }
+}
+
+use crate::game::PieceFactory;
+
+impl PieceFactory {
+
 }

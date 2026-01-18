@@ -1,5 +1,9 @@
 //! # Hex Core for HappyHex
 //! 
+//! ## Feature Flag: core
+//! 
+//! ## Overview
+//! 
 //! This module implements a simplified and optimized hexagonal grid system designed for machine learning applications
 //! and other performance-critical scenarios. It provides efficient representations and operations for hexagonal grids,
 //! pieces, and coordinates, focusing on speed and low overhead.
@@ -19,6 +23,7 @@
 //! - Provides O(1) methods for coordinate-index conversions.
 //! - Optimized algorithms for piece placement, elimination, and density calculations.
 
+#![cfg(any(feature = "default", feature = "core"))]
 use std::fmt;
 use std::ops::{Add, Sub};
 

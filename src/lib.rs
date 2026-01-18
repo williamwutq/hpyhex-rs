@@ -54,6 +54,9 @@ mod hex;
 mod game;
 mod meta;
 
+#[cfg(any(feature = "default", feature = "core"))]
 pub use hex::*;
+#[cfg(any(feature = "default", feature = "game"))]
 pub use game::*;
+#[cfg(feature = "extended")]
 pub use meta::*;

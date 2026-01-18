@@ -10,3 +10,9 @@ keywords = ["hexagonal", "grid", "game", "happyhex", "hex"]
 
 [dependencies]
 rand = "0.9.2"
+
+[features]
+default = []
+core = []
+game = []
+extended = []
