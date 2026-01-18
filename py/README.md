@@ -1,4 +1,4 @@
-# hpyhex
+# hpyhex-rs
 Simplified implementations of the HappyHex game components and hexagonal system in Rust.
 This is a drop-in replacement for the original `hpyhex` package, optimized for performance and memory usage.
 
@@ -7,11 +7,22 @@ This is a drop-in replacement for the original `hpyhex` package, optimized for p
 pip install hpyhex-rs
 ```
 
-**Important Note**:
-`hpyhex-rs` conflicts with the existing `hpyhex` package on PyPI. If you have `hpyhex` installed, please uninstall it first using:
-```bash
-pip uninstall hpyhex
-```
+## **Important Notes**
+1. **Conflicting with Native Python Package**
+   `hpyhex-rs` conflicts with the existing `hpyhex` package on PyPI. If you have `hpyhex` installed, please uninstall it first using:
+   ```bash
+   pip uninstall hpyhex
+   ```
+2. **Difference in Importing Modules**
+   In `hpyhex-rs`, all main classes and functions are located directly under the `hpyhex` module. For example, to import the `Hex` class, use:
+   ```python
+   from hpyhex import Hex, Game
+   ```
+   In contrast, the original `hpyhex` package requires importing from submodules (`hex` and `game`), such as:
+   ```python
+   from hpyhex.hex import Hex
+   from hpyhex.game import Game
+   ```
 
 ## Features
 - Hexagonal grid representation
@@ -26,8 +37,8 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Usage
 ```python
-from hpyhex.hex import Hex, Piece, HexEngine
-from hpyhex.game import Game, PieceFactory
+from hpyhex import Hex, Piece, HexEngine
+from hpyhex import Game, PieceFactory
 
 # Create a hexagonal coordinate
 coo = Hex(0, 1)
