@@ -17,3 +17,5 @@ documentation for details.
 
    docs/crates/py/lib.rst
 
+   README
+
