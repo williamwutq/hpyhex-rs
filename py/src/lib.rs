@@ -26,21 +26,21 @@ use std::hash::{Hash, Hasher};
 /// Use of Hex over tuples is recommended for clarity and to leverage the singleton feature of small Hexes.
 ///
 /// Coordinate Systems:
-///     - Raw Coordinates (i, j, k): Three axes satisfying i + j + k = 0, where
-///       each axis is diagonal to the others at 60° increments.
-///     - Line Coordinates (i, k): Derived coordinates representing distances
-///       perpendicular to axes, simplifying grid operations.
+/// - Raw Coordinates (i, j, k): Three axes satisfying i + j + k = 0, where
+///   each axis is diagonal to the others at 60° increments.
+/// - Line Coordinates (i, k): Derived coordinates representing distances
+///   perpendicular to axes, simplifying grid operations.
 ///
 /// Note:
-///     - This class is immutable and optimized with __slots__.
-///     - Raw coordinate methods (__i__, __j__, __k__) are retained for backward compatibility.
-///     - Only basic functionality is implemented; complex adjacency, iteration,
-///       and mutability features are omitted for simplicity.
+/// - This class is immutable and optimized with __slots__.
+/// - Raw coordinate methods (__i__, __j__, __k__) are retained for backward compatibility.
+/// - Only basic functionality is implemented; complex adjacency, iteration,
+///   and mutability features are omitted for simplicity.
 ///
 /// Attributes:
-///     i (int): The line i coordinate.
-///     j (int): The computed line j coordinate (k - i).
-///     k (int): The line k coordinate.
+/// i (int): The line i coordinate.
+/// j (int): The computed line j coordinate (k - i).
+/// k (int): The line k coordinate.
 #[pyclass(frozen)]
 #[derive(Eq, Clone)]
 pub struct Hex {
@@ -76,18 +76,81 @@ fn get_hex(i: i32, k: i32) -> Hex {
     }
 }
 
+impl TryFrom<Vec<u8>> for Hex {
+    type Error = pyo3::PyErr;
+
+    /// Create a Hex from a byte vector representation.
+    ///
+    /// The byte vector can represent the coordinates in three formats:
+    /// - 4 bytes: Two i16 values (2 bytes each) for i and k coordinates.
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        // Length: 4 for i16, 8 for i32, 16 for i64
+        match value.len() {
+            4 => {
+                let i = i32::from(i16::from_le_bytes([value[0], value[1]]));
+                let k = i32::from(i16::from_le_bytes([value[2], value[3]]));
+                Ok(get_hex(i, k))
+            }
+            8 => {
+                let i = i32::from_le_bytes([value[0], value[1], value[2], value[3]]);
+                let k = i32::from_le_bytes([value[4], value[5], value[6], value[7]]);
+                Ok(get_hex(i, k))
+            }
+            16 => {
+                let i_i64 = i64::from_le_bytes([
+                    value[0], value[1], value[2], value[3],
+                    value[4], value[5], value[6], value[7],
+                ]);
+                let k_i64 = i64::from_le_bytes([
+                    value[8], value[9], value[10], value[11],
+                    value[12], value[13], value[14], value[15],
+                ]);
+                match (i32::try_from(i_i64), i32::try_from(k_i64)) {
+                    (Ok(i), Ok(k)) => Ok(get_hex(i, k)),
+                    _ => Err(pyo3::exceptions::PyTypeError::new_err("i or k value out of range for i32")),
+                }
+            }
+            _ => Err(pyo3::exceptions::PyTypeError::new_err("Invalid byte length for Hex conversion")),
+        }
+    }
+}
+
+impl Hex {
+    /// Convert the Hex coordinates to a byte vector representation.
+    ///
+    /// Arguments:
+    /// - minimize (bool): If true, use i16 representation if possible.
+    /// Returns:
+    /// - Vec<u8>: The byte vector representation of the Hex coordinates.
+    pub fn to_bytes(&self, minimize: bool) -> Vec<u8> {
+        if minimize {
+            // Try i16
+            if let (Ok(i16_i), Ok(i16_k)) = (i16::try_from(self.i), i16::try_from(self.k)) {
+                let mut bytes = Vec::with_capacity(4);
+                bytes.extend_from_slice(&i16_i.to_le_bytes());
+                bytes.extend_from_slice(&i16_k.to_le_bytes());
+                return bytes;
+            }
+            // Fallback to i32
+        }
+        let mut bytes = Vec::with_capacity(8);
+        bytes.extend_from_slice(&self.i.to_le_bytes());
+        bytes.extend_from_slice(&self.k.to_le_bytes());
+        bytes
+    }
+}
 
 #[pymethods]
 impl Hex {
     /// Initialize a Hex coordinate at (i, k). Defaults to (0, 0).
     ///
     /// Arguments:
-    ///     i (int): The I-line coordinate of the hex.
-    ///     k (int): The K-line coordinate of the hex.
+    /// - i (int): The I-line coordinate of the hex.
+    /// - k (int): The K-line coordinate of the hex.
     /// Returns:
-    ///     Hex
+    /// - Hex
     /// Raises:
-    ///     TypeError: If i or k is not an integer.
+    /// - TypeError: If i or k is not an integer.
     #[new]
     #[pyo3(signature = (i = 0, k = 0))]
     pub fn new(i: i32, k: i32) -> Self {
@@ -97,7 +160,7 @@ impl Hex {
     /// Get the I-line coordinate of the hex.
     ///
     /// Returns:
-    ///     int: The I-line coordinate.
+    /// - int: The I-line coordinate.
     #[inline]
     #[getter]
     pub fn i(&self) -> i32 {
@@ -107,7 +170,7 @@ impl Hex {
     /// Get the J-line coordinate of the hex.
     ///
     /// Returns:
-    ///     int: The J-line coordinate.
+    /// - int: The J-line coordinate.
     #[inline]
     #[getter]
     pub fn j(&self) -> i32 {
@@ -117,7 +180,7 @@ impl Hex {
     /// Get the K-line coordinate of the hex.
     ///
     /// Returns:
-    ///     int: The K-line coordinate.
+    /// - int: The K-line coordinate.
     #[inline]
     #[getter]
     pub fn k(&self) -> i32 {
@@ -127,8 +190,8 @@ impl Hex {
     /// Return an iterator over the hex coordinates.
     ///
     /// Yields:
-    ///     int: The I-line coordinate of the hex.
-    ///     int: The K-line coordinate of the hex.
+    /// - int: The I-line coordinate of the hex.
+    /// - int: The K-line coordinate of the hex.
     pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<PyAny>> {
         Python::with_gil(|py| {
             let tuple = pyo3::types::PyTuple::new_bound(py, &[slf.i.into_py(py), slf.k.into_py(py)]);
@@ -139,7 +202,7 @@ impl Hex {
     /// Return the raw i coordinate of the hex.
     ///
     /// Returns:
-    ///     int: The raw i coordinate.
+    /// - int: The raw i coordinate.
     #[inline]
     pub fn __i__(&self) -> i32 {
         self.k * 2 - self.i
@@ -148,7 +211,7 @@ impl Hex {
     /// Return the raw j coordinate of the hex.
     ///
     /// Returns:
-    ///     int: The raw j coordinate.
+    /// - int: The raw j coordinate.
     #[inline]
     pub fn __j__(&self) -> i32 {
         self.i + self.k
@@ -157,7 +220,7 @@ impl Hex {
     /// Return the raw k coordinate of the hex.
     ///
     /// Returns:
-    ///     int: The raw k coordinate.
+    /// - int: The raw k coordinate.
     #[inline]
     pub fn __k__(&self) -> i32 {
         self.i * 2 - self.k
@@ -167,7 +230,7 @@ impl Hex {
     ///
     /// Format: Hex(i, j, k), where i, j, and k are the line coordinates.
     /// Returns:
-    ///     str: The string representation of the hex.
+    /// - str: The string representation of the hex.
     pub fn __str__(&self) -> String {
         format!("Hex({}, {}, {})", self.i, self.k - self.i, self.k)
     }
@@ -176,7 +239,7 @@ impl Hex {
     ///
     /// Format: Hex(i, j, k), where i, j, and k are the line coordinates.
     /// Returns:
-    ///     str: The string representation of the hex.
+    /// - str: The string representation of the hex.
     pub fn __repr__(&self) -> String {
         format!("({}, {})", self.i, self.k)
     }
@@ -184,9 +247,9 @@ impl Hex {
     /// Check equality with another Hex or a tuple of coordinates.
     ///
     /// Arguments:
-    ///     value (Hex or tuple): The value to compare with.
+    /// - value (Hex or tuple): The value to compare with.
     /// Returns:
-    ///     bool: True if the coordinates match, False otherwise.
+    /// - bool: True if the coordinates match, False otherwise.
     pub fn __eq__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
         if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
             Ok(self.i == other_hex.i && self.k == other_hex.k)
@@ -200,7 +263,7 @@ impl Hex {
     /// Return a hash of the hex coordinates.
     ///
     /// Returns:
-    ///     int: The hash value of the hex coordinates.
+    /// - int: The hash value of the hex coordinates.
     pub fn __hash__(&self) -> u64 {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.i.hash(&mut hasher);
@@ -211,11 +274,11 @@ impl Hex {
     /// Add another Hex or a tuple of coordinates to this hex.
     ///
     /// Arguments:
-    ///     other (Hex or tuple): The value to add.
+    /// - other (Hex or tuple): The value to add.
     /// Returns:
-    ///     Hex: A new Hex with the added coordinates.
+    /// - Hex: A new Hex with the added coordinates.
     /// Raises:
-    ///     TypeError: If the other operand is not a Hex or a tuple of coordinates.
+    /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __add__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
             Ok(get_hex(self.i + other_hex.i, self.k + other_hex.k))
@@ -229,11 +292,11 @@ impl Hex {
     /// Reverse addition of this hex to another Hex or a tuple.
     ///
     /// Arguments:
-    ///     other (Hex or tuple): The value to add this hex to.
+    /// - other (Hex or tuple): The value to add this hex to.
     /// Returns:
-    ///     Hex: A new Hex with the added coordinates.
+    /// - Hex: A new Hex with the added coordinates.
     /// Raises:
-    ///     TypeError: If the other operand is not a Hex or a tuple of coordinates.
+    /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __radd__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
             Ok(get_hex(other_hex.i + self.i, other_hex.k + self.k))
@@ -247,11 +310,11 @@ impl Hex {
     /// Subtract another Hex or a tuple of coordinates from this hex.
     ///
     /// Arguments:
-    ///     other (Hex or tuple): The value to subtract.
+    /// - other (Hex or tuple): The value to subtract.
     /// Returns:
-    ///     Hex: A new Hex with the subtracted coordinates.
+    /// - Hex: A new Hex with the subtracted coordinates.
     /// Raises:
-    ///     TypeError: If the other operand is not a Hex or a tuple of coordinates.
+    /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __sub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
             Ok(get_hex(self.i - other_hex.i, self.k - other_hex.k))
@@ -265,11 +328,11 @@ impl Hex {
     /// Reverse subtraction of this hex from another Hex or a tuple.
     ///
     /// Arguments:
-    ///     other (Hex or tuple): The value to subtract this hex from.
+    /// - other (Hex or tuple): The value to subtract this hex from.
     /// Returns:
-    ///     Hex: A new Hex with the subtracted coordinates.
+    /// - Hex: A new Hex with the subtracted coordinates.
     /// Raises:
-    ///     TypeError: If the other operand is not a Hex or a tuple of coordinates.
+    /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __rsub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
             Ok(get_hex(other_hex.i - self.i, other_hex.k - self.k))
@@ -283,7 +346,7 @@ impl Hex {
     /// Create a copy of this Hex.
     ///
     /// Returns:
-    ///     Hex: A new Hex with the same coordinates.
+    /// - Hex: A new Hex with the same coordinates.
     #[inline]
     pub fn __copy__(&self) -> Self {
         get_hex(self.i, self.k)
@@ -292,9 +355,9 @@ impl Hex {
     /// Create a deep copy of this Hex.
     ///
     /// Arguments:
-    ///     memo (dict): A dictionary to keep track of copied objects.
+    /// - memo (dict): A dictionary to keep track of copied objects.
     /// Returns:
-    ///     Hex: A new Hex with the same coordinates.
+    /// - Hex: A new Hex with the same coordinates.
     #[inline]
     pub fn __deepcopy__(&self, _memo: Option<&pyo3::Bound<'_, PyAny>>) -> Self {
         get_hex(self.i, self.k)
@@ -303,7 +366,7 @@ impl Hex {
     /// Check if the Hex is not at the origin (0, 0).
     ///
     /// Returns:
-    ///     bool: True if the Hex is not at the origin, False otherwise.
+    /// - bool: True if the Hex is not at the origin, False otherwise.
     #[inline]
     pub fn __bool__(&self) -> bool {
         self.i != 0 || self.k != 0
@@ -312,11 +375,11 @@ impl Hex {
     /// Return a new Hex shifted along the i-axis by units.
     ///
     /// Arguments:
-    ///     units (int): The number of units to shift along the i-axis.
+    /// - units (int): The number of units to shift along the i-axis.
     /// Returns:
-    ///     Hex: A new Hex shifted by the specified units along the i-axis.
+    /// - Hex: A new Hex shifted by the specified units along the i-axis.
     /// Raises:
-    ///     TypeError: If units is not an integer.
+    /// - TypeError: If units is not an integer.
     #[inline]
     pub fn shift_i(&self, units: i32) -> Self {
         get_hex(self.i + units, self.k)
@@ -325,11 +388,11 @@ impl Hex {
     /// Return a new Hex shifted along the j-axis by units.
     ///
     /// Arguments:
-    ///     units (int): The number of units to shift along the j-axis.
+    /// - units (int): The number of units to shift along the j-axis.
     /// Returns:
-    ///     Hex: A new Hex shifted by the specified units along the j-axis.
+    /// - Hex: A new Hex shifted by the specified units along the j-axis.
     /// Raises:
-    ///     TypeError: If units is not an integer.
+    /// - TypeError: If units is not an integer.
     #[inline]
     pub fn shift_j(&self, units: i32) -> Self {
         get_hex(self.i - units, self.k + units)
@@ -338,11 +401,11 @@ impl Hex {
     /// Return a new Hex shifted along the k-axis by units.
     ///
     /// Arguments:
-    ///     units (int): The number of units to shift along the k-axis.
+    /// - units (int): The number of units to shift along the k-axis.
     /// Returns:
-    ///     Hex: A new Hex shifted by the specified units along the k-axis.
+    /// - Hex: A new Hex shifted by the specified units along the k-axis.
     /// Raises:
-    ///     TypeError: If units is not an integer.
+    /// - TypeError: If units is not an integer.
     #[inline]
     pub fn shift_k(&self, units: i32) -> Self {
         get_hex(self.i, self.k + units)

@@ -53,21 +53,18 @@ Crate ``hpyhex``
       Use of Hex over tuples is recommended for clarity and to leverage the singleton feature of small Hexes.
       
       Coordinate Systems:
-          - Raw Coordinates (i, j, k): Three axes satisfying i + j + k = 0, where
-            each axis is diagonal to the others at 60° increments.
-          - Line Coordinates (i, k): Derived coordinates representing distances
-            perpendicular to axes, simplifying grid operations.
+      - Raw Coordinates (i, j, k): Three axes satisfying i + j + k = 0, where each axis is diagonal to the others at 60° increments.
+      - Line Coordinates (i, k): Derived coordinates representing distances perpendicular to axes, simplifying grid operations.
       
       Note:
-          - This class is immutable and optimized with __slots__.
-          - Raw coordinate methods (__i__, __j__, __k__) are retained for backward compatibility.
-          - Only basic functionality is implemented; complex adjacency, iteration,
-            and mutability features are omitted for simplicity.
+      - This class is immutable and optimized with __slots__.
+      - Raw coordinate methods (__i__, __j__, __k__) are retained for backward compatibility.
+      - Only basic functionality is implemented; complex adjacency, iteration, and mutability features are omitted for simplicity.
       
       Attributes:
-          i (int): The line i coordinate.
-          j (int): The computed line j coordinate (k - i).
-          k (int): The line k coordinate.
+      i (int): The line i coordinate.
+      j (int): The computed line j coordinate (k - i).
+      k (int): The line k coordinate.
 
       .. rubric:: Implementations
 
@@ -90,11 +87,11 @@ Crate ``hpyhex``
             Add another Hex or a tuple of coordinates to this hex.
             
             Arguments:
-                other (Hex or tuple): The value to add.
+            - other (Hex or tuple): The value to add.
             Returns:
-                Hex: A new Hex with the added coordinates.
+            - Hex: A new Hex with the added coordinates.
             Raises:
-                TypeError: If the other operand is not a Hex or a tuple of coordinates.
+            - TypeError: If the other operand is not a Hex or a tuple of coordinates.
 
          .. rust:function:: hpyhex::Hex::__bool__
             :index: -1
@@ -104,7 +101,7 @@ Crate ``hpyhex``
             Check if the Hex is not at the origin (0, 0).
             
             Returns:
-                bool: True if the Hex is not at the origin, False otherwise.
+            - bool: True if the Hex is not at the origin, False otherwise.
 
          .. rust:function:: hpyhex::Hex::__copy__
             :index: -1
@@ -114,7 +111,7 @@ Crate ``hpyhex``
             Create a copy of this Hex.
             
             Returns:
-                Hex: A new Hex with the same coordinates.
+            - Hex: A new Hex with the same coordinates.
 
          .. rust:function:: hpyhex::Hex::__deepcopy__
             :index: -1
@@ -124,9 +121,9 @@ Crate ``hpyhex``
             Create a deep copy of this Hex.
             
             Arguments:
-                memo (dict): A dictionary to keep track of copied objects.
+            - memo (dict): A dictionary to keep track of copied objects.
             Returns:
-                Hex: A new Hex with the same coordinates.
+            - Hex: A new Hex with the same coordinates.
 
          .. rust:function:: hpyhex::Hex::__eq__
             :index: -1
@@ -136,9 +133,9 @@ Crate ``hpyhex``
             Check equality with another Hex or a tuple of coordinates.
             
             Arguments:
-                value (Hex or tuple): The value to compare with.
+            - value (Hex or tuple): The value to compare with.
             Returns:
-                bool: True if the coordinates match, False otherwise.
+            - bool: True if the coordinates match, False otherwise.
 
          .. rust:function:: hpyhex::Hex::__hash__
             :index: -1
@@ -148,7 +145,7 @@ Crate ``hpyhex``
             Return a hash of the hex coordinates.
             
             Returns:
-                int: The hash value of the hex coordinates.
+            - int: The hash value of the hex coordinates.
 
          .. rust:function:: hpyhex::Hex::__i__
             :index: -1
@@ -158,7 +155,7 @@ Crate ``hpyhex``
             Return the raw i coordinate of the hex.
             
             Returns:
-                int: The raw i coordinate.
+            - int: The raw i coordinate.
 
          .. rust:function:: hpyhex::Hex::__iter__
             :index: -1
@@ -168,8 +165,8 @@ Crate ``hpyhex``
             Return an iterator over the hex coordinates.
             
             Yields:
-                int: The I-line coordinate of the hex.
-                int: The K-line coordinate of the hex.
+            - int: The I-line coordinate of the hex.
+            - int: The K-line coordinate of the hex.
 
          .. rust:function:: hpyhex::Hex::__j__
             :index: -1
@@ -179,7 +176,7 @@ Crate ``hpyhex``
             Return the raw j coordinate of the hex.
             
             Returns:
-                int: The raw j coordinate.
+            - int: The raw j coordinate.
 
          .. rust:function:: hpyhex::Hex::__k__
             :index: -1
@@ -189,7 +186,7 @@ Crate ``hpyhex``
             Return the raw k coordinate of the hex.
             
             Returns:
-                int: The raw k coordinate.
+            - int: The raw k coordinate.
 
          .. rust:function:: hpyhex::Hex::__radd__
             :index: -1
@@ -199,11 +196,11 @@ Crate ``hpyhex``
             Reverse addition of this hex to another Hex or a tuple.
             
             Arguments:
-                other (Hex or tuple): The value to add this hex to.
+            - other (Hex or tuple): The value to add this hex to.
             Returns:
-                Hex: A new Hex with the added coordinates.
+            - Hex: A new Hex with the added coordinates.
             Raises:
-                TypeError: If the other operand is not a Hex or a tuple of coordinates.
+            - TypeError: If the other operand is not a Hex or a tuple of coordinates.
 
          .. rust:function:: hpyhex::Hex::__repr__
             :index: -1
@@ -214,7 +211,7 @@ Crate ``hpyhex``
             
             Format: Hex(i, j, k), where i, j, and k are the line coordinates.
             Returns:
-                str: The string representation of the hex.
+            - str: The string representation of the hex.
 
          .. rust:function:: hpyhex::Hex::__rsub__
             :index: -1
@@ -224,11 +221,11 @@ Crate ``hpyhex``
             Reverse subtraction of this hex from another Hex or a tuple.
             
             Arguments:
-                other (Hex or tuple): The value to subtract this hex from.
+            - other (Hex or tuple): The value to subtract this hex from.
             Returns:
-                Hex: A new Hex with the subtracted coordinates.
+            - Hex: A new Hex with the subtracted coordinates.
             Raises:
-                TypeError: If the other operand is not a Hex or a tuple of coordinates.
+            - TypeError: If the other operand is not a Hex or a tuple of coordinates.
 
          .. rust:function:: hpyhex::Hex::__str__
             :index: -1
@@ -239,7 +236,7 @@ Crate ``hpyhex``
             
             Format: Hex(i, j, k), where i, j, and k are the line coordinates.
             Returns:
-                str: The string representation of the hex.
+            - str: The string representation of the hex.
 
          .. rust:function:: hpyhex::Hex::__sub__
             :index: -1
@@ -249,11 +246,11 @@ Crate ``hpyhex``
             Subtract another Hex or a tuple of coordinates from this hex.
             
             Arguments:
-                other (Hex or tuple): The value to subtract.
+            - other (Hex or tuple): The value to subtract.
             Returns:
-                Hex: A new Hex with the subtracted coordinates.
+            - Hex: A new Hex with the subtracted coordinates.
             Raises:
-                TypeError: If the other operand is not a Hex or a tuple of coordinates.
+            - TypeError: If the other operand is not a Hex or a tuple of coordinates.
 
          .. rust:function:: hpyhex::Hex::i
             :index: -1
@@ -263,7 +260,7 @@ Crate ``hpyhex``
             Get the I-line coordinate of the hex.
             
             Returns:
-                int: The I-line coordinate.
+            - int: The I-line coordinate.
 
          .. rust:function:: hpyhex::Hex::j
             :index: -1
@@ -273,7 +270,7 @@ Crate ``hpyhex``
             Get the J-line coordinate of the hex.
             
             Returns:
-                int: The J-line coordinate.
+            - int: The J-line coordinate.
 
          .. rust:function:: hpyhex::Hex::k
             :index: -1
@@ -283,7 +280,7 @@ Crate ``hpyhex``
             Get the K-line coordinate of the hex.
             
             Returns:
-                int: The K-line coordinate.
+            - int: The K-line coordinate.
 
          .. rust:function:: hpyhex::Hex::new
             :index: -1
@@ -293,12 +290,12 @@ Crate ``hpyhex``
             Initialize a Hex coordinate at (i, k). Defaults to (0, 0).
             
             Arguments:
-                i (int): The I-line coordinate of the hex.
-                k (int): The K-line coordinate of the hex.
+            - i (int): The I-line coordinate of the hex.
+            - k (int): The K-line coordinate of the hex.
             Returns:
-                Hex
+            - Hex
             Raises:
-                TypeError: If i or k is not an integer.
+            - TypeError: If i or k is not an integer.
 
          .. rust:function:: hpyhex::Hex::shift_i
             :index: -1
@@ -308,11 +305,11 @@ Crate ``hpyhex``
             Return a new Hex shifted along the i-axis by units.
             
             Arguments:
-                units (int): The number of units to shift along the i-axis.
+            - units (int): The number of units to shift along the i-axis.
             Returns:
-                Hex: A new Hex shifted by the specified units along the i-axis.
+            - Hex: A new Hex shifted by the specified units along the i-axis.
             Raises:
-                TypeError: If units is not an integer.
+            - TypeError: If units is not an integer.
 
          .. rust:function:: hpyhex::Hex::shift_j
             :index: -1
@@ -322,11 +319,11 @@ Crate ``hpyhex``
             Return a new Hex shifted along the j-axis by units.
             
             Arguments:
-                units (int): The number of units to shift along the j-axis.
+            - units (int): The number of units to shift along the j-axis.
             Returns:
-                Hex: A new Hex shifted by the specified units along the j-axis.
+            - Hex: A new Hex shifted by the specified units along the j-axis.
             Raises:
-                TypeError: If units is not an integer.
+            - TypeError: If units is not an integer.
 
          .. rust:function:: hpyhex::Hex::shift_k
             :index: -1
@@ -336,11 +333,11 @@ Crate ``hpyhex``
             Return a new Hex shifted along the k-axis by units.
             
             Arguments:
-                units (int): The number of units to shift along the k-axis.
+            - units (int): The number of units to shift along the k-axis.
             Returns:
-                Hex: A new Hex shifted by the specified units along the k-axis.
+            - Hex: A new Hex shifted by the specified units along the k-axis.
             Raises:
-                TypeError: If units is not an integer.
+            - TypeError: If units is not an integer.
 
       .. rubric:: Traits implemented
 
