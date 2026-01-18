@@ -738,3 +738,69 @@ impl Randomizable<char> for char {
     }
 }
 
+/// Queue for pieces with associated metadata
+/// 
+/// ## Overview
+/// The `PieceQueue<T>` struct implements a circular queue that holds pieces along with their associated
+/// metadata of type `T`. It allows for sequential access to pieces, where each time a piece is retrieved,
+/// it is replaced with a new randomly generated piece and metadata.
+/// 
+/// The queue is circular and allows sequential access to pieces along with their metadata.
+///
+/// ## Type Parameter
+/// - `T`: The metadata type associated with each piece.
+pub struct PieceQueue<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    pieces: Vec<(Piece, T)>,
+    index: usize,
+}
+
+impl <T> PieceQueue<T>
+where
+    T: Clone + Default + Randomizable<T>,
+{
+    /// Creates a new PieceQueue with specified capacity
+    ///
+    /// ## Parameters
+    /// - `capacity`: The initial capacity of the queue.
+    ///
+    /// ## Returns
+    /// A new `PieceQueue<T>` instance.
+    pub fn new(capacity: usize) -> Self {
+        let mut pieces = Vec::with_capacity(capacity);
+        for _ in 0..capacity {
+            let piece = PieceFactory::generate_piece();
+            let meta = T::random();
+            pieces.push((piece, meta));
+        }
+        PieceQueue {
+            pieces,
+            index: 0,
+        }
+    }
+
+    /// Gets the next piece and its metadata from the queue
+    /// 
+    /// ## Returns
+    /// A tuple containing the next `Piece` and its associated metadata.
+    pub fn next(&mut self) -> (Piece, T) {
+        let (piece, meta) = self.pieces[self.index].clone();
+        self.pieces[self.index] = {
+            let new_piece = PieceFactory::generate_piece();
+            let new_meta = T::random();
+            (new_piece, new_meta)
+        };
+        self.index = (self.index + 1) % self.pieces.len();
+        (piece, meta)
+    }
+
+    /// Returns the length of the queue
+    /// 
+    /// ## Returns
+    /// The length as a usize.
+    pub fn len(&self) -> usize {
+        self.pieces.len()
+    }
+}
