@@ -1479,6 +1479,57 @@ impl HexEngine {
     pub fn to_binary_string(&self) -> String {
         self.states.iter().map(|&b| if b { '1' } else { '0' }).collect()
     }
+
+    /// Returns an iterator over the grid states
+    /// 
+    /// ## Returns
+    /// A `HexEngineIterator` for iterating over block states.
+    pub fn iter(&self) -> HexEngineIterator<'_> {
+        HexEngineIterator {
+            engine: self,
+            index: 0,
+        }
+    }
+}
+
+/// Iterator for HexEngine
+/// 
+/// Yields:
+/// - `(Hex, bool)`: Tuple of coordinate and its state (occupied/unoccupied)
+pub struct HexEngineIterator<'a> {
+    engine: &'a HexEngine,
+    index: usize,
+}
+
+impl<'a> HexEngineIterator<'a> {
+    /// Creates a new HexEngineIterator
+    /// 
+    /// ## Parameters
+    /// - `engine`: Reference to the HexEngine to iterate over
+    pub fn new(engine: &'a HexEngine) -> Self {
+        HexEngineIterator {
+            engine,
+            index: 0,
+        }
+    }
+}
+
+impl <'a> Iterator for HexEngineIterator<'a> {
+    type Item = (Hex, bool);
+
+    /// Returns the next coordinate and its state
+    /// 
+    /// ## Returns
+    /// An `Option<(Hex, bool)>` containing the next coordinate and its state, or `None` if iteration is complete.
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.engine.states.len() {
+            return None;
+        }
+        let coo = self.engine.coordinate_of(self.index)?;
+        let state = self.engine.states[self.index];
+        self.index += 1;
+        Some((coo, state))
+    }
 }
 
 impl Clone for HexEngine {
