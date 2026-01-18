@@ -145,16 +145,43 @@ impl Hex {
     /// Initialize a Hex coordinate at (i, k). Defaults to (0, 0).
     ///
     /// Arguments:
-    /// - i (int): The I-line coordinate of the hex.
+    /// - i (int): The I-line coordinate of the hex, or a tuple (i, k) or (i, j, k).
     /// - k (int): The K-line coordinate of the hex.
     /// Returns:
     /// - Hex
     /// Raises:
     /// - TypeError: If i or k is not an integer.
     #[new]
-    #[pyo3(signature = (i = 0, k = 0))]
-    pub fn new(i: i32, k: i32) -> Self {
-        get_hex(i, k)
+    pub fn new(
+        i: Option<&pyo3::Bound<'_, PyAny>>,
+        k: Option<&pyo3::Bound<'_, PyAny>>,
+    ) -> pyo3::PyResult<Self> {
+        // Default to 0 if None
+        if let Some(i_obj) = i {
+            // Handle tuple input for i
+            if let Ok(tuple) = i_obj.extract::<(i32, i32)>() {
+                return Ok(get_hex(tuple.0, tuple.1));
+            } else if let Ok(tuple3) = i_obj.extract::<(i32, i32, i32)>() {
+                let (i_val, _j_val, k_val) = tuple3;
+                return Ok(get_hex(i_val, k_val));
+            } else {
+                let i_val: i32 = i_obj.extract()?;
+                let k_val: i32 = if let Some(k_obj) = k {
+                    k_obj.extract()?
+                } else {
+                    0
+                };
+                return Ok(get_hex(i_val, k_val));
+            }
+        } else {
+            let i_val = 0;
+            let k_val: i32 = if let Some(k_obj) = k {
+                k_obj.extract()?
+            } else {
+                0
+            };
+            return Ok(get_hex(i_val, k_val));
+        }
     }
 
     /// Get the I-line coordinate of the hex.
