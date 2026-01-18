@@ -1519,6 +1519,43 @@ impl TryFrom<Vec<bool>> for HexEngine {
     }
 }
 
+impl TryFrom<Vec<u8>> for HexEngine {
+    type Error = String;
+
+    /// Creates a HexEngine from a byte vector
+    /// 
+    /// The format is: 4 byte for radius, followed by packed bits for block states.
+    /// 
+    /// ## Parameters
+    /// - `bytes`: Vector of bytes representing the grid
+    /// 
+    /// ## Returns
+    /// A `Result<HexEngine, String>` containing the new grid or an error if invalid.
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        if bytes.len() < 4 {
+            return Err("Byte vector too short".to_string());
+        }
+        let radius = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let expected_len = HexEngine::calc_length(radius);
+        let mut states = Vec::with_capacity(expected_len);  
+        let mut bit_index = 0;
+        for byte in &bytes[4..] {
+            for i in 0..8 {
+                if bit_index >= expected_len {
+                    break;
+                }
+                let bit = (byte >> (7 - i)) & 1;
+                states.push(bit == 1);
+                bit_index += 1;
+            }
+        }
+        if states.len() != expected_len {
+            return Err("Byte vector does not match expected length".to_string());
+        }
+        Ok(HexEngine { radius, states })
+    }
+}
+
 impl TryFrom<Vec<Hex>> for HexEngine {
     type Error = String;
 
@@ -1570,6 +1607,44 @@ impl Into<Vec<bool>> for HexEngine {
     /// A vector of booleans representing block occupancy.
     fn into(self) -> Vec<bool> {
         self.states
+    }
+}
+
+impl Into<Vec<u8>> for HexEngine {
+    /// Converts HexEngine to byte vector
+    /// 
+    /// The format is: 4 byte for radius, followed by packed bits for block states.
+    /// 
+    /// ## Returns
+    /// A vector of bytes representing the grid.
+    fn into(self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let radius_bytes = (self.radius as u32).to_le_bytes();
+        bytes.extend_from_slice(&radius_bytes);
+
+        let mut current_byte = 0u8;
+        let mut bit_count = 0;
+
+        for &state in &self.states {
+            current_byte <<= 1;
+            if state {
+                current_byte |= 1;
+            }
+            bit_count += 1;
+
+            if bit_count == 8 {
+                bytes.push(current_byte);
+                current_byte = 0;
+                bit_count = 0;
+            }
+        }
+
+        if bit_count > 0 {
+            current_byte <<= 8 - bit_count;
+            bytes.push(current_byte);
+        }
+
+        bytes
     }
 }
 
@@ -1877,6 +1952,18 @@ mod tests {
         assert_eq!(h1.shift_i(5), Hex::new(6, 2));
         assert_eq!(h1.shift_k(3), Hex::new(1, 5));
         assert_eq!(h1.shift_j(1), Hex::new(0, 3));
+    }
+
+    #[test]
+    fn test_into_bytes_and_back() {
+        let mut engine = create_test_engine();
+        engine.set(Hex::new(0, 0), true).unwrap();
+        engine.set(Hex::new(1, 1), true).unwrap();
+        engine.set(Hex::new(1, 0), true).unwrap();
+        let bytes: Vec<u8> = engine.clone().into();
+        let engine_from_bytes = HexEngine::try_from(bytes).unwrap();
+        assert_eq!(engine.radius, engine_from_bytes.radius, "Radius should match after conversion");
+        assert_eq!(engine.states, engine_from_bytes.states, "States should match after conversion");
     }
 
     #[test]
