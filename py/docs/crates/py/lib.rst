@@ -210,6 +210,7 @@ Crate ``hpyhex``
             Return a string representation of the hex coordinates for debugging.
             
             Format: Hex(i, j, k), where i, j, and k are the line coordinates.
+
             Returns:
                - str: The string representation of the hex.
 
@@ -235,6 +236,7 @@ Crate ``hpyhex``
             Return a string representation of the hex coordinates.
             
             Format: Hex(i, j, k), where i, j, and k are the line coordinates.
+
             Returns:
                - str: The string representation of the hex.
 
@@ -338,3 +340,198 @@ Crate ``hpyhex``
                - Hex: A new Hex shifted by the specified units along the k-axis.
             Raises:
                - TypeError: If units is not an integer.
+
+
+   .. rust:struct:: hpyhex::Piece
+      :index: 1
+      :vis: pub
+      :toc: struct Piece
+      :layout: [{"type":"keyword","value":"struct"},{"type":"space"},{"type":"name","value":"Piece"}]
+
+      Represents a shape or unit made up of 7 Block instances,
+      typically forming a logical structure such as a game piece.
+      
+      This implementation of piece contains no blocks, and instead only contains 
+      a single u8 value representing the occupancy state of each block (7 bits used).
+      
+      This is a singleton class, meaning that each unique Piece state is cached
+      and reused to save memory and improve performance.
+      
+      Attributes:
+         - positions (list[Hex]): A list of Hex coordinates representing the positions of the blocks in the piece.
+         - state (u8): A byte value representing the occupancy state of each block in the piece.
+
+      .. rubric:: Implementations
+
+      .. rust:impl:: hpyhex::Piece
+         :index: -1
+         :vis: pub
+         :layout: [{"type":"keyword","value":"impl"},{"type":"space"},{"type":"link","value":"Piece","target":"Piece"}]
+         :toc: impl Piece
+
+         .. rubric:: Variables
+         
+         .. rust:variable:: hpyhex::Piece::positions
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"pub"},{"type":"space"},{"type":"name","value":"positions"},{"type":"punctuation","value":":"},{"type":"space"},{"type":"link","value":"Vec","target":"Vec"},{"type":"punctuation","value":"<"},{"type":"link","value":"Hex","target":"Hex"},{"type":"punctuation","value":">"}]
+
+            The fixed positions of the 7 blocks in a standard Piece.
+
+            Returns:
+               - list[Hex]: A list of Hex coordinates representing the positions of the blocks in the piece.
+
+         .. rubric:: Functions
+
+
+         .. rust:function:: hpyhex::Piece::__bool__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__bool__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"bool","target":"bool"}]
+
+            Check if the Piece has any occupied blocks.
+            
+            Returns:
+               - bool: True if any block is occupied, False otherwise.
+
+         .. rust:function:: hpyhex::Piece::__eq__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__eq__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":", "},{"type":"name","value":"other"},{"type":"punctuation","value":": "},{"type":"punctuation","value":"&"},{"type":"link","value":"Piece","target":"Piece"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"bool","target":"bool"}]
+
+            Returns True if the occupancy states match, False otherwise.
+            
+            Arguments:
+               - other (Piece): The Piece to compare with.
+            Returns:
+               - bool: True if the occupancy states match, False otherwise.
+
+         .. rust:function:: hpyhex::Piece::__hash__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__hash__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"u8","target":"u8"}]
+
+            Return a hash of the Piece's occupancy states.
+            
+            This method directly uses the byte representation of the Piece to generate a hash value.
+
+            Returns:
+               - int: The hash value of the Piece.
+
+         .. rust:function:: hpyhex::Piece::__int__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__int__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"u8","target":"u8"}]
+
+            Return a byte representation of the blocks in a standard 7-Block piece.
+            
+            Returns:
+               - int: A byte representation of the Piece, where each bit represents the occupancy state of a
+
+         .. rust:function:: hpyhex::Piece::__iter__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__iter__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"PyResult","target":"PyResult"},{"type":"punctuation","value":"<"},{"type":"link","value":"Py","target":"Py"},{"type":"punctuation","value":"<"},{"type":"link","value":"PyAny","target":"PyAny"},{"type":"punctuation","value":">"},{"type":"punctuation","value":">"}]
+
+            Return an iterator over the occupancy states of the Piece.
+            
+            Yields:
+               - bool: The occupancy state of each block in the Piece.
+
+         .. rust:function:: hpyhex::Piece::__len__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__len__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"usize","target":"usize"}]
+
+            Return the number of occupied blocks in the Piece.
+            
+            Returns:
+               - int: The number of occupied blocks in the Piece.
+
+         .. rust:function:: hpyhex::Piece::__repr__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__repr__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"String","target":"String"}]
+
+            Return a string representation of the Piece in byte format.
+            This representation is useful for debugging and serialization.
+            
+            Returns:
+               - str: A string representation of the Piece in byte format.
+
+         .. rust:function:: hpyhex::Piece::__str__
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"__str__"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"String","target":"String"}]
+
+            Return a string representation of the Piece.
+            
+            Format: Piece{Block(i, j, k, state), ...}, where i, j, and k are the line coordinates of each block,
+            and state is the occupancy state, if occupied, else "null".
+            
+            Returns:
+               - str: The string representation of the Piece.
+
+         .. rust:function:: hpyhex::Piece::all_pieces
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"all_pieces"},{"type":"punctuation","value":"("},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"PyResult","target":"PyResult"},{"type":"punctuation","value":"<"},{"type":"link","value":"Py","target":"Py"},{"type":"punctuation","value":"<"},{"type":"link","value":"PyAny","target":"PyAny"},{"type":"punctuation","value":">"},{"type":"punctuation","value":">"}]
+
+            Get a list of all possible non-empty Piece instances.
+            This method returns all cached Piece instances representing different occupancy states.
+            
+            The return of this method does not guarantee that pieces are spacially contigous.
+
+            Returns:
+               - list[Piece]: A list of all possible Piece instances.
+
+         .. rust:function:: hpyhex::Piece::contigous_pieces
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"contigous_pieces"},{"type":"punctuation","value":"("},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"PyResult","target":"PyResult"},{"type":"punctuation","value":"<"},{"type":"link","value":"Py","target":"Py"},{"type":"punctuation","value":"<"},{"type":"link","value":"PyAny","target":"PyAny"},{"type":"punctuation","value":">"},{"type":"punctuation","value":">"}]
+
+            Get a list of all possible contigous Piece instances.
+            This method returns all cached Piece instances representing different occupancy states
+            that are spatially contiguous.
+            
+            Returns:
+               - slist[Piece]: A list of all possible contigous Piece instances.
+
+         .. rust:function:: hpyhex::Piece::coordinates
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"coordinates"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"Vec","target":"Vec"},{"type":"punctuation","value":"<"},{"type":"link","value":"Hex","target":"Hex"},{"type":"punctuation","value":">"}]
+
+            Get the list of Hex coordinates representing the positions of the blocks in the Piece.
+            
+            Returns:
+               - list[Hex]: The list of Hex coordinates for the Piece.
+
+         .. rust:function:: hpyhex::Piece::count_neighbors
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"count_neighbors"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":", "},{"type":"name","value":"coo"},{"type":"punctuation","value":": "},{"type":"punctuation","value":"&"},{"type":"link","value":"Hex","target":"Hex"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"link","value":"usize","target":"usize"}]
+
+            Count occupied neighboring Blocks around the given Hex position.
+            
+            Checks up to six adjacent positions to the block at Hex coordinate.
+            A neighbor is occupied if the block is non-null and its state is True.
+            
+            Parameters:
+               - coo (Hex | tuple): The Hex coordinate to check for neighbors.
+            Returns:
+               - int: The count of occupied neighboring Blocks.
+            Raises:
+               - TypeError: If coo is not a Hex or a tuple of coordinates.
+
+         .. rust:function:: hpyhex::Piece::states
+            :index: -1
+            :vis: pub
+            :layout: [{"type":"keyword","value":"fn"},{"type":"space"},{"type":"name","value":"states"},{"type":"punctuation","value":"("},{"type":"punctuation","value":"&"},{"type":"keyword","value":"self"},{"type":"punctuation","value":")"},{"type":"space"},{"type":"returns"},{"type":"space"},{"type":"punctuation","value":"["},{"type":"link","value":"bool","target":"bool"},{"type":"punctuation","value":"; "},{"type":"literal","value":"7"},{"type":"punctuation","value":"]"}]
+
+            Get the tuple of boolean values representing the occupancy state of each block in the Piece.
+            
+            Returns:
+               - tuple[bool, ...]: The tuple of boolean values for the Piece.
+
+
