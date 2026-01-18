@@ -1,6 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use pyo3::prelude::*;
+use pyo3::types::{PyList, PyAny, PyType};
 
 #[pymodule]
 fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
@@ -87,6 +88,12 @@ fn get_hex(i: i32, k: i32) -> Py<Hex> {
         })
     } else {
         Python::with_gil(|py| Py::new(py, Hex { i, k }).unwrap())
+    }
+}
+
+impl Into<(i32, i32)> for Hex {
+    fn into(self) -> (i32, i32) {
+        (self.i, self.k)
     }
 }
 
@@ -767,4 +774,1307 @@ impl Piece {
         })
     }
     
+}
+
+#[pyclass]
+#[derive(Eq, Clone)]
+/// The HexEngine class provides a complete engine for managing a two-dimensional hexagonal
+/// block grid used for constructing and interacting with hex-based shapes in the game.
+///
+/// The engine does not actually contain any blocks, but instead contains a list of booleans
+/// representing the occupancy state of each block in the hexagonal grid. The correspondence is achieved
+/// through optimized indexing and coordinate transformations.
+///
+/// Grid Structure:
+/// - Uses an axial coordinate system (i, k), where i - j + k = 0, and j is derived as j = i + k.
+/// - Three axes: I, J, K. I+ is 60° from J+, J+ is 60° from K+, K+ is 60° from I-.
+/// - Raw coordinates: distance along an axis multiplied by 2.
+/// - Line-coordinates (I, K) are perpendicular distances to axes, calculated from raw coordinates.
+/// - Blocks are stored in a sorted array by increasing raw coordinate i, then k.
+///
+/// Grid Size:
+/// - Total blocks for radius r: Aₖ = 1 + 3*r*(r-1)
+/// - Derived from: Aₖ = Aₖ₋₁ + 6*(k-1); A₁ = 1
+///
+/// Machine Learning:
+/// - Supports reward functions for evaluating action quality.
+/// - check_add discourages invalid moves (e.g., overlaps).
+/// - compute_dense_index evaluates placement density for rewarding efficient gap-filling.
+///
+/// Attributes:
+/// - radius (int): The radius of the hexagonal grid, defining the size of the grid.
+/// - states (list[bool]): A list of booleans representing the occupancy state of each block in the grid.
+pub struct HexEngine {
+    radius: usize,
+    states: Vec<bool>,
+}
+
+impl PartialEq for HexEngine {
+    fn eq(&self, other: &Self) -> bool {
+        self.radius == other.radius && self.states == other.states
+    }
+}
+
+impl HexEngine {
+    /// Converts linear index to coordinate
+    /// 
+    /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate.
+    /// 
+    /// Arguments:
+    /// - `index`: The linear index to convert
+    /// Returns:
+    /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
+    pub fn coordinate_of(&self, mut index: usize) -> PyResult<Py<Hex>> {
+        if index >= self.states.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+        }
+
+        let r = self.radius as i32;
+        
+        // First half
+        for i in 0..r {
+            let len = (i + r) as usize;
+            if index < len {
+                return Ok(get_hex(i, index as i32));
+            }
+            index -= len;
+        }
+        
+        // Second half
+        for i in 0..(r - 1) {
+            let len = (2 * r - 2 - i) as usize;
+            if index < len {
+                return Ok(get_hex(i + r, index as i32 + i + 1));
+            }
+            index -= len;
+        }
+        
+        Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
+    }
+    /// Converts linear index to coordinate
+    /// 
+    /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate.
+    /// 
+    /// Arguments:
+    /// - `index`: The linear index to convert
+    /// Returns:
+    /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
+    pub fn hex_coordinate_of(&self, mut index: usize) -> PyResult<Hex> {
+        if index >= self.states.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+        }
+
+        let r = self.radius as i32;
+        
+        // First half
+        for i in 0..r {
+            let len = (i + r) as usize;
+            if index < len {
+                return Ok(Hex { i, k: index as i32 });
+            }
+            index -= len;
+        }
+        
+        // Second half
+        for i in 0..(r - 1) {
+            let len = (2 * r - 2 - i) as usize;
+            if index < len {
+                return Ok(Hex { i: i + r, k: index as i32 + i + 1 });
+            }
+            index -= len;
+        }
+        
+        Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
+    }
+    /// Converts coordinate to linear index
+    /// 
+    /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector.
+    /// 
+    /// Arguments:
+    /// - `coo`: The `Hex` coordinate to convert
+    /// Returns:
+    /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
+    pub fn index_of(&self, coo: &Py<Hex>) -> PyResult<isize> {
+        let r = self.radius as i32;
+        let (i, k) = {
+            let hex = coo.borrow(Python::with_gil(|py| py));
+            (hex.i, hex.k)
+        };
+        if Self::check_range(coo, self.radius)? {
+            if i < r {
+                Ok((k + i * r + i * (i - 1) / 2) as isize)
+            } else {
+                Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
+            }
+        } else {
+            Ok(-1)
+        }
+    }
+    /// Converts coordinate to linear index
+    /// 
+    /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector.
+    /// 
+    /// Arguments:
+    /// - `i`: The I-line coordinate
+    /// - `k`: The K-line coordinate
+    /// Returns:
+    /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
+    pub fn linear_index_of(&self, i: i32, k: i32) -> PyResult<isize> {
+        let r = self.radius as i32;
+        if Self::check_range_coords(i, k - i, k, self.radius)? {
+            if i < r {
+                Ok((k + i * r + i * (i - 1) / 2) as isize)
+            } else {
+                Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
+            }
+        } else {
+            Ok(-1)
+        }
+    }
+    /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
+    ///
+    /// Arguments:
+    /// - coo: Hex coordinate to check.
+    /// - radius: Radius of the hexagonal grid.
+    /// Returns:
+    /// - bool: True if the coordinate is within range, False otherwise.
+    #[inline]
+    pub fn check_range(coo: &Py<Hex>, radius: usize) -> PyResult<bool> {
+        let hex = coo.borrow(Python::with_gil(|py| py));
+        let (i, j, k) = (hex.i, hex.k - hex.i, hex.k);
+        Ok(0 <= i && i < (radius as i32) * 2 - 1 &&
+           -((radius as i32)) < j && j < (radius as i32) &&
+           0 <= k && k < (radius as i32) * 2 - 1)
+    }
+    /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
+    ///
+    /// Arguments:
+    /// - i: I-line coordinate.
+    /// - j: J-line coordinate.
+    /// - k: K-line coordinate.
+    /// - radius: Radius of the hexagonal grid.
+    /// Returns:
+    /// - bool: True if the coordinate is within range, False otherwise.
+    #[inline]
+    pub fn check_range_coords(i: i32, j: i32, k: i32, radius: usize) -> PyResult<bool> {
+        Ok(0 <= i && i < (radius as i32) * 2 - 1 &&
+           -((radius as i32)) < j && j < (radius as i32) &&
+           0 <= k && k < (radius as i32) * 2 - 1)
+    }
+
+    /// Get the occupancy state of a block at the given linear index.
+    ///
+    /// Arguments:
+    /// - index: Linear index of the block to get.
+    /// Returns:
+    /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
+    pub fn get_state_from_index(&self, index: usize) -> PyResult<bool> {
+        if index >= self.states.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+        }
+        Ok(self.states[index])
+    }
+
+    /// Set the occupancy state of a block at the given linear index.
+    ///
+    /// Arguments:
+    /// - index: Linear index of the block to set.
+    /// - state: The occupancy state to set (True for occupied, False for unoccupied
+    pub fn set_state_from_index(&mut self, index: usize, state: bool) -> PyResult<()> {
+        if index >= self.states.len() {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+        }
+        self.states[index] = state;
+        Ok(())
+    }
+
+    /// Get the occupancy state of a block at the given Hex coordinate.
+    ///
+    /// Arguments:
+    /// - coo: Hex coordinate of the block to get.
+    /// Returns:
+    /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
+    pub fn get_state_from_coordinate(&self, coo: &Py<Hex>) -> PyResult<bool> {
+        let index = self.index_of(coo)?;
+        if index == -1 {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
+        }
+        Ok(self.states[index as usize])
+    }
+
+    /// Get the occupancy state of a block at the given Hex coordinate.
+    ////
+    /// Arguments:
+    /// - i: I-line coordinate of the block to get.
+    /// - k: K-line coordinate of the block to get.
+    /// Returns:
+    /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
+    pub fn state_of(&self, i: i32, k: i32) -> PyResult<bool> {
+        let index = self.linear_index_of(i, k)?;
+        if index == -1 {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
+        }
+        Ok(self.states[index as usize])
+    }
+
+    /// Set the occupancy state of a block at the given Hex coordinate.
+    ///
+    /// Arguments:
+    /// - coo: Hex coordinate of the block to set.
+    /// - state: The occupancy state to set (True for occupied, False for unoccupied).
+    pub fn set_state_from_coordinate(&mut self, coo: &Py<Hex>, state: bool) -> PyResult<()> {
+        let index = self.index_of(coo)?;
+        if index == -1 {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
+        }
+        self.states[index as usize] = state;
+        Ok(())
+    }
+    /// Count occupied neighboring Blocks around the given Hex position.
+    ///
+    /// Checks up to six adjacent positions to the block at Hex coordinate.
+    /// A neighbor is occupied if the block is non-null and its state is True.
+    ///
+    /// Parameters:
+    /// - i: I-line coordinate of the block to check for neighbors.
+    /// - k: K-line coordinate of the block to check for neighbors.
+    /// Returns:
+    /// - int: The count of occupied neighboring Blocks.
+    /// Raises:
+    /// - TypeError: If coo is not a Hex.
+    pub fn count_neighbors_coordinate(&self, i: i32, k: i32) -> PyResult<usize> {
+        let mut count = 0;
+        for pos in &Piece::positions {
+            let target_i = pos.i + i;
+            let target_k = pos.k + k;
+            let target_j = target_k - target_i;
+            if Self::check_range_coords(target_i, target_j, target_k, self.radius).unwrap_or(false) {
+                if self.get_state_from_coordinate(&get_hex(target_i, target_k)).unwrap_or(false) {
+                    count += 1;
+                }
+            } else {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+    /// Get a byte representation of the blocks around the given Hex position.
+    /// 
+    /// Each bit in the byte represents the occupancy state of a block in the Piece,
+    /// with the most significant bit corresponding to the first block in the Piece's positions.
+    /// 
+    /// Parameters:
+    /// - i: I-line coordinate of the block to check.
+    /// - k: K-line coordinate of the block to check.
+    /// Returns:
+    /// - int: A byte representation of the blocks around the given Hex position.
+    pub fn pattern_of(&self, i: i32, k: i32) -> PyResult<u8> {
+        let mut pattern: u8 = 0;
+        for (idx, pos) in Piece::positions.iter().enumerate() {
+            let target_i = pos.i + i;
+            let target_k = pos.k + k;
+            let target_j = target_k - target_i;
+            if Self::check_range_coords(target_i, target_j, target_k, self.radius).unwrap_or(false) {
+                if self.get_state_from_coordinate(&get_hex(target_i, target_k)).unwrap_or(false) {
+                    pattern |= 1 << (6 - idx);
+                }
+            }
+        }
+        Ok(pattern)
+    }
+
+    /// Identify coordinates along I axis that can be eliminated and insert them into the input list
+    ///
+    /// Arguments:
+    /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    fn eliminate_i(&self, eliminated: &mut Vec<Py<Hex>>) {
+        let r = self.radius as i32;
+        
+        // First half
+        for i in 0..r {
+            let start_idx = (i * (r * 2 + i - 1) / 2) as usize;
+            let len = (r + i) as usize;
+            
+            if (0..len).all(|b| self.states.get(start_idx + b) == Some(&true)) {
+                for b in 0..len {
+                    match self.coordinate_of(start_idx + b) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                }
+            }
+        }
+        
+        // Second half
+        let const_term = (r * (r * 3 - 1) / 2) as usize;
+        for i in (0..=(r - 2)).rev() {
+            let start_idx = const_term + ((r - i - 2) * (r * 3 - 1 + i) / 2) as usize;
+            let len = (r + i) as usize;
+            
+            if (0..len).all(|b| self.states.get(start_idx + b) == Some(&true)) {
+                for b in 0..len {
+                    match self.coordinate_of(start_idx + b) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Identify coordinates along J axis that can be eliminated and insert them into the input list
+    ///
+    /// Arguments:
+    /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    fn eliminate_j(&self, eliminated: &mut Vec<Py<Hex>>) {
+        let radius = self.radius as i32;
+        
+        for r in 0..radius {
+            let mut idx = r as usize;
+            let mut all_valid = true;
+            
+            // Check first part (1 to radius-1)
+            for c in 1..radius {
+                if idx >= self.states.len() || !self.states[idx] {
+                    all_valid = false;
+                    break;
+                }
+                idx += (radius + c) as usize;
+            }
+            
+            // Check second part (radius - r blocks)
+            if all_valid {
+                for c in 0..(radius - r) {
+                    if idx >= self.states.len() || !self.states[idx] {
+                        all_valid = false;
+                        break;
+                    }
+                    idx += (2 * radius - c - 1) as usize;
+                }
+            }
+            
+            // If all blocks are occupied, add them to eliminated list
+            if all_valid {
+                let mut idx = r as usize;
+                for c in 1..radius {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (radius + c) as usize;
+                }
+                for c in 0..(radius - r) {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (2 * radius - c - 1) as usize;
+                }
+            }
+        }
+        
+        for r in 1..radius {
+            let start_idx = (radius * r + r * (r - 1) / 2) as usize;
+            let mut idx = start_idx;
+            let mut all_valid = true;
+            
+            // Check first part (1 to radius-r-1)
+            for c in 1..(radius - r) {
+                if idx >= self.states.len() || !self.states[idx] {
+                    all_valid = false;
+                    break;
+                }
+                idx += (radius + c + r) as usize;
+            }
+            
+            // Check second part (radius blocks)
+            if all_valid {
+                for c in 0..radius {
+                    if idx >= self.states.len() || !self.states[idx] {
+                        all_valid = false;
+                        break;
+                    }
+                    idx += (2 * radius - c - 1) as usize;
+                }
+            }
+            
+            // If all blocks are occupied, add them to eliminated list
+            if all_valid {
+                let mut idx = start_idx;
+                for c in 1..(radius - r) {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (radius + c + r) as usize;
+                }
+                for c in 0..radius {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (2 * radius - c - 1) as usize;
+                }
+            }
+        }
+    }
+
+    /// Identify coordinates along L axis that can be eliminated and insert them into the input list
+    ///
+    /// Arguments:
+    /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    fn eliminate_k(&self, eliminated: &mut Vec<Py<Hex>>) {
+        let radius = self.radius as i32;
+        
+        for r in 0..radius {
+            let mut idx = r as usize;
+            let mut all_valid = true;
+            
+            // Check first part (radius-1 blocks)
+            for c in 0..(radius - 1) {
+                if idx >= self.states.len() || !self.states[idx] {
+                    all_valid = false;
+                    break;
+                }
+                idx += (radius + c) as usize;
+            }
+            
+            // Check second part (r+1 blocks)
+            if all_valid {
+                for c in 0..(r + 1) {
+                    if idx >= self.states.len() || !self.states[idx] {
+                        all_valid = false;
+                        break;
+                    }
+                    idx += (2 * radius - c - 2) as usize;
+                }
+            }
+            
+            // If all blocks are occupied, add them to eliminated list
+            if all_valid {
+                let mut idx = r as usize;
+                for c in 0..(radius - 1) {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (radius + c) as usize;
+                }
+                for c in 0..(r + 1) {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (2 * radius - c - 2) as usize;
+                }
+            }
+        }
+        
+        for r in 1..radius {
+            let start_idx = (radius * (r + 1) + r * (r + 1) / 2 - 1) as usize;
+            let mut idx = start_idx;
+            let mut all_valid = true;
+            
+            // Check first part (r to radius-2)
+            for c in r..(radius - 1) {
+                if idx >= self.states.len() || !self.states[idx] {
+                    all_valid = false;
+                    break;
+                }
+                idx += (radius + c) as usize;
+            }
+            
+            // Check second part (radius-1 down to 0)
+            if all_valid {
+                for c in (0..radius).rev() {
+                    if idx >= self.states.len() || !self.states[idx] {
+                        all_valid = false;
+                        break;
+                    }
+                    idx += (radius + c - 1) as usize;
+                }
+            }
+            
+            // If all blocks are occupied, add them to eliminated list
+            if all_valid {
+                let mut idx = start_idx;
+                for c in r..(radius - 1) {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (radius + c) as usize;
+                }
+                for c in (0..radius).rev() {
+                    match self.coordinate_of(idx) {
+                        Ok(coo) => eliminated.push(coo),
+                        Err(_) => (),
+                    }
+                    idx += (radius + c - 1) as usize;
+                }
+            }
+        }
+    }
+}
+
+#[pymethods]
+impl HexEngine {
+    /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
+    ///
+    /// Arguments:
+    /// - coo: Hex coordinate to check.
+    /// - radius: Radius of the hexagonal grid.
+    /// Returns:
+    /// - bool: True if the coordinate is within range, False otherwise.
+    #[staticmethod]
+    pub fn __in_range(coo: &pyo3::Bound<'_, PyAny>, radius: usize) -> PyResult<bool> {
+        let (i, j, k) = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
+            (hex.i, hex.k - hex.i, hex.k)
+        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+            let (i, k) = tuple;
+            let j = k - i;
+            (i, j, k)
+        } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
+            (tuple3.0, tuple3.1, tuple3.2)
+        } else {
+            return Ok(false);
+        };
+        HexEngine::check_range_coords(i, j, k, radius)
+    }
+
+    /// Solves for the length of a HexEngine based on its radius.
+    /// 
+    /// Arguments:
+    /// - radius (int): The radius of the hexagonal grid.
+    /// Returns:
+    /// - int: The length of the hexagonal grid, or -1 if the radius is invalid.
+    #[staticmethod]
+    pub fn solve_length(radius: usize) -> isize {
+        if radius < 1 {
+            -1
+        } else {
+            1 + 3 * (radius as isize) * ((radius as isize) - 1)
+        }
+    }
+
+    /// Solves for the radius of a HexEngine based on its length.
+    /// 
+    /// Arguments:
+    /// - radius (int): The radius of the hexagonal grid.
+    /// Returns:
+    /// - int: The radius of the hexagonal grid, or -1 if the length is invalid.
+    #[staticmethod]
+    pub fn solve_radius(length: usize) -> isize {
+        if length == 0 {
+            return 0;
+        }
+        if length % 3 != 1 {
+            return -1;
+        }
+        let target = (length - 1) / 3;
+        let u = target * 4 + 1;
+        let r = ((u as f64).sqrt() as usize + 1) / 2;
+        if r > 0 && r * (r - 1) == target {
+            r as isize
+        } else {
+            -1
+        }
+    }
+
+    /// Construct a HexEngine with the specified radius, states, or string.
+    /// 
+    /// This method initializes the hexagonal grid with a given radius,
+    /// creating an array of booleans to represent the grid.
+    /// 
+    /// Arguments:
+    /// - arg (int | str | list[bool]):
+    ///     - An integer representing the radius of the hexagonal grid.
+    ///     - A list of booleans representing the occupancy state of each block.
+    ///     - A string representation of the occupancy state, either as 'X'/'O' or '1'/'0'.
+    /// Raises:
+    /// - TypeError: If radius is not an integer greater than 0, or if the list contains non-boolean values.
+    /// - ValueError: If radius is less than 1, or if the length of the list/string does not match a valid hexagonal grid size.
+    #[new]
+    pub fn new(arg: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(radius) = arg.extract::<usize>() {
+            if radius < 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err("Radius must be greater than 0"));
+            }
+            Ok(HexEngine {
+                radius,
+                states: vec![false; 1 + 3 * radius * (radius - 1)],
+            })
+        } else if let Ok(s) = arg.extract::<String>() {
+            let s = s.trim();
+            if !s.chars().all(|c| c == '0' || c == '1' || c == 'X' || c == 'O') {
+                return Err(pyo3::exceptions::PyValueError::new_err("String must contain only '0' or '1', or 'X' or 'O'"));
+            }
+            let radius = HexEngine::solve_radius(s.len()) as usize;
+            if radius < 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err("Invalid length for hexagonal grid"));
+            }
+            let states = s.chars().map(|c| c == '1' || c == 'X').collect();
+            Ok(HexEngine { radius, states })
+        } else if let Ok(list) = arg.extract::<Vec<bool>>() {
+            let radius = HexEngine::solve_radius(list.len()) as usize;
+            if radius < 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err("Invalid length for hexagonal grid"));
+            }
+            Ok(HexEngine { radius, states: list })
+        } else {
+            Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for HexEngine initialization"))
+        }
+    }
+
+    /// Get the radius of the hexagonal grid.
+    /// 
+    /// Returns:
+    /// - int: The radius of the hexagonal grid.
+    #[getter]
+    pub fn radius(&self) -> usize {
+        self.radius
+    }
+
+    /// Get the occupancy states of the hexagonal grid blocks.
+    /// 
+    /// Returns:
+    /// - list[bool]: The occupancy states of the hexagonal grid blocks.
+    #[getter]
+    pub fn states(&self) -> Vec<bool> {
+        self.states.clone()
+    }
+
+    /// Check equality with another HexEngine or a list of booleans.
+    /// Returns True if the states match, False otherwise.
+    /// 
+    /// Arguments:
+    /// - value (HexEngine | list[bool]): The HexEngine or list of booleans to compare with.
+    /// Returns:
+    /// - bool: True if the states match, False otherwise.
+    pub fn __eq__(&self, value: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
+        if let Ok(other) = value.extract::<PyRef<HexEngine>>() {
+            Ok(self.states == other.states)
+        } else if let Ok(list) = value.extract::<Vec<bool>>() {
+            Ok(self.states == list)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Return a hash of the HexEngine's occupancy states.
+    /// This method uses the tuple representation of the states for hashing.
+    /// 
+    /// Returns:
+    /// - int: The hash value of the HexEngine.
+    pub fn __hash__(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        let mut hasher = DefaultHasher::new();
+        self.states.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Get the number of blocks in the hexagonal grid.
+    /// 
+    /// Returns:
+    /// - int: The number of blocks in the grid.
+    pub fn __len__(&self) -> usize {
+        self.states.len()
+    }
+
+    /// Return an iterator over the occupancy states of the hexagonal grid blocks.
+    /// 
+    /// Yields:
+    /// - bool: The occupancy state of each block in the grid.
+    pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<PyAny>> {
+        Python::with_gil(|py| {
+            let tuple = pyo3::types::PyTuple::new_bound(py, &slf.states);
+            Ok(tuple.into_py(py))
+        })
+    }
+
+    /// Return a string representation of the grid block states.
+    /// This representation is useful for debugging and serialization.
+    /// Format: "1" for occupied blocks, "0" for unoccupied blocks.
+    /// 
+    /// Returns:
+    /// - str: A string representation of the grid block states.
+    pub fn __repr__(&self) -> String {
+        self.states.iter().map(|&b| if b { '1' } else { '0' }).collect()
+    }
+
+    /// Return a string representation of the grid block states.
+    /// Format: "HexEngine[blocks = {block1, block2, ...}]",
+    /// where each block is represented by its string representation.
+    /// 
+    /// Returns:
+    /// - str: The string representation of the HexEngine.
+    pub fn __str__(&self) -> String {
+        let mut s = String::from("HexEngine[blocks = {");
+        for (i, &state) in self.states.iter().enumerate() {
+            let hex = Python::with_gil(|py| {
+                let hex = self.coordinate_of(i).unwrap();
+                let h = hex.borrow(py);
+                (h.i, h.k)
+            });
+            if i > 0 {
+                s.push_str(", ");
+            }
+            s.push_str(&format!("({}, {}, {})", hex.0, hex.1, state));
+        }
+        s.push_str("}]");
+        s
+    }
+
+    /// Create a deep copy of the HexEngine.
+    /// 
+    /// Returns:
+    /// HexEngine: A new HexEngine with the same radius and states.
+    pub fn __copy__(&self) -> Self {
+        HexEngine { radius: self.radius, states: self.states.clone() }
+    }
+
+    /// Create a deep copy of the HexEngine.
+    /// Arguments:
+    /// - memo (dict): A dictionary to keep track of copied objects.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance with the same radius and blocks.
+    pub fn __deepcopy__(&self, memo: Option<&pyo3::Bound<'_, PyAny>>) -> Self {
+        // Check if already copied
+        if let Some(m) = memo {
+            if let Ok(existing) = m.get_item(self as *const _ as usize) {
+                if let Ok(hex_engine) = existing.extract::<PyRef<HexEngine>>() {
+                    return hex_engine.clone();
+                }
+            }
+        }
+        // Create a new instance
+        let new_instance = HexEngine {
+            radius: self.radius,
+            states: self.states.clone(),
+        };
+        // Store in memo
+        if let Some(m) = memo {
+            let _ = m.set_item(self as *const _ as usize, Python::with_gil(|py| Py::new(py, new_instance.clone()).unwrap()));
+        }
+        new_instance
+    }
+
+    /// Reset the HexEngine grid to its initial state, clearing all blocks.
+    /// This method reinitializes the grid, setting all blocks to unoccupied.
+    /// 
+    /// Returns:
+    /// - None
+    pub fn reset(&mut self) {
+        self.states = vec![false; 1 + 3 * self.radius * (self.radius - 1)];
+    }
+
+    /// Check if a Hex coordinate is within the radius of the hexagonal grid.
+    /// 
+    /// Arguments:
+    /// - coo: Hex coordinate to check.
+    /// Returns:
+    /// - bool: True if the coordinate is within range, False otherwise.
+    pub fn in_range(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
+        Self::__in_range(coo, self.radius)
+    }
+
+    /// Get the index of the Block at the specified Hex coordinate.
+    /// 
+    /// This method is heavily optimized for performance and achieves O(1) complexity by using direct index formulas
+    /// based on the hexagonal grid's structure. It calculates the index based on the I and K coordinates of the Hex.
+    /// 
+    /// Arguments:
+    /// - coo: The Hex coordinate.
+    /// Returns:
+    /// - int: The index of the Block, or -1 if out of range.
+    pub fn index_block(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<isize> {
+        let r = self.radius as i32;
+        let (i, k) = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
+            (hex.i, hex.k)
+        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+            (tuple.0, tuple.1)
+        } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
+            (tuple3.0, tuple3.2)
+        } else {
+            return Ok(-1);
+        };
+        let py_hex: Option<Py<Hex>> = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
+            Some(hex.into())
+        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+            Some(get_hex(tuple.0, tuple.1))
+        } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
+            Some(get_hex(tuple3.0, tuple3.2))
+        } else {
+            None
+        };
+        if let Some(ref hex) = py_hex {
+            if Self::check_range(hex, r as usize)? {
+                if i < r {
+                    Ok((k + i * r + i * (i - 1) / 2) as isize)
+                } else {
+                    Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
+                }
+            } else {
+                Ok(-1)
+            }
+        } else {
+            Ok(-1)
+        }
+    }
+
+    /// Get the Hex coordinate of the Block at the specified index.
+    /// 
+    /// This method retrieves the Hex coordinate based on the index in the hexagonal grid.
+    /// If the index is out of range, raise ValueError.
+    /// 
+    /// Arguments:
+    /// - index (int): The index of the Block.
+    /// Returns:
+    /// - Hex: The Hex coordinate of the Block.
+    /// Raises:
+    /// - TypeError: If index is not an integer.
+    /// - ValueError: If the index is out of range.
+    pub fn coordinate_block(&self, index: usize) -> PyResult<Py<Hex>> {
+        if index < self.states.len() {
+            let hex = self.coordinate_of(index).unwrap();
+            Python::with_gil(|py| Ok(Py::new(py, hex).unwrap()))
+        } else {
+            Err(pyo3::exceptions::PyValueError::new_err("Index out of range"))
+        }
+    }
+
+    /// Get the Block occupancy state at the specified Hex coordinate or index.
+    /// 
+    /// This method retrieves the Block state based on either a Hex coordinate or an index.
+    /// If the coordinate or index is out of range, raise ValueError.
+    /// 
+    /// Arguments:
+    /// - coo (Hex | tuple | int): The Hex coordinate or index of the Block.
+    /// Returns:
+    /// - bool: The occupancy state of the Block.
+    /// Raises:
+    /// - TypeError: If coo is not a Hex, tuple, or integer.
+    /// - ValueError: If the coordinate or index is out of range.
+    pub fn get_state(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
+        if let Ok(idx) = coo.extract::<usize>() {
+            if idx < self.states.len() {
+                Ok(self.states[idx])
+            } else {
+                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+            }
+        } else {
+            let idx = self.index_block(coo)?;
+            if idx == -1 {
+                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+            } else {
+                Ok(self.states[idx as usize])
+            }
+        }
+    }
+
+    /// Set the occupancy state of the Block at the specified Hex coordinate.
+    /// 
+    /// This method updates the state of a Block at the given coordinate.
+    /// If the coordinate is out of range, raise ValueError.
+    /// 
+    /// Arguments:
+    /// - coo (Hex | tuple | int): The Hex coordinate or index of the block to set.
+    /// - state (bool): The new occupancy state to set for the Block.
+    /// Raises:
+    /// - ValueError: If the coordinate is out of range.
+    /// - TypeError: If the coordinate type is unsupported, or state is not a boolean.
+    pub fn set_state(&mut self, coo: &pyo3::Bound<'_, PyAny>, state: bool) -> PyResult<()> {
+        if let Ok(idx) = coo.extract::<usize>() {
+            if idx < self.states.len() {
+                self.states[idx] = state;
+                Ok(())
+            } else {
+                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+            }
+        } else {
+            let idx = self.index_block(coo)?;
+            if idx == -1 {
+                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+            } else {
+                self.states[idx as usize] = state;
+                Ok(())
+            }
+        }
+    }
+
+    /// Check if a Piece can be added to the hexagonal grid without overlaps.
+    /// 
+    /// This method checks if the Piece can be placed on the grid without overlapping
+    /// any existing occupied blocks. It returns True if the Piece can be added,
+    /// otherwise returns False.
+    /// 
+    /// Arguments:
+    /// - coo (Hex | tuple): The Hex coordinate to check for addition.
+    /// - piece (Piece | int): The Piece to check for addition.
+    /// Returns:
+    /// - bool: True if the Piece can be added, False otherwise.
+    /// Raises:
+    /// - TypeError: If piece is not a Piece instance.
+    pub fn check_add(&self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
+        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
+            p
+        } else if let Ok(state) = piece.extract::<u8>() {
+            Python::with_gil(|py| {
+                PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py)
+            })
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
+        };
+        for i in 0..7 {
+            if piece.states()[i] {
+                let (hex_i, hex_k) = Python::with_gil(|_py| {
+                    let pos = &Piece::positions[i];
+                    let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                    let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                    (pos.i + base.0, pos.k + base.1)
+                });
+                if let Ok(idx) = self.linear_index_of(hex_i, hex_k) {
+                    if idx == -1 { return Ok(false); }
+                    if self.states[idx as usize] { return Ok(false); }
+                } else {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+
+    /// Add a Piece to the hexagonal grid at the specified Hex coordinate.
+    /// 
+    /// This method places the Piece on the grid, updating the occupancy state of
+    /// the blocks based on the Piece's states. If the Piece cannot be added due to
+    /// overlaps or out-of-range coordinates, it raises a ValueError.
+    /// 
+    /// Arguments:
+    /// - coo (Hex | tuple): The Hex coordinate to add the Piece.
+    /// - piece (Piece | int): The Piece to add to the grid.
+    /// Raises:
+    /// - ValueError: If the Piece cannot be added due to overlaps or out-of-range coordinates.
+    /// - TypeError: If piece is not a valid Piece instance.
+    pub fn add_piece(&mut self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<()> {
+        if !self.check_add(coo, piece)? {
+            return Err(pyo3::exceptions::PyValueError::new_err("Cannot add piece due to overlaps or out-of-range coordinates"));
+        }
+        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
+            p
+        } else if let Ok(state) = piece.extract::<u8>() {
+            Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
+        };
+        for i in 0..7 {
+            if piece.states()[i] {
+                let (placed_i, placed_k) = Python::with_gil(|_py| {
+                    let pos = &Piece::positions[i];
+                    let base = if let Ok(c) = coo.extract::<PyRef<Hex>>() {
+                        (c.i, c.k)
+                    } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                        (tuple.0, tuple.1)
+                    } else {
+                        (0, 0)
+                    };
+                    (pos.i + base.0, pos.k + base.1)
+                });
+                let idx = self.linear_index_of(placed_i, placed_k)?;
+                if idx == -1 {
+                    return Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"));
+                }
+                self.states[idx as usize] = true;
+            }
+        }
+        Ok(())
+    }
+
+    /// Return all valid positions where another grid can be added.
+    /// 
+    /// This method returns a list of Hex coordinate candidates where the Piece can be added
+    /// without overlaps. It checks each position in the Piece and returns the Hex coordinates
+    /// of the occupied blocks.
+    /// If the Piece is not valid, it raises a ValueError.
+    ///
+    /// Arguments:
+    /// - piece (Piece): The Piece to check for occupied positions.
+    /// Returns:
+    /// - list[Hex]: A list of Hex coordinates for the occupied blocks in the Piece.
+    /// Raises:
+    /// - TypeError: If the piece is not a valid Piece instance.
+    pub fn check_positions(&self, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<Vec<Py<Hex>>> {
+        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
+            p
+        } else if let Ok(state) = piece.extract::<u8>() {
+            Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
+        };
+        let mut positions = Vec::new();
+        for a in 0..(self.radius * 2) as i32 {
+            for b in 0..(self.radius * 2) as i32 {
+                let hex = get_hex(a, b);
+                Python::with_gil(|py| {
+                    let hex_any = hex.clone_ref(py).into_bound(py);
+                    if self.check_add(&hex_any, &piece.into_py(py).into_bound(py)).unwrap_or(false) {
+                        positions.push(hex);
+                    }
+                });
+            }
+        }
+        Ok(positions)
+    }
+
+    /// Eliminate fully occupied lines along I, J, or K axes and return eliminated coordinates.
+    /// 
+    /// Modifies the grid permanently.
+    /// 
+    /// Returns:
+    /// - list[Hex]: A list of Hex coordinates that were eliminated.
+    pub fn eliminate(&mut self, py: Python) -> PyResult<Vec<Py<Hex>>> {
+        let mut eliminate: Vec<Py<Hex>> = Vec::new();
+        self.eliminate_i(&mut eliminate);
+        self.eliminate_j(&mut eliminate);
+        self.eliminate_k(&mut eliminate);
+        for &coo in &eliminate {
+            let _ = self.set_state_from_coordinate(&coo, false);
+        }
+        Ok(eliminate)
+    }
+
+    /// Identify coordinates along I axis that can be eliminated and insert them into the input list
+    ///
+    /// Arguments:
+    /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    pub fn __eliminate_i(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
+        let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
+        self.eliminate_i(&mut eliminated_vec);
+        for coo in eliminated_vec {
+            eliminated.append(coo)?;
+        }
+        Ok(())
+    }
+
+    /// Identify coordinates along J axis that can be eliminated and insert them into the input list
+    ///
+    /// Arguments:
+    /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    pub fn __eliminate_j(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
+        let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
+        self.eliminate_j(&mut eliminated_vec);
+        for coo in eliminated_vec {
+            eliminated.append(coo)?;
+        }
+        Ok(())
+    }
+
+    /// Identify coordinates along K axis that can be eliminated and insert them into the input list
+    ///
+    /// Arguments:
+    /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    pub fn __eliminate_k(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
+        let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
+        self.eliminate_k(&mut eliminated_vec);
+        for coo in eliminated_vec {
+            eliminated.append(coo)?;
+        }
+        Ok(())
+    }
+
+    /// Count occupied neighboring Blocks around the given Hex position.
+    /// 
+    /// Checks up to six adjacent positions to the block at Hex coordinate.
+    /// A neighbor is occupied if the block is null or its state is True 
+    ///
+    /// Arguments:
+    /// - coo (Hex | tuple): The Hex coordinate to check for neighbors.
+    /// Returns:
+    /// - int: The count of occupied neighboring Blocks.
+    /// Raises:
+    /// - TypeError: If coo is not a Hex or a tuple of coordinates.
+    pub fn count_neighbors(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<usize> {
+        let hex = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
+            h
+        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+            Python::with_gil(|py| get_hex(tuple.0, tuple.1).borrow(py))
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for Hex coordinates"));
+        };
+        let mut count = 0;
+        for pos in &Piece::positions {
+            let target = get_hex(pos.i + hex.i, pos.k + hex.k);
+            if Self::check_range(&target, self.radius).unwrap_or(false) {
+                if self.get_state_from_coordinate(&target).unwrap_or(false) {
+                    count += 1;
+                }
+            } else {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    /// Determine the pattern of blocks around the given position in the hexagonal grid, including the block itself.
+    /// 
+    /// This method checks up to seven positions in a hexagonal box centered at coordinates (i, k).
+    /// It returns a value representing the pattern of occupied/unoccupied blocks, ignoring block colors.
+    /// The pattern is encoded as a 7-bit integer (0 to 127) based on the state of the central block
+    /// and its six neighbors. If a neighboring position is out of range or contains a None block,
+    /// it is treated as occupied or unoccupied based on the include_null flag.
+    /// 
+    /// Arguments:
+    /// - coo (Hex | tuple): The hex coordinate of the block at the center of the box.
+    /// Returns:
+    /// - pattern (int): A number in the range [0, 127] representing the pattern of blocks in the hexagonal box.
+    pub fn get_pattern(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<u8> {
+        let mut pattern = 0u8;
+        for i in 0..7 {
+            pattern <<= 1;
+            let (coo_i, coo_k) = Python::with_gil(|_py| {
+                let pos = &Piece::positions[i];
+                let base = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
+                    (h.i, h.k)
+                } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                    (tuple.0, tuple.1)
+                } else {
+                    (0, 0)
+                };
+                (pos.i + base.0, pos.k + base.1)
+            });
+            if let Ok(state) = self.state_of(coo_i, coo_k) {
+                if state {
+                    pattern |= 1;
+                }
+            }
+        }
+        Ok(pattern)
+    }
+
+    /// Compute a density index score for hypothetically placing another piece.
+    /// 
+    /// Returns a value between 0 and 1 representing surrounding density.
+    /// A score of 1 means all surrounding blocks would be filled, 0 means the grid would be alone.
+    /// 
+    /// Arguments:
+    /// - coo (Hex): Position for hypothetical placement.
+    /// - piece (Piece): The Piece to evaluate for placement.
+    /// Returns:
+    /// - float: Density index (0 to 1), or 0 if placement is invalid or no neighbors exist.
+    pub fn compute_dense_index(&self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<f64> {
+        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
+            p
+        } else if let Ok(state) = piece.extract::<u8>() {
+            Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
+        };
+        let mut total_possible = 0;
+        let mut total_populated = 0;
+        for i in 0..7 {
+            if piece.states()[i] {
+                let (placed_i, placed_k) = Python::with_gil(|_py| {
+                    let pos = &Piece::positions[i];
+                    let base = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
+                        (h.i, h.k)
+                    } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                        (tuple.0, tuple.1)
+                    } else {
+                        (0, 0)
+                    };
+                    (pos.i + base.0, pos.k + base.1)
+                });
+                let placed_block = get_hex(placed_i, placed_k);
+                if !HexEngine::check_range(&placed_block, self.radius).unwrap_or(false) || self.get_state_from_coordinate(&placed_block).unwrap_or(false) {
+                    return Ok(0.0);
+                }
+                total_possible += 6 - piece.count_neighbors(&placed_block.borrow(Python::with_gil(|py| py)));
+                total_populated += self.count_neighbors_coordinate(placed_i, placed_k).unwrap_or(0);
+            }
+        }
+        Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
+    }
+
+    /// Compute the entropy of the hexagonal grid based on the distribution of 7-block patterns.
+    /// 
+    /// Entropy is calculated using the Shannon entropy formula, measuring the randomness of block
+    /// arrangements in the grid. Each pattern consists of a central block and its six neighbors,
+    /// forming a 7-block hexagonal box, as defined by the _get_pattern method. The entropy reflects
+    /// the diversity of these patterns: a grid with randomly distributed filled and empty blocks
+    /// has higher entropy than one with structured patterns (e.g., all blocks in a line or cluster).
+    /// A grid with all blocks filled or all empty has zero entropy. Inverting the grid (swapping
+    /// filled and empty states) results in the same entropy, as the pattern distribution is unchanged.
+    ///
+    /// The method iterates over all blocks within the grid's radius (excluding the outermost layer
+    /// to ensure all neighbors are in range), counts the frequency of each possible 7-block pattern
+    /// (2^7 = 128 patterns), and computes the entropy using the Shannon entropy formula:
+    ///     H = -Σ (p * log₂(p))
+    /// where p is the probability of each pattern (frequency divided by total patterns counted).
+    /// Blocks on the grid's boundary (beyond radius - 1) are excluded to avoid incomplete patterns.
+    ///
+    /// Returns:
+    /// - entropy (float): The entropy of the grid in bits, a non-negative value representing the randomness
+    ///     - of block arrangements. Returns 0.0 for a uniform grid (all filled or all empty) or if no valid patterns are counted.
+    pub fn compute_entropy(&self) -> PyResult<f64> {
+        let mut pattern_counts = [0usize; 128];
+        let mut pattern_total = 0usize;
+        let radius = self.radius as i32 - 1;
+        for i in 0..self.states.len() {
+            let center = match self.hex_coordinate_of(i) {
+                Ok(h) => h,
+                Err(_) => continue,
+            };
+            let (center_i, center_k) = center.into();
+            let shifted_i = center_i - 1;
+            let shifted_k = center_k + 1;
+            let shifted_j = -shifted_i - shifted_k;
+            if HexEngine::check_range_coords(shifted_i, shifted_j, shifted_k, radius as usize)? {
+                let pattern = self.pattern_of(center_i, center_k)?;
+                pattern_counts[pattern as usize] += 1;
+                pattern_total += 1;
+            }
+        }
+        let mut entropy = 0.0;
+        for &count in &pattern_counts {
+            if count > 0 {
+                let p = count as f64 / pattern_total as f64;
+                entropy -= p * p.log2();
+            }
+        }
+        Ok(entropy)
+    }
+
+    /// Generate all possible HexEngine instances representing valid occupancy states for a given radius.
+    /// All generated HexEngines will have eliminations already applied, meaning they will not contain any fully occupied lines.
+    /// 
+    /// For large radius values, this method may take a long time and significant resource to compute due to the exponential growth of possible states.
+    /// It is recommended to cache the results for specific radius values to avoid recomputation. HexEngine does not provide a dictionary for caching such data.
+    /// 
+    /// Arguments:
+    /// - radius (int): The radius of the hexagonal grid for which to generate all possible HexEngines.
+    /// Returns:
+    /// - list[HexEngine]: A list of HexEngine instances representing all valid occupancy states for the specified radius.
+    /// Raises:
+    /// - TypeError: If radius is not an integer greater than 1. Only empty engine is valid for radius 1.
+    #[classmethod]
+    pub fn all_engines(_cls: &pyo3::Bound<'_, PyType>, radius: usize) -> PyResult<Vec<HexEngine>> {
+        if radius < 2 {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Radius must be an integer greater than 1"));
+        }
+        let length = 1 + 3 * radius * (radius - 1);
+        let mut result = Vec::new();
+        for i in 0..(1 << length) {
+            let mut states = Vec::with_capacity(length);
+            for j in 0..length {
+                states.push(((i >> j) & 1) == 1);
+            }
+            let mut engine = HexEngine { radius, states };
+            let eliminated = Python::with_gil(|py| engine.eliminate(py).unwrap_or_default());
+            if !eliminated.is_empty() {
+                continue;
+            }
+            result.push(engine);
+        }
+        Ok(result)
+    }
 }
