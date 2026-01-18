@@ -3,8 +3,10 @@ import statistics
 from typing import Callable, Any
 try:
     from hpyhex.hex import Hex, Piece
+    version = "Rust"
 except ImportError:
     from hpyhex import Hex, Piece
+    version = "Native Python"
 
 class Benchmark:
     """Simple benchmark runner with timing and statistics."""
@@ -327,6 +329,7 @@ def run_all_benchmarks():
     print("BENCHMARK SUITE COMPLETE")
     print(get_local_datetime() + " on " + get_machine_info())
     print("="*60)
+    print(f"Version: {version}")
     print(f"Total Time: {format_time(total_time)}")
     print("="*60)
 
