@@ -10,7 +10,6 @@ fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 
-use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::hash::{Hash, Hasher};
 
@@ -58,34 +57,68 @@ impl PartialEq for Hex {
 // Caching for small grids: -64..=64 for both i and k
 const CACHE_MIN: i32 = -64;
 const CACHE_MAX: i32 = 64;
-static HEX_CACHE: OnceLock<HashMap<(i32, i32), Hex>> = OnceLock::new();
+// Singleton cache for all small Hexes in the range -64..=64 for both i and k
+static HEX_CACHE: OnceLock<[[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN + 1) as usize]; (CACHE_MAX - CACHE_MIN + 1) as usize]> = OnceLock::new();
 
-fn get_hex(i: i32, k: i32) -> Hex {
-    if (CACHE_MIN..=CACHE_MAX).contains(&i) && (CACHE_MIN..=CACHE_MAX).contains(&k) {
-        let cache = HEX_CACHE.get_or_init(|| HashMap::new());
-        if let Some(hex) = cache.get(&(i, k)) {
-            return hex.clone();
+fn initialize_hex_cache(py: Python) -> [[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN + 1) as usize]; (CACHE_MAX - CACHE_MIN + 1) as usize] {
+    use std::mem::MaybeUninit;
+    const N: usize = (CACHE_MAX - CACHE_MIN + 1) as usize;
+    let mut cache: [[MaybeUninit<Option<Py<Hex>>>; N]; N] = unsafe { MaybeUninit::uninit().assume_init() };
+    for i in 0..N {
+        for k in 0..N {
+            let hex = Hex { i: (i as i32) + CACHE_MIN, k: (k as i32) + CACHE_MIN };
+            cache[i][k].write(Some(Py::new(py, hex).unwrap()));
         }
-        // Insert if not present
-        let mut cache = HEX_CACHE.get_or_init(|| HashMap::new()).clone();
-        let hex = Hex { i, k };
-        cache.insert((i, k), hex.clone());
-        HEX_CACHE.set(cache).ok();
-        hex
+    }
+    unsafe { std::mem::transmute::<_, [[Option<Py<Hex>>; N]; N]>(cache) }
+}
+
+fn get_hex(i: i32, k: i32) -> Py<Hex> {
+    if (CACHE_MIN..=CACHE_MAX).contains(&i) && (CACHE_MIN..=CACHE_MAX).contains(&k) {
+        Python::with_gil(|py| {
+            let cache = HEX_CACHE.get_or_init(|| initialize_hex_cache(py));
+            let idx_i = (i - CACHE_MIN) as usize;
+            let idx_k = (k - CACHE_MIN) as usize;
+            if let Some(hex) = &cache[idx_i][idx_k] {
+                return hex.clone_ref(py);
+            }
+            // This branch should never be hit, but fallback just in case
+            Py::new(py, Hex { i, k }).unwrap()
+        })
     } else {
-        Hex { i, k }
+        Python::with_gil(|py| Py::new(py, Hex { i, k }).unwrap())
     }
 }
 
-impl TryFrom<Vec<u8>> for Hex {
-    type Error = pyo3::PyErr;
+impl Hex {
+    /// Convert the Hex coordinates to a byte vector representation.
+    ///
+    /// Arguments:
+    /// - minimize (bool): If true, use i16 representation if possible.
+    /// Returns:
+    /// - Vec<u8>: The byte vector representation of the Hex coordinates.
+    pub fn to_bytes(&self, minimize: bool) -> Vec<u8> {
+        if minimize {
+            // Try i16
+            if let (Ok(i16_i), Ok(i16_k)) = (i16::try_from(self.i), i16::try_from(self.k)) {
+                let mut bytes = Vec::with_capacity(4);
+                bytes.extend_from_slice(&i16_i.to_le_bytes());
+                bytes.extend_from_slice(&i16_k.to_le_bytes());
+                return bytes;
+            }
+            // Fallback to i32
+        }
+        let mut bytes = Vec::with_capacity(8);
+        bytes.extend_from_slice(&self.i.to_le_bytes());
+        bytes.extend_from_slice(&self.k.to_le_bytes());
+        bytes
+    }
 
     /// Create a Hex from a byte vector representation.
     ///
     /// The byte vector can represent the coordinates in three formats:
     /// - 4 bytes: Two i16 values (2 bytes each) for i and k coordinates.
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        // Length: 4 for i16, 8 for i32, 16 for i64
+    pub fn try_from(value: Vec<u8>) -> Result<Py<Hex>, pyo3::PyErr> {
         match value.len() {
             4 => {
                 let i = i32::from(i16::from_le_bytes([value[0], value[1]]));
@@ -116,31 +149,6 @@ impl TryFrom<Vec<u8>> for Hex {
     }
 }
 
-impl Hex {
-    /// Convert the Hex coordinates to a byte vector representation.
-    ///
-    /// Arguments:
-    /// - minimize (bool): If true, use i16 representation if possible.
-    /// Returns:
-    /// - Vec<u8>: The byte vector representation of the Hex coordinates.
-    pub fn to_bytes(&self, minimize: bool) -> Vec<u8> {
-        if minimize {
-            // Try i16
-            if let (Ok(i16_i), Ok(i16_k)) = (i16::try_from(self.i), i16::try_from(self.k)) {
-                let mut bytes = Vec::with_capacity(4);
-                bytes.extend_from_slice(&i16_i.to_le_bytes());
-                bytes.extend_from_slice(&i16_k.to_le_bytes());
-                return bytes;
-            }
-            // Fallback to i32
-        }
-        let mut bytes = Vec::with_capacity(8);
-        bytes.extend_from_slice(&self.i.to_le_bytes());
-        bytes.extend_from_slice(&self.k.to_le_bytes());
-        bytes
-    }
-}
-
 #[pymethods]
 impl Hex {
     /// Initialize a Hex coordinate at (i, k). Defaults to (0, 0).
@@ -156,10 +164,8 @@ impl Hex {
     pub fn new(
         i: Option<&pyo3::Bound<'_, PyAny>>,
         k: Option<&pyo3::Bound<'_, PyAny>>,
-    ) -> pyo3::PyResult<Self> {
-        // Default to 0 if None
+    ) -> pyo3::PyResult<Py<Hex>> {
         if let Some(i_obj) = i {
-            // Handle tuple input for i
             if let Ok(tuple) = i_obj.extract::<(i32, i32)>() {
                 return Ok(get_hex(tuple.0, tuple.1));
             } else if let Ok(tuple3) = i_obj.extract::<(i32, i32, i32)>() {
@@ -307,14 +313,16 @@ impl Hex {
     /// - Hex: A new Hex with the added coordinates.
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
-    pub fn __add__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
-            Ok(get_hex(self.i + other_hex.i, self.k + other_hex.k))
-        } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
-            Ok(get_hex(self.i + tuple.0, self.k + tuple.1))
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for addition with Hex"))
-        }
+    pub fn __add__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
+        Python::with_gil(|_py| {
+            if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
+                Ok(get_hex(self.i + other_hex.i, self.k + other_hex.k))
+            } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
+                Ok(get_hex(self.i + tuple.0, self.k + tuple.1))
+            } else {
+                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for addition with Hex"))
+            }
+        })
     }
 
     /// Reverse addition of this hex to another Hex or a tuple.
@@ -325,14 +333,16 @@ impl Hex {
     /// - Hex: A new Hex with the added coordinates.
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
-    pub fn __radd__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
-            Ok(get_hex(other_hex.i + self.i, other_hex.k + self.k))
-        } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
-            Ok(get_hex(tuple.0 + self.i, tuple.1 + self.k))
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for reverse addition with Hex"))
-        }
+    pub fn __radd__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
+        Python::with_gil(|_py| {
+            if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
+                Ok(get_hex(other_hex.i + self.i, other_hex.k + self.k))
+            } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
+                Ok(get_hex(tuple.0 + self.i, tuple.1 + self.k))
+            } else {
+                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for reverse addition with Hex"))
+            }
+        })
     }
 
     /// Subtract another Hex or a tuple of coordinates from this hex.
@@ -343,14 +353,16 @@ impl Hex {
     /// - Hex: A new Hex with the subtracted coordinates.
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
-    pub fn __sub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
-            Ok(get_hex(self.i - other_hex.i, self.k - other_hex.k))
-        } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
-            Ok(get_hex(self.i - tuple.0, self.k - tuple.1))
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for subtraction with Hex"))
-        }
+    pub fn __sub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
+        Python::with_gil(|_py| {
+            if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
+                Ok(get_hex(self.i - other_hex.i, self.k - other_hex.k))
+            } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
+                Ok(get_hex(self.i - tuple.0, self.k - tuple.1))
+            } else {
+                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for subtraction with Hex"))
+            }
+        })
     }
 
     /// Reverse subtraction of this hex from another Hex or a tuple.
@@ -361,14 +373,16 @@ impl Hex {
     /// - Hex: A new Hex with the subtracted coordinates.
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
-    pub fn __rsub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
-            Ok(get_hex(other_hex.i - self.i, other_hex.k - self.k))
-        } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
-            Ok(get_hex(tuple.0 - self.i, tuple.1 - self.k))
-        } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for reverse subtraction with Hex"))
-        }
+    pub fn __rsub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
+        Python::with_gil(|_py| {
+            if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
+                Ok(get_hex(other_hex.i - self.i, other_hex.k - self.k))
+            } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
+                Ok(get_hex(tuple.0 - self.i, tuple.1 - self.k))
+            } else {
+                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for reverse subtraction with Hex"))
+            }
+        })
     }
 
     /// Create a copy of this Hex.
@@ -376,7 +390,7 @@ impl Hex {
     /// Returns:
     /// - Hex: A new Hex with the same coordinates.
     #[inline]
-    pub fn __copy__(&self) -> Self {
+    pub fn __copy__(&self) -> Py<Hex> {
         get_hex(self.i, self.k)
     }
 
@@ -387,7 +401,7 @@ impl Hex {
     /// Returns:
     /// - Hex: A new Hex with the same coordinates.
     #[inline]
-    pub fn __deepcopy__(&self, _memo: Option<&pyo3::Bound<'_, PyAny>>) -> Self {
+    pub fn __deepcopy__(&self, _memo: Option<&pyo3::Bound<'_, PyAny>>) -> Py<Hex> {
         get_hex(self.i, self.k)
     }
 
@@ -409,7 +423,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If units is not an integer.
     #[inline]
-    pub fn shift_i(&self, units: i32) -> Self {
+    pub fn shift_i(&self, units: i32) -> Py<Hex> {
         get_hex(self.i + units, self.k)
     }
 
@@ -422,7 +436,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If units is not an integer.
     #[inline]
-    pub fn shift_j(&self, units: i32) -> Self {
+    pub fn shift_j(&self, units: i32) -> Py<Hex> {
         get_hex(self.i - units, self.k + units)
     }
 
@@ -435,7 +449,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If units is not an integer.
     #[inline]
-    pub fn shift_k(&self, units: i32) -> Self {
+    pub fn shift_k(&self, units: i32) -> Py<Hex> {
         get_hex(self.i, self.k + units)
     }
 }
