@@ -3,9 +3,10 @@ import statistics
 from typing import Callable, Any
 try:
     from hpyhex.hex import Hex, Piece, HexEngine
+    from hpyhex.game import random_engine
     version = "Native Python"
 except ImportError:
-    from hpyhex import Hex, Piece, HexEngine
+    from hpyhex import Hex, Piece, HexEngine, random_engine
     version = "Rust"
 
 class Benchmark:
@@ -670,6 +671,38 @@ def benchmark_hexengine_mixed():
     print_result(result)
 
 
+def benchmark_random_engine_creation():
+    """Benchmark random HexEngine creation."""
+    print("\n" + "="*60)
+    print("RANDOM HEXENGINE CREATION BENCHMARKS")
+    print("="*60)
+    
+    # Creation with radius=3
+    bench = Benchmark("Random HexEngine Creation (r=3)", iterations=10000)
+    result = bench.run(lambda: random_engine(3))
+    print_result(result)
+    
+    # Creation with radius=5
+    bench = Benchmark("Random HexEngine Creation (r=5)", iterations=10000)
+    result = bench.run(lambda: random_engine(5))
+    print_result(result)
+    
+    # Creation with radius=7
+    bench = Benchmark("Random HexEngine Creation (r=7)", iterations=2000)
+    result = bench.run(lambda: random_engine(7))
+    print_result(result)
+
+    # Creation with radius=51
+    bench = Benchmark("Random HexEngine Creation (r=51)", iterations=200)
+    result = bench.run(lambda: random_engine(51))
+    print_result(result)
+
+    # Creation with radius=100
+    bench = Benchmark("Random HexEngine Creation (r=100)", iterations=100)
+    result = bench.run(lambda: random_engine(100))
+    print_result(result)
+
+
 def run_all_benchmarks():
     """Run all benchmark suites."""
     print("\n" + "="*60)
@@ -696,6 +729,7 @@ def run_all_benchmarks():
     benchmark_hexengine_serialization()
     benchmark_hexengine_collections()
     benchmark_hexengine_mixed()
+    benchmark_random_engine_creation()
     
     total_time = time.perf_counter() - start_time
     
