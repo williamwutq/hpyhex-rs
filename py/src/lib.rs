@@ -8,6 +8,7 @@ fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Hex>()?;
     m.add_class::<Piece>()?;
     m.add_class::<HexEngine>()?;
+    m.add_function(wrap_pyfunction!(random_engine, m)?)?;
     Ok(())
 }
 
@@ -834,18 +835,18 @@ impl PartialEq for HexEngine {
     }
 }
 
-impl TryFrom<[bool]> for HexEngine {
+impl TryFrom<Vec<bool>> for HexEngine {
     type Error = PyErr;
 
-    fn try_from(value: [bool]) -> Result<Self, Self::Error> {
-        let radius = calc_radius(value.len()).ok_or_else(|| {
+    fn try_from(value: Vec<bool>) -> Result<Self, Self::Error> {
+        let radius = HexEngine::calc_radius(value.len()).ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 format!("Invalid state length: {}", value.len())
             )
         })?;
         Ok(HexEngine {
             radius,
-            states: value.to_vec(),
+            states: value
         })
     }
 }
@@ -2114,4 +2115,31 @@ impl HexEngine {
     }
 }
 
+use rand::Rng;
 
+#[pyfunction]
+/// Generate a random HexEngine with a given radius. True randomness or random distribution is not guaranteed
+/// as elimination is applied to the engine, reducing some instances to other instances.
+/// 
+/// This is superior than HexEngine.all_engines(radius) because it does not consume significant memory and time.
+/// 
+/// Arguments:
+/// - radius (int): The radius of the hexagonal game board.
+/// Returns:
+/// - HexEngine: A new randomized HexEngine instance with the specified radius.
+/// Raises:
+/// - TypeError: If radius is not an integer or is less than 2.
+pub fn random_engine(radius: usize) -> PyResult<HexEngine> {
+    if radius < 2 {
+        return Err(pyo3::exceptions::PyTypeError::new_err("Radius must be an integer greater than 1"));
+    }
+    let length = 1 + 3 * radius * (radius - 1);
+    let mut rng = rand::rng();
+    let mut states = Vec::with_capacity(length);
+    for _ in 0..length {
+        states.push(rng.random_bool(0.5));
+    }
+    let mut engine = HexEngine { radius, states };
+    let _ = engine.eliminate();
+    Ok(engine)
+}
