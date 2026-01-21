@@ -825,42 +825,6 @@ impl HexEngine {
     /// - `index`: The linear index to convert
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
-    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
-    fn coordinate_of(&self, mut index: usize) -> PyResult<Py<Hex>> {
-        if index >= self.states.len() {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
-        }
-
-        let r = self.radius as i32;
-        
-        // First half
-        for i in 0..r {
-            let len = (i + r) as usize;
-            if index < len {
-                return Ok(get_hex(i, index as i32));
-            }
-            index -= len;
-        }
-        
-        // Second half
-        for i in 0..(r - 1) {
-            let len = (2 * r - 2 - i) as usize;
-            if index < len {
-                return Ok(get_hex(i + r, index as i32 + i + 1));
-            }
-            index -= len;
-        }
-        
-        Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
-    }
-    /// Converts linear index to coordinate
-    /// 
-    /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate.
-    /// 
-    /// Arguments:
-    /// - `index`: The linear index to convert
-    /// Returns:
-    /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
     fn hex_coordinate_of(&self, mut index: usize) -> PyResult<Hex> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
@@ -1423,15 +1387,12 @@ impl HexEngine {
     pub fn __str__(&self) -> String {
         let mut s = String::from("HexEngine[blocks = {");
         for (i, &state) in self.states.iter().enumerate() {
-            let hex = Python::with_gil(|py| {
-                let hex = self.coordinate_of(i).unwrap();
-                let h = hex.borrow(py);
-                (h.i, h.k)
-            });
+            let hex = self.hex_coordinate_of(i).unwrap_or(Hex { i: -1, k: -1 });
+            // It is certain that the later will not happen but just in case
             if i > 0 {
                 s.push_str(", ");
             }
-            s.push_str(&format!("({}, {}, {})", hex.0, hex.1, state));
+            s.push_str(&format!("({}, {}, {})", hex.i, hex.k, state));
         }
         s.push_str("}]");
         s
@@ -1552,8 +1513,9 @@ impl HexEngine {
     /// - ValueError: If the index is out of range.
     pub fn coordinate_block(&self, index: usize) -> PyResult<Py<Hex>> {
         if index < self.states.len() {
-            let hex = self.coordinate_of(index).unwrap();
-            Python::with_gil(|py| Ok(Py::new(py, hex).unwrap()))
+            let hex = self.hex_coordinate_of(index)?;
+            let hex = get_hex(hex.i, hex.k);
+            Ok(hex)
         } else {
             Err(pyo3::exceptions::PyValueError::new_err("Index out of range"))
         }
@@ -1632,32 +1594,49 @@ impl HexEngine {
     /// Raises:
     /// - TypeError: If piece is not a Piece instance.
     pub fn check_add(&self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
-        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
-            p
+        if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
+            for i in 0..7 {
+                if piece_ref.states()[i] {
+                    let (hex_i, hex_k) = Python::with_gil(|_py| {
+                        let pos = &Piece::positions[i];
+                        let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                        let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                        (pos.i + base.0, pos.k + base.1)
+                    });
+                    if let Ok(idx) = self.linear_index_of(hex_i, hex_k) {
+                        if idx == -1 { return Ok(false); }
+                        if self.states[idx as usize] { return Ok(false); }
+                    } else {
+                        return Ok(false);
+                    }
+                }
+            }
+            Ok(true)
         } else if let Ok(state) = piece.extract::<u8>() {
             Python::with_gil(|py| {
-                PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py)
+                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
+                let piece_ref = piece_obj.borrow(py);
+                for i in 0..7 {
+                    if piece_ref.states()[i] {
+                        let (hex_i, hex_k) = {
+                            let pos = &Piece::positions[i];
+                            let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                            let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                            (pos.i + base.0, pos.k + base.1)
+                        };
+                        if let Ok(idx) = self.linear_index_of(hex_i, hex_k) {
+                            if idx == -1 { return Ok(false); }
+                            if self.states[idx as usize] { return Ok(false); }
+                        } else {
+                            return Ok(false);
+                        }
+                    }
+                }
+                Ok(true)
             })
         } else {
             return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
-        };
-        for i in 0..7 {
-            if piece.states()[i] {
-                let (hex_i, hex_k) = Python::with_gil(|_py| {
-                    let pos = &Piece::positions[i];
-                    let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                    let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
-                    (pos.i + base.0, pos.k + base.1)
-                });
-                if let Ok(idx) = self.linear_index_of(hex_i, hex_k) {
-                    if idx == -1 { return Ok(false); }
-                    if self.states[idx as usize] { return Ok(false); }
-                } else {
-                    return Ok(false);
-                }
-            }
         }
-        Ok(true)
     }
 
     /// Add a Piece to the hexagonal grid at the specified Hex coordinate.
