@@ -5,6 +5,7 @@ use pyo3::types::{PyList, PyAny, PyType};
 
 #[pymodule]
 fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("version", "hpyhex-rs-0.1.0")?;
     m.add_class::<Hex>()?;
     m.add_class::<Piece>()?;
     m.add_class::<HexEngine>()?;
@@ -534,6 +535,17 @@ impl std::fmt::Debug for Piece {
         }
         s.push('}');
         write!(f, "{s}")
+    }
+}
+
+impl Piece {
+    /// Returns the number of occupied blocks
+    /// 
+    /// # Returns
+    /// The count of occupied blocks as a u32.
+    #[inline]
+    pub const fn count(&self) -> u32 {
+        self.state.count_ones()
     }
 }
 
@@ -2601,7 +2613,89 @@ impl Game {
         })
     }
 
-    
+    /// Add a piece to the game engine at the specified coordinates.
+    ///
+    /// Parameters:
+    /// - piece_index (int): The index of the piece in the queue to be added.
+    /// - coord (Hex): The coordinates where the piece should be placed.
+    /// Returns:
+    /// - bool: True if the piece was successfully added, False otherwise.
+    pub fn add_piece(&mut self, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
+        // Check piece exists
+        if piece_index >= self.__queue.len() {
+            return Ok(false);
+        }
+        let piece = self.__queue[piece_index].clone();
+        // Add piece to engine and increment score and turn
+        let engine_bound = Python::with_gil(|py| self.__engine.bind(py));
+        let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
+        if let Err(ref e) = add_result {
+            if e.is_instance_of::<pyo3::exceptions::PyValueError>(engine_bound.py()) {
+                return Ok(false);
+            } else {
+                return Err(e.clone_ref(engine_bound.py()));
+            }
+        }
+        self.__score += piece.count() as u64;
+        // Replace used piece
+        let new_piece = PieceFactory::generate_piece()?;
+        self.__queue[piece_index] = new_piece;
+        // Eliminate and add score TODO: inefficient
+        let eliminated = engine_bound.call_method0("eliminate")?;
+        let eliminated_len = eliminated.len().unwrap_or(0);
+        self.__score += (eliminated_len as u64) * 5;
+        self.__turn += 1;
+        // Check whether the game has ended
+        let mut has_move = false;
+        for p in &self.__queue {
+            let positions = engine_bound.call_method1("check_positions", (p.clone(),));
+            if let Ok(pos) = positions {
+                if pos.len().unwrap_or(0) > 0 {
+                    has_move = true;
+                    break;
+                }
+            }
+        }
+        if !has_move {
+            self.__end = true;
+        }
+        Ok(true)
+    }
+
+    /// Make a move using the specified algorithm.
+    ///
+    /// Parameters:
+    /// - algorithm (callable): The algorithm to use for making the move.
+    ///   The algorithm should follow the signature: `algorithm(engine: HexEngine, queue: list[Piece]) -> tuple[int, Hex]`.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    pub fn make_move(&mut self, algorithm: &Bound<'_, PyAny>) -> PyResult<bool> {
+        if self.__end { return Ok(false); }
+        let engine_bound = Python::with_gil(|py| self.__engine.bind(py));
+        let queue_py = self.queue(engine_bound.py())?;
+        let result = algorithm.call1((engine_bound, queue_py));
+        let (index, coord) = match result {
+            Ok(tuple) => {
+                let item0 = tuple.get_item(0);
+                let index = match &item0 {
+                    Ok(val) => val.extract::<usize>().unwrap_or(usize::MAX),
+                    Err(_) => usize::MAX,
+                };
+                let item1 = tuple.get_item(1);
+                let coord = match &item1 {
+                    Ok(val) => val.extract::<Py<Hex>>()?.bind(val.py()),
+                    Err(_) => return Ok(false),
+                };
+                (index, coord)
+            }
+            Err(_) => return Ok(false),
+        };
+        if index == usize::MAX {
+            return Ok(false);
+        }
+        self.add_piece(index, &coord)
+    }
+
     /// Return a string representation of the game state.
     /// 
     /// Returns:
