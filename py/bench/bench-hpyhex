@@ -8,19 +8,19 @@ HEX CREATION BENCHMARKS
 ============================================================
 
 Hex Creation (Cached)
-  Mean:   4.96 µs
-  Median: 4.79 µs
-  StdDev: 1.33 µs
+  Mean:   4.77 µs
+  Median: 4.67 µs
+  StdDev: 806.21 ns
   Min:    4.25 µs
-  Max:    58.00 µs
+  Max:    48.04 µs
   Iterations: 10000
 
 Hex Creation (Uncached)
-  Mean:   4.58 µs
-  Median: 4.29 µs
-  StdDev: 2.74 µs
-  Min:    3.96 µs
-  Max:    102.71 µs
+  Mean:   4.05 µs
+  Median: 3.96 µs
+  StdDev: 975.25 ns
+  Min:    3.79 µs
+  Max:    62.33 µs
   Iterations: 10000
 
 ============================================================
@@ -28,27 +28,27 @@ HEX ARITHMETIC BENCHMARKS
 ============================================================
 
 Hex Addition
-  Mean:   318.44 ns
+  Mean:   301.18 ns
   Median: 292.00 ns
-  StdDev: 233.24 ns
-  Min:    208.01 ns
-  Max:    40.79 µs
+  StdDev: 315.82 ns
+  Min:    208.00 ns
+  Max:    55.92 µs
   Iterations: 100000
 
 Hex Subtraction
-  Mean:   294.44 ns
+  Mean:   295.30 ns
   Median: 292.00 ns
-  StdDev: 217.61 ns
-  Min:    207.98 ns
-  Max:    32.37 µs
+  StdDev: 188.53 ns
+  Min:    208.00 ns
+  Max:    23.29 µs
   Iterations: 100000
 
 Hex Addition (with tuple)
-  Mean:   322.24 ns
-  Median: 332.98 ns
-  StdDev: 247.48 ns
+  Mean:   320.06 ns
+  Median: 333.00 ns
+  StdDev: 158.23 ns
   Min:    208.01 ns
-  Max:    28.29 µs
+  Max:    17.50 µs
   Iterations: 100000
 
 ============================================================
@@ -56,51 +56,51 @@ HEX METHOD BENCHMARKS
 ============================================================
 
 Hex Property Access (i, j, k)
-  Mean:   150.03 ns
-  Median: 165.98 ns
-  StdDev: 109.83 ns
-  Min:    42.00 ns
-  Max:    12.54 µs
+  Mean:   150.32 ns
+  Median: 166.00 ns
+  StdDev: 69.69 ns
+  Min:    83.00 ns
+  Max:    12.13 µs
   Iterations: 100000
 
 Hex shift_i
-  Mean:   261.12 ns
+  Mean:   270.72 ns
   Median: 250.00 ns
-  StdDev: 87.64 ns
-  Min:    165.98 ns
-  Max:    18.79 µs
+  StdDev: 119.99 ns
+  Min:    167.00 ns
+  Max:    14.54 µs
   Iterations: 100000
 
 Hex shift_j
-  Mean:   264.89 ns
-  Median: 250.00 ns
-  StdDev: 66.85 ns
-  Min:    167.00 ns
-  Max:    12.42 µs
+  Mean:   274.75 ns
+  Median: 290.99 ns
+  StdDev: 114.55 ns
+  Min:    208.00 ns
+  Max:    13.83 µs
   Iterations: 100000
 
 Hex shift_k
-  Mean:   265.87 ns
+  Mean:   270.00 ns
   Median: 250.00 ns
-  StdDev: 186.50 ns
-  Min:    165.98 ns
-  Max:    23.75 µs
+  StdDev: 146.38 ns
+  Min:    166.00 ns
+  Max:    29.29 µs
   Iterations: 100000
 
 Hex Equality
-  Mean:   111.63 ns
+  Mean:   112.99 ns
   Median: 125.00 ns
-  StdDev: 36.09 ns
-  Min:    40.98 ns
-  Max:    6.21 µs
+  StdDev: 85.44 ns
+  Min:    41.00 ns
+  Max:    17.58 µs
   Iterations: 100000
 
 Hex Hash
-  Mean:   115.10 ns
+  Mean:   116.03 ns
   Median: 125.00 ns
-  StdDev: 74.99 ns
-  Min:    40.98 ns
-  Max:    15.50 µs
+  StdDev: 113.31 ns
+  Min:    41.00 ns
+  Max:    17.96 µs
   Iterations: 100000
 
 ============================================================
@@ -108,35 +108,35 @@ HEX COLLECTION BENCHMARKS
 ============================================================
 
 Create Set of Hexes
-  Mean:   106.60 µs
-  Median: 105.42 µs
-  StdDev: 4.93 µs
-  Min:    103.83 µs
-  Max:    185.17 µs
+  Mean:   108.38 µs
+  Median: 107.71 µs
+  StdDev: 2.84 µs
+  Min:    105.62 µs
+  Max:    151.13 µs
   Iterations: 1000
 
 Hex Set Lookup
-  Mean:   113.78 ns
+  Mean:   115.72 ns
   Median: 125.00 ns
-  StdDev: 19.43 ns
-  Min:    41.01 ns
-  Max:    292.00 ns
+  StdDev: 157.23 ns
+  Min:    41.00 ns
+  Max:    39.04 µs
   Iterations: 100000
 
 Create Dict with Hex Keys
-  Mean:   148.41 µs
-  Median: 143.94 µs
-  StdDev: 12.29 µs
-  Min:    141.21 µs
-  Max:    305.12 µs
+  Mean:   150.22 µs
+  Median: 149.87 µs
+  StdDev: 6.45 µs
+  Min:    145.42 µs
+  Max:    256.58 µs
   Iterations: 1000
 
 Hex Dict Lookup
-  Mean:   119.67 ns
+  Mean:   119.59 ns
   Median: 125.00 ns
-  StdDev: 147.61 ns
-  Min:    42.00 ns
-  Max:    15.04 µs
+  StdDev: 120.10 ns
+  Min:    41.00 ns
+  Max:    18.17 µs
   Iterations: 100000
 
 ============================================================
@@ -144,19 +144,19 @@ PIECE CREATION BENCHMARKS
 ============================================================
 
 Piece Creation (from int)
-  Mean:   13.91 µs
-  Median: 13.42 µs
-  StdDev: 1.83 µs
-  Min:    13.21 µs
-  Max:    66.67 µs
+  Mean:   13.96 µs
+  Median: 13.71 µs
+  StdDev: 1.01 µs
+  Min:    13.12 µs
+  Max:    36.38 µs
   Iterations: 10000
 
 Piece Creation (from list)
-  Mean:   870.33 ns
-  Median: 834.00 ns
-  StdDev: 411.72 ns
-  Min:    749.98 ns
-  Max:    14.12 µs
+  Mean:   878.48 ns
+  Median: 875.00 ns
+  StdDev: 197.54 ns
+  Min:    750.00 ns
+  Max:    10.50 µs
   Iterations: 10000
 
 ============================================================
@@ -164,51 +164,51 @@ PIECE METHOD BENCHMARKS
 ============================================================
 
 Piece Length
-  Mean:   131.57 ns
+  Mean:   131.66 ns
   Median: 125.00 ns
-  StdDev: 137.74 ns
-  Min:    42.00 ns
-  Max:    12.75 µs
+  StdDev: 48.74 ns
+  Min:    41.00 ns
+  Max:    9.42 µs
   Iterations: 100000
 
 Piece to Int
-  Mean:   341.78 ns
-  Median: 333.01 ns
-  StdDev: 241.32 ns
-  Min:    249.97 ns
-  Max:    20.83 µs
+  Mean:   343.15 ns
+  Median: 333.00 ns
+  StdDev: 138.13 ns
+  Min:    249.99 ns
+  Max:    13.33 µs
   Iterations: 100000
 
 Piece Coordinates
-  Mean:   370.89 ns
-  Median: 374.97 ns
-  StdDev: 340.37 ns
-  Min:    290.98 ns
-  Max:    37.96 µs
+  Mean:   370.15 ns
+  Median: 375.00 ns
+  StdDev: 131.79 ns
+  Min:    290.99 ns
+  Max:    13.96 µs
   Iterations: 100000
 
 Piece Count Neighbors
-  Mean:   3.35 µs
-  Median: 3.25 µs
-  StdDev: 802.49 ns
+  Mean:   3.30 µs
+  Median: 3.29 µs
+  StdDev: 378.68 ns
   Min:    3.04 µs
-  Max:    55.62 µs
+  Max:    22.29 µs
   Iterations: 100000
 
 Piece Equality
-  Mean:   127.73 ns
+  Mean:   127.72 ns
   Median: 125.00 ns
-  StdDev: 106.87 ns
-  Min:    42.00 ns
-  Max:    12.75 µs
+  StdDev: 49.17 ns
+  Min:    41.00 ns
+  Max:    9.88 µs
   Iterations: 100000
 
 Piece Hash
-  Mean:   357.90 ns
-  Median: 333.01 ns
-  StdDev: 280.90 ns
+  Mean:   353.00 ns
+  Median: 334.00 ns
+  StdDev: 97.19 ns
   Min:    250.00 ns
-  Max:    29.25 µs
+  Max:    25.33 µs
   Iterations: 100000
 
 ============================================================
@@ -216,19 +216,19 @@ PIECE ITERATION BENCHMARKS
 ============================================================
 
 Get All Pieces (generator)
-  Mean:   9.21 µs
-  Median: 9.04 µs
-  StdDev: 1.42 µs
-  Min:    8.75 µs
-  Max:    28.46 µs
+  Mean:   8.16 µs
+  Median: 7.92 µs
+  StdDev: 1.65 µs
+  Min:    7.29 µs
+  Max:    29.42 µs
   Iterations: 1000
 
 Get Contiguous Pieces
-  Mean:   49.64 µs
-  Median: 47.71 µs
-  StdDev: 3.75 µs
-  Min:    47.04 µs
-  Max:    62.46 µs
+  Mean:   48.95 µs
+  Median: 47.29 µs
+  StdDev: 3.93 µs
+  Min:    46.71 µs
+  Max:    73.33 µs
   Iterations: 100
 
 ============================================================
@@ -236,25 +236,361 @@ MIXED OPERATION BENCHMARKS
 ============================================================
 
 Mixed Workflow (Hex + Piece operations)
-  Mean:   366.03 µs
-  Median: 360.52 µs
-  StdDev: 20.16 µs
-  Min:    350.29 µs
-  Max:    480.96 µs
+  Mean:   359.64 µs
+  Median: 355.63 µs
+  StdDev: 10.08 µs
+  Min:    349.96 µs
+  Max:    398.21 µs
   Iterations: 100
 
 Calculate Hex Path
-  Mean:   10.21 µs
-  Median: 9.83 µs
-  StdDev: 1.88 µs
-  Min:    9.33 µs
-  Max:    73.17 µs
+  Mean:   9.92 µs
+  Median: 9.79 µs
+  StdDev: 1.42 µs
+  Min:    9.29 µs
+  Max:    80.12 µs
   Iterations: 10000
 
 ============================================================
+HEXENGINE CREATION BENCHMARKS
+============================================================
+
+HexEngine Creation (radius=3)
+  Mean:   193.78 ns
+  Median: 208.00 ns
+  StdDev: 30.68 ns
+  Min:    124.99 ns
+  Max:    2.21 µs
+  Iterations: 10000
+
+HexEngine Creation (radius=5)
+  Mean:   287.78 ns
+  Median: 291.00 ns
+  StdDev: 219.51 ns
+  Min:    208.00 ns
+  Max:    12.75 µs
+  Iterations: 10000
+
+HexEngine Creation (radius=7)
+  Mean:   431.44 ns
+  Median: 417.00 ns
+  StdDev: 180.65 ns
+  Min:    333.00 ns
+  Max:    12.79 µs
+  Iterations: 5000
+
+HexEngine Creation (from string, r=3)
+  Mean:   1.55 µs
+  Median: 1.54 µs
+  StdDev: 440.26 ns
+  Min:    1.42 µs
+  Max:    24.08 µs
+  Iterations: 10000
+
+HexEngine Creation (from list, r=3)
+  Mean:   1.03 µs
+  Median: 1.00 µs
+  StdDev: 352.71 ns
+  Min:    916.00 ns
+  Max:    21.67 µs
+  Iterations: 10000
+
+============================================================
+HEXENGINE COORDINATE OPERATION BENCHMARKS
+============================================================
+
+HexEngine in_range
+  Mean:   264.67 ns
+  Median: 250.00 ns
+  StdDev: 125.61 ns
+  Min:    166.00 ns
+  Max:    15.12 µs
+  Iterations: 100000
+
+HexEngine index_block
+  Mean:   419.95 ns
+  Median: 417.00 ns
+  StdDev: 205.21 ns
+  Min:    333.00 ns
+  Max:    23.29 µs
+  Iterations: 100000
+
+HexEngine coordinate_block
+  Mean:   403.64 ns
+  Median: 416.00 ns
+  StdDev: 183.10 ns
+  Min:    333.00 ns
+  Max:    21.87 µs
+  Iterations: 100000
+
+HexEngine round-trip (hex->index->hex)
+  Mean:   772.70 ns
+  Median: 750.01 ns
+  StdDev: 200.11 ns
+  Min:    666.00 ns
+  Max:    18.29 µs
+  Iterations: 50000
+
+============================================================
+HEXENGINE STATE OPERATION BENCHMARKS
+============================================================
+
+HexEngine get_state (by Hex)
+  Mean:   471.52 ns
+  Median: 458.00 ns
+  StdDev: 118.56 ns
+  Min:    334.00 ns
+  Max:    18.88 µs
+  Iterations: 100000
+
+HexEngine get_state (by index)
+  Mean:   138.46 ns
+  Median: 125.00 ns
+  StdDev: 80.33 ns
+  Min:    83.00 ns
+  Max:    21.13 µs
+  Iterations: 100000
+
+HexEngine set_state (by Hex)
+  Mean:   468.13 ns
+  Median: 458.00 ns
+  StdDev: 162.90 ns
+  Min:    334.00 ns
+  Max:    18.75 µs
+  Iterations: 100000
+
+HexEngine set_state (by index)
+  Mean:   156.48 ns
+  Median: 166.00 ns
+  StdDev: 88.63 ns
+  Min:    83.00 ns
+  Max:    10.88 µs
+  Iterations: 100000
+
+HexEngine reset
+  Mean:   269.71 ns
+  Median: 250.00 ns
+  StdDev: 49.72 ns
+  Min:    208.00 ns
+  Max:    3.58 µs
+  Iterations: 10000
+
+============================================================
+HEXENGINE PIECE OPERATION BENCHMARKS
+============================================================
+
+HexEngine check_add
+  Mean:   3.37 µs
+  Median: 3.33 µs
+  StdDev: 672.01 ns
+  Min:    3.00 µs
+  Max:    38.29 µs
+  Iterations: 50000
+
+HexEngine add_piece
+  Mean:   7.09 µs
+  Median: 6.96 µs
+  StdDev: 1.25 µs
+  Min:    6.42 µs
+  Max:    36.71 µs
+  Iterations: 10000
+
+HexEngine check_positions (r=3)
+  Mean:   76.19 µs
+  Median: 73.67 µs
+  StdDev: 6.96 µs
+  Min:    71.58 µs
+  Max:    115.54 µs
+  Iterations: 100
+
+HexEngine check_positions (r=5)
+  Mean:   223.08 µs
+  Median: 219.75 µs
+  StdDev: 8.88 µs
+  Min:    211.63 µs
+  Max:    261.37 µs
+  Iterations: 50
+
+============================================================
+HEXENGINE NEIGHBOR OPERATION BENCHMARKS
+============================================================
+
+HexEngine count_neighbors
+  Mean:   6.62 µs
+  Median: 6.42 µs
+  StdDev: 1.34 µs
+  Min:    6.08 µs
+  Max:    81.21 µs
+  Iterations: 50000
+
+HexEngine get_pattern
+  Mean:   5.15 µs
+  Median: 4.96 µs
+  StdDev: 1.30 µs
+  Min:    4.75 µs
+  Max:    64.46 µs
+  Iterations: 50000
+
+============================================================
+HEXENGINE ELIMINATE BENCHMARKS
+============================================================
+
+HexEngine eliminate (r=3, 1 line)
+  Mean:   6.70 µs
+  Median: 6.50 µs
+  StdDev: 1.60 µs
+  Min:    6.12 µs
+  Max:    66.12 µs
+  Iterations: 10000
+
+HexEngine eliminate (r=5, 1 line)
+  Mean:   10.66 µs
+  Median: 10.42 µs
+  StdDev: 1.80 µs
+  Min:    9.96 µs
+  Max:    92.25 µs
+  Iterations: 5000
+
+============================================================
+HEXENGINE ANALYSIS BENCHMARKS
+============================================================
+
+HexEngine compute_dense_index
+  Mean:   32.53 µs
+  Median: 31.71 µs
+  StdDev: 3.27 µs
+  Min:    30.63 µs
+  Max:    169.08 µs
+  Iterations: 10000
+
+HexEngine compute_entropy (r=3)
+  Mean:   40.97 µs
+  Median: 40.17 µs
+  StdDev: 2.78 µs
+  Min:    39.00 µs
+  Max:    79.58 µs
+  Iterations: 1000
+
+HexEngine compute_entropy (r=5)
+  Mean:   218.71 µs
+  Median: 212.98 µs
+  StdDev: 15.32 µs
+  Min:    208.46 µs
+  Max:    370.58 µs
+  Iterations: 500
+
+============================================================
+HEXENGINE SERIALIZATION BENCHMARKS
+============================================================
+
+HexEngine __repr__ (to string)
+  Mean:   1.04 µs
+  Median: 1.00 µs
+  StdDev: 457.16 ns
+  Min:    916.00 ns
+  Max:    23.87 µs
+  Iterations: 10000
+
+HexEngine from string (deserialize)
+  Mean:   3.49 µs
+  Median: 3.37 µs
+  StdDev: 1.18 µs
+  Min:    3.21 µs
+  Max:    47.79 µs
+  Iterations: 10000
+
+HexEngine __copy__
+  Mean:   576.70 ns
+  Median: 582.99 ns
+  StdDev: 270.44 ns
+  Min:    500.00 ns
+  Max:    13.25 µs
+  Iterations: 10000
+
+HexEngine __hash__
+  Mean:   448.94 ns
+  Median: 417.01 ns
+  StdDev: 322.86 ns
+  Min:    375.00 ns
+  Max:    19.79 µs
+  Iterations: 10000
+
+HexEngine __eq__
+  Mean:   142.50 ns
+  Median: 125.00 ns
+  StdDev: 152.20 ns
+  Min:    42.00 ns
+  Max:    13.83 µs
+  Iterations: 50000
+
+============================================================
+HEXENGINE COLLECTION BENCHMARKS
+============================================================
+
+Create Set of HexEngines
+  Mean:   2.51 µs
+  Median: 2.46 µs
+  StdDev: 886.47 ns
+  Min:    2.37 µs
+  Max:    24.96 µs
+  Iterations: 1000
+
+HexEngine Set Lookup
+  Mean:   183.40 ns
+  Median: 167.00 ns
+  StdDev: 284.88 ns
+  Min:    124.99 ns
+  Max:    21.17 µs
+  Iterations: 10000
+
+Create Dict with HexEngine Keys
+  Mean:   2.91 µs
+  Median: 2.79 µs
+  StdDev: 1.04 µs
+  Min:    2.71 µs
+  Max:    23.50 µs
+  Iterations: 1000
+
+HexEngine Dict Lookup
+  Mean:   185.07 ns
+  Median: 167.00 ns
+  StdDev: 252.30 ns
+  Min:    124.99 ns
+  Max:    16.46 µs
+  Iterations: 10000
+
+============================================================
+HEXENGINE MIXED OPERATION BENCHMARKS
+============================================================
+
+Game Simulation (add 3 pieces + eliminate)
+  Mean:   28.61 µs
+  Median: 27.67 µs
+  StdDev: 3.70 µs
+  Min:    26.46 µs
+  Max:    122.17 µs
+  Iterations: 5000
+
+AI Evaluation (check + score positions)
+  Mean:   284.61 µs
+  Median: 281.54 µs
+  StdDev: 14.52 µs
+  Min:    270.83 µs
+  Max:    362.54 µs
+  Iterations: 100
+
+State Analysis (entropy + neighbors + pattern)
+  Mean:   126.12 µs
+  Median: 122.88 µs
+  StdDev: 8.04 µs
+  Min:    120.04 µs
+  Max:    227.54 µs
+  Iterations: 500
+
+============================================================
 BENCHMARK SUITE COMPLETE
-2026-01-17 23:11:09 on Darwin 23.5.0, Python 3.11.13
+2026-01-21 00:41:15 on Darwin 23.5.0, Python 3.11.13
 ============================================================
 Version: Native Python
-Total Time: 2.14 s
+Total Time: 4.75 s
 ============================================================

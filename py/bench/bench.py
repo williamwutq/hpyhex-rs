@@ -2,11 +2,11 @@ import time
 import statistics
 from typing import Callable, Any
 try:
-    from hpyhex.hex import Hex, Piece
-    version = "Rust"
-except ImportError:
-    from hpyhex import Hex, Piece
+    from hpyhex.hex import Hex, Piece, HexEngine
     version = "Native Python"
+except ImportError:
+    from hpyhex import Hex, Piece, HexEngine
+    version = "Rust"
 
 class Benchmark:
     """Simple benchmark runner with timing and statistics."""
@@ -306,6 +306,370 @@ def benchmark_mixed_operations():
     print_result(result)
 
 
+def benchmark_hexengine_creation():
+    """Benchmark HexEngine creation."""
+    print("\n" + "="*60)
+    print("HEXENGINE CREATION BENCHMARKS")
+    print("="*60)
+    
+    # Creation from radius
+    bench = Benchmark("HexEngine Creation (radius=3)", iterations=10000)
+    result = bench.run(lambda: HexEngine(3))
+    print_result(result)
+    
+    bench = Benchmark("HexEngine Creation (radius=5)", iterations=10000)
+    result = bench.run(lambda: HexEngine(5))
+    print_result(result)
+    
+    bench = Benchmark("HexEngine Creation (radius=7)", iterations=5000)
+    result = bench.run(lambda: HexEngine(7))
+    print_result(result)
+    
+    # Creation from string
+    state_str = "0" * 19  # radius=3
+    bench = Benchmark("HexEngine Creation (from string, r=3)", iterations=10000)
+    result = bench.run(lambda: HexEngine(state_str))
+    print_result(result)
+    
+    # Creation from list
+    state_list = [False] * 19  # radius=3
+    bench = Benchmark("HexEngine Creation (from list, r=3)", iterations=10000)
+    result = bench.run(lambda: HexEngine(state_list))
+    print_result(result)
+
+
+def benchmark_hexengine_coordinate_ops():
+    """Benchmark HexEngine coordinate operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE COORDINATE OPERATION BENCHMARKS")
+    print("="*60)
+    
+    engine = HexEngine(5)
+    test_hex = Hex(2, 3)
+    
+    # in_range check
+    bench = Benchmark("HexEngine in_range", iterations=100000)
+    result = bench.run(lambda: engine.in_range(test_hex))
+    print_result(result)
+    
+    # index_block (O(1) lookup)
+    bench = Benchmark("HexEngine index_block", iterations=100000)
+    result = bench.run(lambda: engine.index_block(test_hex))
+    print_result(result)
+    
+    # coordinate_block (reverse lookup)
+    bench = Benchmark("HexEngine coordinate_block", iterations=100000)
+    result = bench.run(lambda: engine.coordinate_block(15))
+    print_result(result)
+    
+    # Round-trip conversion
+    bench = Benchmark("HexEngine round-trip (hex->index->hex)", iterations=50000)
+    result = bench.run(lambda: engine.coordinate_block(engine.index_block(test_hex)))
+    print_result(result)
+
+
+def benchmark_hexengine_state_ops():
+    """Benchmark HexEngine state operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE STATE OPERATION BENCHMARKS")
+    print("="*60)
+    
+    engine = HexEngine(5)
+    test_hex = Hex(2, 3)
+    
+    # get_state
+    bench = Benchmark("HexEngine get_state (by Hex)", iterations=100000)
+    result = bench.run(lambda: engine.get_state(test_hex))
+    print_result(result)
+    
+    bench = Benchmark("HexEngine get_state (by index)", iterations=100000)
+    result = bench.run(lambda: engine.get_state(15))
+    print_result(result)
+    
+    # set_state
+    bench = Benchmark("HexEngine set_state (by Hex)", iterations=100000)
+    result = bench.run(lambda: engine.set_state(test_hex, True))
+    print_result(result)
+    
+    bench = Benchmark("HexEngine set_state (by index)", iterations=100000)
+    result = bench.run(lambda: engine.set_state(15, False))
+    print_result(result)
+    
+    # reset
+    bench = Benchmark("HexEngine reset", iterations=10000)
+    result = bench.run(lambda: engine.reset())
+    print_result(result)
+
+
+def benchmark_hexengine_piece_ops():
+    """Benchmark HexEngine piece operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE PIECE OPERATION BENCHMARKS")
+    print("="*60)
+    
+    engine = HexEngine(5)
+    test_hex = Hex(2, 3)
+    test_piece = Piece(0b1111000)  # 4 blocks occupied
+    
+    # check_add
+    bench = Benchmark("HexEngine check_add", iterations=50000)
+    result = bench.run(lambda: engine.check_add(test_hex, test_piece))
+    print_result(result)
+    
+    # add_piece
+    def add_and_reset():
+        engine.reset()
+        engine.add_piece(test_hex, test_piece)
+    
+    bench = Benchmark("HexEngine add_piece", iterations=10000)
+    result = bench.run(add_and_reset)
+    print_result(result)
+    
+    # check_positions
+    bench = Benchmark("HexEngine check_positions (r=3)", iterations=100)
+    engine3 = HexEngine(3)
+    result = bench.run(lambda: engine3.check_positions(test_piece))
+    print_result(result)
+    
+    bench = Benchmark("HexEngine check_positions (r=5)", iterations=50)
+    result = bench.run(lambda: engine.check_positions(test_piece))
+    print_result(result)
+
+
+def benchmark_hexengine_neighbor_ops():
+    """Benchmark HexEngine neighbor operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE NEIGHBOR OPERATION BENCHMARKS")
+    print("="*60)
+    
+    engine = HexEngine(5)
+    # Create a pattern with some occupied blocks
+    for i in range(10):
+        engine.set_state(i, True)
+    
+    test_hex = Hex(2, 3)
+    
+    # count_neighbors
+    bench = Benchmark("HexEngine count_neighbors", iterations=50000)
+    result = bench.run(lambda: engine.count_neighbors(test_hex))
+    print_result(result)
+    
+    # get_pattern
+    bench = Benchmark("HexEngine get_pattern", iterations=50000)
+    result = bench.run(lambda: engine.get_pattern(test_hex))
+    print_result(result)
+
+
+def benchmark_hexengine_eliminate():
+    """Benchmark HexEngine eliminate operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE ELIMINATE BENCHMARKS")
+    print("="*60)
+    
+    # Create engine with full line for radius=3
+    engine = HexEngine(3)
+    # Fill first i-line (indices 0-2)
+    for i in range(3):
+        engine.set_state(i, True)
+    
+    bench = Benchmark("HexEngine eliminate (r=3, 1 line)", iterations=10000)
+    def eliminate_and_reset():
+        # Reset to filled line
+        engine.reset()
+        for i in range(3):
+            engine.set_state(i, True)
+        return engine.eliminate()
+    result = bench.run(eliminate_and_reset)
+    print_result(result)
+    
+    # Larger grid
+    engine5 = HexEngine(5)
+    # Fill first i-line (indices 0-4)
+    for i in range(5):
+        engine5.set_state(i, True)
+    
+    bench = Benchmark("HexEngine eliminate (r=5, 1 line)", iterations=5000)
+    def eliminate_and_reset5():
+        engine5.reset()
+        for i in range(5):
+            engine5.set_state(i, True)
+        return engine5.eliminate()
+    result = bench.run(eliminate_and_reset5)
+    print_result(result)
+
+
+def benchmark_hexengine_analysis():
+    """Benchmark HexEngine analysis operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE ANALYSIS BENCHMARKS")
+    print("="*60)
+    
+    engine = HexEngine(5)
+    # Create semi-random pattern
+    for i in range(0, 30, 3):
+        engine.set_state(i, True)
+    
+    test_hex = Hex(2, 3)
+    test_piece = Piece(0b1111000)
+    
+    # compute_dense_index
+    bench = Benchmark("HexEngine compute_dense_index", iterations=10000)
+    result = bench.run(lambda: engine.compute_dense_index(test_hex, test_piece))
+    print_result(result)
+    
+    # compute_entropy (expensive operation)
+    bench = Benchmark("HexEngine compute_entropy (r=3)", iterations=1000)
+    engine3 = HexEngine(3)
+    for i in range(0, 10, 2):
+        engine3.set_state(i, True)
+    result = bench.run(lambda: engine3.compute_entropy())
+    print_result(result)
+    
+    bench = Benchmark("HexEngine compute_entropy (r=5)", iterations=500)
+    result = bench.run(lambda: engine.compute_entropy())
+    print_result(result)
+
+
+def benchmark_hexengine_serialization():
+    """Benchmark HexEngine serialization operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE SERIALIZATION BENCHMARKS")
+    print("="*60)
+    
+    engine = HexEngine(5)
+    for i in range(0, 30, 2):
+        engine.set_state(i, True)
+    
+    # String representation
+    bench = Benchmark("HexEngine __repr__ (to string)", iterations=10000)
+    result = bench.run(lambda: repr(engine))
+    print_result(result)
+    
+    # Deserialization from string
+    state_str = repr(engine)
+    bench = Benchmark("HexEngine from string (deserialize)", iterations=10000)
+    result = bench.run(lambda: HexEngine(state_str))
+    print_result(result)
+    
+    # Copy
+    bench = Benchmark("HexEngine __copy__", iterations=10000)
+    result = bench.run(lambda: engine.__copy__())
+    print_result(result)
+    
+    # Hash
+    bench = Benchmark("HexEngine __hash__", iterations=10000)
+    result = bench.run(lambda: hash(engine))
+    print_result(result)
+    
+    # Equality
+    engine2 = engine.__copy__()
+    bench = Benchmark("HexEngine __eq__", iterations=50000)
+    result = bench.run(lambda: engine == engine2)
+    print_result(result)
+
+
+def benchmark_hexengine_collections():
+    """Benchmark HexEngine in collections."""
+    print("\n" + "="*60)
+    print("HEXENGINE COLLECTION BENCHMARKS")
+    print("="*60)
+    
+    # Create multiple engines
+    engines = []
+    for i in range(20):
+        engine = HexEngine(3)
+        for j in range(i):
+            if j < len(engine.states):
+                engine.set_state(j, True)
+        engines.append(engine)
+    
+    # Set operations
+    bench = Benchmark("Create Set of HexEngines", iterations=1000)
+    result = bench.run(lambda: set(engines))
+    print_result(result)
+    
+    engine_set = set(engines)
+    test_engine = engines[10]
+    
+    bench = Benchmark("HexEngine Set Lookup", iterations=10000)
+    result = bench.run(lambda: test_engine in engine_set)
+    print_result(result)
+    
+    # Dict operations
+    bench = Benchmark("Create Dict with HexEngine Keys", iterations=1000)
+    result = bench.run(lambda: {e: i for i, e in enumerate(engines)})
+    print_result(result)
+    
+    engine_dict = {e: i for i, e in enumerate(engines)}
+    
+    bench = Benchmark("HexEngine Dict Lookup", iterations=10000)
+    result = bench.run(lambda: engine_dict.get(test_engine))
+    print_result(result)
+
+
+def benchmark_hexengine_mixed():
+    """Benchmark realistic mixed HexEngine operations."""
+    print("\n" + "="*60)
+    print("HEXENGINE MIXED OPERATION BENCHMARKS")
+    print("="*60)
+    
+    # Typical game loop: create engine, add pieces, check, eliminate
+    def game_simulation():
+        engine = HexEngine(5)
+        pieces = [Piece(0b1111000), Piece(0b1110001), Piece(0b1010101)]
+        positions = [Hex(1, 1), Hex(2, 2), Hex(3, 3)]
+        
+        for pos, piece in zip(positions, pieces):
+            if engine.check_add(pos, piece):
+                engine.add_piece(pos, piece)
+        
+        engine.eliminate()
+        return engine
+    
+    bench = Benchmark("Game Simulation (add 3 pieces + eliminate)", iterations=5000)
+    result = bench.run(game_simulation)
+    print_result(result)
+    
+    # AI evaluation workflow
+    def ai_evaluation():
+        engine = HexEngine(4)
+        # Add some pieces
+        for i in range(10):
+            engine.set_state(i, True)
+        
+        piece = Piece(0b1111000)
+        positions = engine.check_positions(piece)
+        
+        # Evaluate each position
+        best_score = 0.0
+        for pos in positions[:5]:  # Limit to first 5 for speed
+            score = engine.compute_dense_index(pos, piece)
+            if score > best_score:
+                best_score = score
+        
+        return best_score
+    
+    bench = Benchmark("AI Evaluation (check + score positions)", iterations=100)
+    result = bench.run(ai_evaluation)
+    print_result(result)
+    
+    # Full game state analysis
+    def state_analysis():
+        engine = HexEngine(4)
+        for i in range(0, 20, 2):
+            engine.set_state(i, True)
+        
+        entropy = engine.compute_entropy()
+        neighbors = engine.count_neighbors(Hex(2, 2))
+        pattern = engine.get_pattern(Hex(2, 2))
+        
+        return entropy, neighbors, pattern
+    
+    bench = Benchmark("State Analysis (entropy + neighbors + pattern)", iterations=500)
+    result = bench.run(state_analysis)
+    print_result(result)
+
+
 def run_all_benchmarks():
     """Run all benchmark suites."""
     print("\n" + "="*60)
@@ -322,6 +686,16 @@ def run_all_benchmarks():
     benchmark_piece_methods()
     benchmark_piece_iteration()
     benchmark_mixed_operations()
+    benchmark_hexengine_creation()
+    benchmark_hexengine_coordinate_ops()
+    benchmark_hexengine_state_ops()
+    benchmark_hexengine_piece_ops()
+    benchmark_hexengine_neighbor_ops()
+    benchmark_hexengine_eliminate()
+    benchmark_hexengine_analysis()
+    benchmark_hexengine_serialization()
+    benchmark_hexengine_collections()
+    benchmark_hexengine_mixed()
     
     total_time = time.perf_counter() - start_time
     
