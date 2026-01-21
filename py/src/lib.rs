@@ -1017,64 +1017,51 @@ impl HexEngine {
         Ok(pattern)
     }
 
-    /// Identify coordinates along I axis that can be eliminated and insert them into the input list
+    /// Identify coordinates along I axis that can be eliminated and return them as Vec<Hex>
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
-    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
-    // Note on redesign elimination: (This should be on line 1025 or something)
-    // In each line elimination method, we return a new Vec<Hex>
-    // In the actual elimination method, we call each line elimination method,
-    // perform a join on the results to eliminate duplicates, then foreach set state to false
-    // Finally, convert the Vec<Hex> to a Python list and return it
-    fn eliminate_i(&self, eliminated: &mut Vec<Py<Hex>>) {
+    fn eliminate_i(&self) -> Vec<Hex> {
         let r = self.radius as i32;
-        
+        let mut eliminated = Vec::new();
         // First half
         for i in 0..r {
             let start_idx = (i * (r * 2 + i - 1) / 2) as usize;
             let len = (r + i) as usize;
-            
             if (0..len).all(|b| self.states.get(start_idx + b) == Some(&true)) {
                 for b in 0..len {
-                    match self.coordinate_of(start_idx + b) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(start_idx + b) {
+                        eliminated.push(coo);
                     }
                 }
             }
         }
-        
         // Second half
         let const_term = (r * (r * 3 - 1) / 2) as usize;
         for i in (0..=(r - 2)).rev() {
             let start_idx = const_term + ((r - i - 2) * (r * 3 - 1 + i) / 2) as usize;
             let len = (r + i) as usize;
-            
             if (0..len).all(|b| self.states.get(start_idx + b) == Some(&true)) {
                 for b in 0..len {
-                    match self.coordinate_of(start_idx + b) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(start_idx + b) {
+                        eliminated.push(coo);
                     }
                 }
             }
         }
+        eliminated
     }
 
     /// Identify coordinates along J axis that can be eliminated and insert them into the input list
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
-    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
-    // See note on redesign elimination in eliminate_i (line 1025)
-    fn eliminate_j(&self, eliminated: &mut Vec<Py<Hex>>) {
+    fn eliminate_j(&self) -> Vec<Hex> {
         let radius = self.radius as i32;
-        
+        let mut eliminated = Vec::new();
         for r in 0..radius {
             let mut idx = r as usize;
             let mut all_valid = true;
-            
             // Check first part (1 to radius-1)
             for c in 1..radius {
                 if idx >= self.states.len() || !self.states[idx] {
@@ -1083,7 +1070,6 @@ impl HexEngine {
                 }
                 idx += (radius + c) as usize;
             }
-            
             // Check second part (radius - r blocks)
             if all_valid {
                 for c in 0..(radius - r) {
@@ -1094,32 +1080,27 @@ impl HexEngine {
                     idx += (2 * radius - c - 1) as usize;
                 }
             }
-            
             // If all blocks are occupied, add them to eliminated list
             if all_valid {
                 let mut idx = r as usize;
                 for c in 1..radius {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (radius + c) as usize;
                 }
                 for c in 0..(radius - r) {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (2 * radius - c - 1) as usize;
                 }
             }
         }
-        
         for r in 1..radius {
             let start_idx = (radius * r + r * (r - 1) / 2) as usize;
             let mut idx = start_idx;
             let mut all_valid = true;
-            
             // Check first part (1 to radius-r-1)
             for c in 1..(radius - r) {
                 if idx >= self.states.len() || !self.states[idx] {
@@ -1128,7 +1109,6 @@ impl HexEngine {
                 }
                 idx += (radius + c + r) as usize;
             }
-            
             // Check second part (radius blocks)
             if all_valid {
                 for c in 0..radius {
@@ -1139,41 +1119,36 @@ impl HexEngine {
                     idx += (2 * radius - c - 1) as usize;
                 }
             }
-            
             // If all blocks are occupied, add them to eliminated list
             if all_valid {
                 let mut idx = start_idx;
                 for c in 1..(radius - r) {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (radius + c + r) as usize;
                 }
                 for c in 0..radius {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (2 * radius - c - 1) as usize;
                 }
             }
         }
+        eliminated
     }
 
-    /// Identify coordinates along L axis that can be eliminated and insert them into the input list
-    ///
+    /// Identify coordinates along K axis that can be eliminated and return them as Vec<Hex>
+    /// 
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
-    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
-    // See note on redesign elimination in eliminate_i (line 1025)
-    fn eliminate_k(&self, eliminated: &mut Vec<Py<Hex>>) {
+    fn eliminate_k(&self) -> Vec<Hex> {
         let radius = self.radius as i32;
-        
+        let mut eliminated = Vec::new();
         for r in 0..radius {
             let mut idx = r as usize;
             let mut all_valid = true;
-            
             // Check first part (radius-1 blocks)
             for c in 0..(radius - 1) {
                 if idx >= self.states.len() || !self.states[idx] {
@@ -1182,7 +1157,6 @@ impl HexEngine {
                 }
                 idx += (radius + c) as usize;
             }
-            
             // Check second part (r+1 blocks)
             if all_valid {
                 for c in 0..(r + 1) {
@@ -1193,32 +1167,27 @@ impl HexEngine {
                     idx += (2 * radius - c - 2) as usize;
                 }
             }
-            
             // If all blocks are occupied, add them to eliminated list
             if all_valid {
                 let mut idx = r as usize;
                 for c in 0..(radius - 1) {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (radius + c) as usize;
                 }
                 for c in 0..(r + 1) {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (2 * radius - c - 2) as usize;
                 }
             }
         }
-        
         for r in 1..radius {
             let start_idx = (radius * (r + 1) + r * (r + 1) / 2 - 1) as usize;
             let mut idx = start_idx;
             let mut all_valid = true;
-            
             // Check first part (r to radius-2)
             for c in r..(radius - 1) {
                 if idx >= self.states.len() || !self.states[idx] {
@@ -1227,7 +1196,6 @@ impl HexEngine {
                 }
                 idx += (radius + c) as usize;
             }
-            
             // Check second part (radius-1 down to 0)
             if all_valid {
                 for c in (0..radius).rev() {
@@ -1238,26 +1206,24 @@ impl HexEngine {
                     idx += (radius + c - 1) as usize;
                 }
             }
-            
             // If all blocks are occupied, add them to eliminated list
             if all_valid {
                 let mut idx = start_idx;
                 for c in r..(radius - 1) {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (radius + c) as usize;
                 }
                 for c in (0..radius).rev() {
-                    match self.coordinate_of(idx) {
-                        Ok(coo) => eliminated.push(coo),
-                        Err(_) => (),
+                    if let Ok(coo) = self.hex_coordinate_of(idx) {
+                        eliminated.push(coo);
                     }
                     idx += (radius + c - 1) as usize;
                 }
             }
         }
+        eliminated
     }
 }
 
@@ -1784,15 +1750,24 @@ impl HexEngine {
     /// Returns:
     /// - list[Hex]: A list of Hex coordinates that were eliminated.
     // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
-    pub fn eliminate(&mut self, py: Python) -> PyResult<Vec<Py<Hex>>> {
-        let mut eliminate: Vec<Py<Hex>> = Vec::new();
-        self.eliminate_i(&mut eliminate);
-        self.eliminate_j(&mut eliminate);
-        self.eliminate_k(&mut eliminate);
-        for &coo in &eliminate {
-            let _ = self.set_state_from_index(&coo, false);
+    pub fn eliminate(&mut self) -> PyResult<Vec<Py<Hex>>> {
+        let i_coords = self.eliminate_i();
+        let j_coords = self.eliminate_j();
+        let k_coords = self.eliminate_k();
+        let joint = [i_coords, j_coords, k_coords].concat();
+        // Set to false and gather
+        let mut res: Vec<Py<Hex>> = Vec::new();
+        for coo in &joint {
+            let index = self.linear_index_of(coo.i, coo.k)?;
+            if index == -1 {
+                continue;
+            }
+            self.set_state_from_index(index as usize, false)?;
+            // Convert to Py<Hex>
+            let py_hex = get_hex(coo.i, coo.k);
+            res.push(py_hex);
         }
-        Ok(eliminate)
+        Ok(res)
     }
 
     /// Identify coordinates along I axis that can be eliminated and insert them into the input list
@@ -1801,10 +1776,10 @@ impl HexEngine {
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
     // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn __eliminate_i(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
-        let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
-        self.eliminate_i(&mut eliminated_vec);
-        for coo in eliminated_vec {
-            eliminated.append(coo)?;
+        let i_coords = self.eliminate_i();
+        // Convert and insert
+        for coo in i_coords {
+            eliminated.append(get_hex(coo.i, coo.k))?;
         }
         Ok(())
     }
@@ -1815,10 +1790,10 @@ impl HexEngine {
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
     // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn __eliminate_j(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
-        let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
-        self.eliminate_j(&mut eliminated_vec);
-        for coo in eliminated_vec {
-            eliminated.append(coo)?;
+        let j_coords = self.eliminate_j();
+        // Convert and insert
+        for coo in j_coords {
+            eliminated.append(get_hex(coo.i, coo.k))?;
         }
         Ok(())
     }
@@ -1829,10 +1804,10 @@ impl HexEngine {
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
     // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn __eliminate_k(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
-        let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
-        self.eliminate_k(&mut eliminated_vec);
-        for coo in eliminated_vec {
-            eliminated.append(coo)?;
+        let k_coords = self.eliminate_k();
+        // Convert and insert
+        for coo in k_coords {
+            eliminated.append(get_hex(coo.i, coo.k))?;
         }
         Ok(())
     }
@@ -2024,7 +1999,7 @@ impl HexEngine {
                 states.push(((i >> j) & 1) == 1);
             }
             let mut engine = HexEngine { radius, states };
-            let eliminated = Python::with_gil(|py| engine.eliminate(py).unwrap_or_default());
+            let eliminated = engine.eliminate().unwrap_or_default();
             if !eliminated.is_empty() {
                 continue;
             }
