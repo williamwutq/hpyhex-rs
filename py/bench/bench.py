@@ -706,7 +706,7 @@ def benchmark_random_engine_creation():
 def run_all_benchmarks():
     """Run all benchmark suites."""
     print("\n" + "="*60)
-    print("PYTHON HEX & PIECE BENCHMARK SUITE")
+    print("PYTHON HPYHEX BENCHMARK SUITE")
     print("="*60)
     
     start_time = time.perf_counter()
