@@ -776,6 +776,24 @@ impl Piece {
     
 }
 
+fn piece_neighbors_of(p: Piece, target_i: i32, target_k: i32) -> usize {
+    let mut count = 0;
+    let idx = Piece::positions.iter().position(|h| h.i == target_i && h.k == target_k);
+    if let Some(idx) = idx {
+        if (p.state & (1 << (6 - idx))) != 0 {
+            for (__i, pos) in Piece::positions.iter().enumerate() {
+                let neighbor = Hex { i: pos.i + target_i, k: pos.k + target_k };
+                if let Some(nidx) = Piece::positions.iter().position(|h| h == &neighbor) {
+                    if (p.state & (1 << (6 - nidx))) != 0 {
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    count
+}
+
 #[pyclass]
 #[derive(Eq, Clone)]
 /// The HexEngine class provides a complete engine for managing a two-dimensional hexagonal
@@ -1655,24 +1673,13 @@ impl HexEngine {
         if !self.check_add(coo, piece)? {
             return Err(pyo3::exceptions::PyValueError::new_err("Cannot add piece due to overlaps or out-of-range coordinates"));
         }
-        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
-            p
-        } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
-        };
+        if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
         for i in 0..7 {
-            if piece.states()[i] {
+                if piece_ref.states()[i] {
                 let (placed_i, placed_k) = Python::with_gil(|_py| {
                     let pos = &Piece::positions[i];
-                    let base = if let Ok(c) = coo.extract::<PyRef<Hex>>() {
-                        (c.i, c.k)
-                    } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
-                        (tuple.0, tuple.1)
-                    } else {
-                        (0, 0)
-                    };
+                        let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                        let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
                     (pos.i + base.0, pos.k + base.1)
                 });
                 let idx = self.linear_index_of(placed_i, placed_k)?;
@@ -1683,6 +1690,30 @@ impl HexEngine {
             }
         }
         Ok(())
+        } else if let Ok(state) = piece.extract::<u8>() {
+            Python::with_gil(|py| {
+                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
+                let piece_ref = piece_obj.borrow(py);
+                for i in 0..7 {
+                    if piece_ref.states()[i] {
+                        let (placed_i, placed_k) = {
+                            let pos = &Piece::positions[i];
+                            let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                            let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                            (pos.i + base.0, pos.k + base.1)
+                        };
+                        let idx = self.linear_index_of(placed_i, placed_k)?;
+                        if idx == -1 {
+                            return Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"));
+                        }
+                        self.states[idx as usize] = true;
+                    }
+                }
+                Ok(())
+            })
+        } else {
+            Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
+        }
     }
 
     /// Return all valid positions where another grid can be added.
