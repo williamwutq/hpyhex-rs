@@ -815,6 +815,7 @@ impl PartialEq for HexEngine {
     }
 }
 
+// This is the backend scope, nothing is exposed to Python here
 impl HexEngine {
     /// Converts linear index to coordinate
     /// 
@@ -824,7 +825,8 @@ impl HexEngine {
     /// - `index`: The linear index to convert
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
-    pub fn coordinate_of(&self, mut index: usize) -> PyResult<Py<Hex>> {
+    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
+    fn coordinate_of(&self, mut index: usize) -> PyResult<Py<Hex>> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
         }
@@ -859,7 +861,7 @@ impl HexEngine {
     /// - `index`: The linear index to convert
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
-    pub fn hex_coordinate_of(&self, mut index: usize) -> PyResult<Hex> {
+    fn hex_coordinate_of(&self, mut index: usize) -> PyResult<Hex> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
         }
@@ -891,37 +893,13 @@ impl HexEngine {
     /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector.
     /// 
     /// Arguments:
-    /// - `coo`: The `Hex` coordinate to convert
-    /// Returns:
-    /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
-    pub fn index_of(&self, coo: &Py<Hex>) -> PyResult<isize> {
-        let r = self.radius as i32;
-        let (i, k) = {
-            let hex = coo.borrow(Python::with_gil(|py| py));
-            (hex.i, hex.k)
-        };
-        if Self::check_range(coo, self.radius)? {
-            if i < r {
-                Ok((k + i * r + i * (i - 1) / 2) as isize)
-            } else {
-                Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
-            }
-        } else {
-            Ok(-1)
-        }
-    }
-    /// Converts coordinate to linear index
-    /// 
-    /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector.
-    /// 
-    /// Arguments:
     /// - `i`: The I-line coordinate
     /// - `k`: The K-line coordinate
     /// Returns:
     /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
-    pub fn linear_index_of(&self, i: i32, k: i32) -> PyResult<isize> {
+    fn linear_index_of(&self, i: i32, k: i32) -> PyResult<isize> {
         let r = self.radius as i32;
-        if Self::check_range_coords(i, k - i, k, self.radius)? {
+        if Self::check_range_coords(i, k, self.radius)? {
             if i < r {
                 Ok((k + i * r + i * (i - 1) / 2) as isize)
             } else {
@@ -930,33 +908,18 @@ impl HexEngine {
         } else {
             Ok(-1)
         }
-    }
-    /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
-    ///
-    /// Arguments:
-    /// - coo: Hex coordinate to check.
-    /// - radius: Radius of the hexagonal grid.
-    /// Returns:
-    /// - bool: True if the coordinate is within range, False otherwise.
-    #[inline]
-    pub fn check_range(coo: &Py<Hex>, radius: usize) -> PyResult<bool> {
-        let hex = coo.borrow(Python::with_gil(|py| py));
-        let (i, j, k) = (hex.i, hex.k - hex.i, hex.k);
-        Ok(0 <= i && i < (radius as i32) * 2 - 1 &&
-           -((radius as i32)) < j && j < (radius as i32) &&
-           0 <= k && k < (radius as i32) * 2 - 1)
     }
     /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
     ///
     /// Arguments:
     /// - i: I-line coordinate.
-    /// - j: J-line coordinate.
     /// - k: K-line coordinate.
     /// - radius: Radius of the hexagonal grid.
     /// Returns:
     /// - bool: True if the coordinate is within range, False otherwise.
     #[inline]
-    pub fn check_range_coords(i: i32, j: i32, k: i32, radius: usize) -> PyResult<bool> {
+    fn check_range_coords(i: i32, k: i32, radius: usize) -> PyResult<bool> {
+        let j = k - i;
         Ok(0 <= i && i < (radius as i32) * 2 - 1 &&
            -((radius as i32)) < j && j < (radius as i32) &&
            0 <= k && k < (radius as i32) * 2 - 1)
@@ -968,7 +931,7 @@ impl HexEngine {
     /// - index: Linear index of the block to get.
     /// Returns:
     /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
-    pub fn get_state_from_index(&self, index: usize) -> PyResult<bool> {
+    fn get_state_from_index(&self, index: usize) -> PyResult<bool> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
         }
@@ -980,26 +943,12 @@ impl HexEngine {
     /// Arguments:
     /// - index: Linear index of the block to set.
     /// - state: The occupancy state to set (True for occupied, False for unoccupied
-    pub fn set_state_from_index(&mut self, index: usize, state: bool) -> PyResult<()> {
+    fn set_state_from_index(&mut self, index: usize, state: bool) -> PyResult<()> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
         }
         self.states[index] = state;
         Ok(())
-    }
-
-    /// Get the occupancy state of a block at the given Hex coordinate.
-    ///
-    /// Arguments:
-    /// - coo: Hex coordinate of the block to get.
-    /// Returns:
-    /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
-    pub fn get_state_from_coordinate(&self, coo: &Py<Hex>) -> PyResult<bool> {
-        let index = self.index_of(coo)?;
-        if index == -1 {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
-        }
-        Ok(self.states[index as usize])
     }
 
     /// Get the occupancy state of a block at the given Hex coordinate.
@@ -1009,7 +958,7 @@ impl HexEngine {
     /// - k: K-line coordinate of the block to get.
     /// Returns:
     /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
-    pub fn state_of(&self, i: i32, k: i32) -> PyResult<bool> {
+    fn state_of(&self, i: i32, k: i32) -> PyResult<bool> {
         let index = self.linear_index_of(i, k)?;
         if index == -1 {
             return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
@@ -1017,19 +966,6 @@ impl HexEngine {
         Ok(self.states[index as usize])
     }
 
-    /// Set the occupancy state of a block at the given Hex coordinate.
-    ///
-    /// Arguments:
-    /// - coo: Hex coordinate of the block to set.
-    /// - state: The occupancy state to set (True for occupied, False for unoccupied).
-    pub fn set_state_from_coordinate(&mut self, coo: &Py<Hex>, state: bool) -> PyResult<()> {
-        let index = self.index_of(coo)?;
-        if index == -1 {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
-        }
-        self.states[index as usize] = state;
-        Ok(())
-    }
     /// Count occupied neighboring Blocks around the given Hex position.
     ///
     /// Checks up to six adjacent positions to the block at Hex coordinate.
@@ -1042,14 +978,13 @@ impl HexEngine {
     /// - int: The count of occupied neighboring Blocks.
     /// Raises:
     /// - TypeError: If coo is not a Hex.
-    pub fn count_neighbors_coordinate(&self, i: i32, k: i32) -> PyResult<usize> {
+    fn count_neighbors_coordinate(&self, i: i32, k: i32) -> PyResult<usize> {
         let mut count = 0;
         for pos in &Piece::positions {
             let target_i = pos.i + i;
             let target_k = pos.k + k;
-            let target_j = target_k - target_i;
-            if Self::check_range_coords(target_i, target_j, target_k, self.radius).unwrap_or(false) {
-                if self.get_state_from_coordinate(&get_hex(target_i, target_k)).unwrap_or(false) {
+            if Self::check_range_coords(target_i, target_k, self.radius).unwrap_or(false) {
+                if self.state_of(target_i, target_k).unwrap_or(false) {
                     count += 1;
                 }
             } else {
@@ -1068,14 +1003,13 @@ impl HexEngine {
     /// - k: K-line coordinate of the block to check.
     /// Returns:
     /// - int: A byte representation of the blocks around the given Hex position.
-    pub fn pattern_of(&self, i: i32, k: i32) -> PyResult<u8> {
+    fn pattern_of(&self, i: i32, k: i32) -> PyResult<u8> {
         let mut pattern: u8 = 0;
         for (idx, pos) in Piece::positions.iter().enumerate() {
             let target_i = pos.i + i;
             let target_k = pos.k + k;
-            let target_j = target_k - target_i;
-            if Self::check_range_coords(target_i, target_j, target_k, self.radius).unwrap_or(false) {
-                if self.get_state_from_coordinate(&get_hex(target_i, target_k)).unwrap_or(false) {
+            if Self::check_range_coords(target_i, target_k, self.radius).unwrap_or(false) {
+                if self.state_of(target_i, target_k).unwrap_or(false) {
                     pattern |= 1 << (6 - idx);
                 }
             }
@@ -1087,6 +1021,12 @@ impl HexEngine {
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
+    // Note on redesign elimination: (This should be on line 1025 or something)
+    // In each line elimination method, we return a new Vec<Hex>
+    // In the actual elimination method, we call each line elimination method,
+    // perform a join on the results to eliminate duplicates, then foreach set state to false
+    // Finally, convert the Vec<Hex> to a Python list and return it
     fn eliminate_i(&self, eliminated: &mut Vec<Py<Hex>>) {
         let r = self.radius as i32;
         
@@ -1126,6 +1066,8 @@ impl HexEngine {
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
+    // See note on redesign elimination in eliminate_i (line 1025)
     fn eliminate_j(&self, eliminated: &mut Vec<Py<Hex>>) {
         let radius = self.radius as i32;
         
@@ -1223,6 +1165,8 @@ impl HexEngine {
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    #[deprecated = "frontend only function that invokes Python GIL in backend scope"]
+    // See note on redesign elimination in eliminate_i (line 1025)
     fn eliminate_k(&self, eliminated: &mut Vec<Py<Hex>>) {
         let radius = self.radius as i32;
         
@@ -1328,18 +1272,20 @@ impl HexEngine {
     /// - bool: True if the coordinate is within range, False otherwise.
     #[staticmethod]
     pub fn __in_range(coo: &pyo3::Bound<'_, PyAny>, radius: usize) -> PyResult<bool> {
-        let (i, j, k) = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
-            (hex.i, hex.k - hex.i, hex.k)
+        let (i, k) = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
+            (hex.i, hex.k)
         } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
             let (i, k) = tuple;
-            let j = k - i;
-            (i, j, k)
+            (i, k)
         } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
-            (tuple3.0, tuple3.1, tuple3.2)
+            if tuple3.0 + tuple3.1 + tuple3.2 != 0 {
+                return Ok(false);
+            }
+            (tuple3.0, tuple3.2)
         } else {
             return Ok(false);
         };
-        HexEngine::check_range_coords(i, j, k, radius)
+        HexEngine::check_range_coords(i, k, radius)
     }
 
     /// Solves for the length of a HexEngine based on its radius.
@@ -1601,24 +1547,28 @@ impl HexEngine {
         let py_hex: Option<Py<Hex>> = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
             Some(hex.into())
         } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
-            Some(get_hex(tuple.0, tuple.1))
+            Some(get_hex(tuple.0, tuple.1)) // TODO: unnecessary use of get_hex
         } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
-            Some(get_hex(tuple3.0, tuple3.2))
+            Some(get_hex(tuple3.0, tuple3.2))  // TODO: unnecessary use of get_hex
         } else {
             None
         };
-        if let Some(ref hex) = py_hex {
-            if Self::check_range(hex, r as usize)? {
-                if i < r {
-                    Ok((k + i * r + i * (i - 1) / 2) as isize)
+        // To explain why the former are unnecessary use of get_hex:
+        // We only need the i and k values, which we already have. Frontend functions should
+        // Only be used at the end of the process to reduce overhead.
+        match py_hex {
+            Some(_) => {
+                if Self::check_range_coords(i, k, self.radius)? {
+                    if i < r {
+                        Ok((k + i * r + i * (i - 1) / 2) as isize)
+                    } else {
+                        Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
+                    }
                 } else {
-                    Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
+                    Ok(-1)
                 }
-            } else {
-                Ok(-1)
-            }
-        } else {
-            Ok(-1)
+            },
+            None => Ok(-1),
         }
     }
 
@@ -1814,8 +1764,9 @@ impl HexEngine {
         let mut positions = Vec::new();
         for a in 0..(self.radius * 2) as i32 {
             for b in 0..(self.radius * 2) as i32 {
-                let hex = get_hex(a, b);
-                Python::with_gil(|py| {
+                let hex = get_hex(a, b); // TODO: could be unnecessary use of get_hex
+                Python::with_gil(|py| { // TODO: could be unnecessary use of GIL
+                    // TO optimize this, only create hex_any once check succeeds
                     let hex_any = hex.clone_ref(py).into_bound(py);
                     if self.check_add(&hex_any, &piece.into_py(py).into_bound(py)).unwrap_or(false) {
                         positions.push(hex);
@@ -1832,13 +1783,14 @@ impl HexEngine {
     /// 
     /// Returns:
     /// - list[Hex]: A list of Hex coordinates that were eliminated.
+    // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn eliminate(&mut self, py: Python) -> PyResult<Vec<Py<Hex>>> {
         let mut eliminate: Vec<Py<Hex>> = Vec::new();
         self.eliminate_i(&mut eliminate);
         self.eliminate_j(&mut eliminate);
         self.eliminate_k(&mut eliminate);
         for &coo in &eliminate {
-            let _ = self.set_state_from_coordinate(&coo, false);
+            let _ = self.set_state_from_index(&coo, false);
         }
         Ok(eliminate)
     }
@@ -1847,6 +1799,7 @@ impl HexEngine {
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn __eliminate_i(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
         let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
         self.eliminate_i(&mut eliminated_vec);
@@ -1860,6 +1813,7 @@ impl HexEngine {
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn __eliminate_j(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
         let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
         self.eliminate_j(&mut eliminated_vec);
@@ -1873,6 +1827,7 @@ impl HexEngine {
     ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
+    // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
     pub fn __eliminate_k(&mut self, eliminated: &pyo3::Bound<'_, PyList>) -> PyResult<()> {
         let mut eliminated_vec: Vec<Py<Hex>> = Vec::new();
         self.eliminate_k(&mut eliminated_vec);
@@ -1894,18 +1849,19 @@ impl HexEngine {
     /// Raises:
     /// - TypeError: If coo is not a Hex or a tuple of coordinates.
     pub fn count_neighbors(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<usize> {
-        let hex = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
-            h
+        let (hex_i, hex_k) = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
+            (h.i, h.k)
         } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
-            Python::with_gil(|py| get_hex(tuple.0, tuple.1).borrow(py))
+            (tuple.0, tuple.1)
         } else {
             return Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for Hex coordinates"));
         };
         let mut count = 0;
         for pos in &Piece::positions {
-            let target = get_hex(pos.i + hex.i, pos.k + hex.k);
-            if Self::check_range(&target, self.radius).unwrap_or(false) {
-                if self.get_state_from_coordinate(&target).unwrap_or(false) {
+            let target_i = pos.i + hex_i;
+            let target_k = pos.k + hex_k;
+            if Self::check_range_coords(target_i, target_k, self.radius)? {
+                if self.state_of(target_i, target_k).unwrap_or(false) {
                     count += 1;
                 }
             } else {
@@ -1984,8 +1940,8 @@ impl HexEngine {
                     };
                     (pos.i + base.0, pos.k + base.1)
                 });
-                let placed_block = get_hex(placed_i, placed_k);
-                if !HexEngine::check_range(&placed_block, self.radius).unwrap_or(false) || self.get_state_from_coordinate(&placed_block).unwrap_or(false) {
+                let placed_block = get_hex(placed_i, placed_k); // TODO: unnecessary use of get_hex involking Python GIL
+                if !HexEngine::check_range_coords(placed_i, placed_k, self.radius).unwrap_or(false) || self.state_of(placed_i, placed_k).unwrap_or(false) {
                     return Ok(0.0);
                 }
                 total_possible += 6 - piece.count_neighbors(&placed_block.borrow(Python::with_gil(|py| py)));
@@ -2027,8 +1983,7 @@ impl HexEngine {
             let (center_i, center_k) = center.into();
             let shifted_i = center_i - 1;
             let shifted_k = center_k + 1;
-            let shifted_j = -shifted_i - shifted_k;
-            if HexEngine::check_range_coords(shifted_i, shifted_j, shifted_k, radius as usize)? {
+            if HexEngine::check_range_coords(shifted_i, shifted_k, radius as usize)? {
                 let pattern = self.pattern_of(center_i, center_k)?;
                 pattern_counts[pattern as usize] += 1;
                 pattern_total += 1;
