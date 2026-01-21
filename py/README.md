@@ -95,6 +95,47 @@ def simple_algorithm(engine, queue):
 game.make_move(simple_algorithm)
 ```
 
+## Usage Advices
+
+### Use Objects Provided by this Package
+When using `hpyhex-rs`, ensure that you create and manipulate objects (like `Hex`, `Piece`, `HexEngine`, etc.) using the classes provided by this package. Although the API, which is defined in the original `hpyhex` package, accepts various types of inputs (like tuples for coordinates), using the native classes from `hpyhex-rs` ensures optimal performance and compatibility.
+
+For example, following the original flyweight pattern in the `Hex` coordinate class, which use a cache for small coordinates, the `Hex` class in `hpyhex-rs` also have a similar cache in Rust memory, which is not hold by the GIL. Effectively, this means small Hex objects does not contain actual data, but just a pointer to a shared object in Rust memory. There are multiple ways to represent a `Hex` coordinate, either a tuple `(i, k)`, `(i, j, k)` or a `Hex` object. While all of them are accepted by most functions in the API, only `Hex` participate in the caching mechanism. Therefore, for frequently used coordinates, it is recommended to create and reuse `Hex` objects from `hpyhex-rs` instead of using tuples.
+
+Take another example of `Piece` objects. Like the original optimized `Piece` in `hpyhex`, no pieces are created at all. Since there are only a total of 127 pieces made out of blocks, all pieces are pre-defined and stored in a global registry. When you create a piece using `Piece()`, it simply returns a reference to the corresponding pre-defined piece object. The Rust implementation further optimizes this by storing all piece objects in Rust memory, removing them from the control of the GIL. When expensive piece operations such as `count_neighbors` are performed, the Rust implementation quickly accesses the piece data and performs raw arithmetic and bit operations in Rust, significantly improving performance compared to the original Python implementation. None of those benefits are provided if integers are used instead of `Piece` objects, although they may seem smaller in memory. (Remember all Python objects have overhead in memory, and an interger is a python object too.)
+
+### Use Optimized Methods Provided by this Package
+When using `hpyhex-rs`, prefer using methods provided by this package for better performance. If a function is already provided by the package, don't write your own implementation in Python, as it may be less efficient.
+
+To illustrate this, take example of `check_positions` of `HexEngine`. The original `hpyhex` package implements `check_positions` in Python as follows:
+```python
+def check_positions(self, piece: Union[Piece, int]) -> List[Hex]:
+   if isinstance(piece, int):
+      piece = Piece(piece)
+   elif not isinstance(piece, Piece):
+      raise TypeError("Piece must be an instance of Piece or an integer representing a Piece state")
+   positions = []
+   for a in range(self.radius * 2):
+      for b in range(self.radius * 2):
+         hex = Hex(a, b)
+         if self.check_add(hex, piece):
+            positions.append(hex)
+   return positions
+```
+
+Obviously, if the fact the `hpyhex-rs` provide a Rust-backed implementation of `check_positions` is ignored, and the above Python implementation can be used as `hpyhex-rs` also provides `radius` attribute and `check_add` method. However, this implementation is inefficient as it creates various temporary Python objects, which are managed by the GIL, and performs various method calls (such as `range`) in Python, which are slow.
+
+The `hpyhex-rs` package provides a Rust-backed implementation of `check_positions`, which performs all operations in Rust memory, avoiding the overhead of Python object management and method calls. In the entire expensive process of checking all possible positions, the GIL is only acquired once. The radius is not passed as a Python object, but a direct integer in the Rust struct. The nested loops are performed in Rust, and `Hex` objects are created directly as structs without going through Python constructors. Further, instead of calling `check_add` method, a special version of `check_add` that take in raw Rust structs representing `Hex` and `Piece` is used, avoiding the overhead of interacting with Python objects at all. These optimizations means the Rust-backed `check_positions` is more than **100 times** faster than the native Python implementation, as per [benchmarking](./bench/bench.py) results.
+
+### Don't Reinvent the Wheel
+It is tempting to implement your own versions of the various abstractions provided by this package, such as `Game`, which intuitively is 
+just a combination of `HexEngine` and a piece queue, and does not offer too much extra customization. Unless your purpose is different from
+the original intention of `hpyhex`, it is recommended to use the provided `Game` class directly, as it interacts with the optimized Rust versions of `HexEngine` and `PieceFactory` without the overhead of creating intermediate Python objects. For extra functionality, consider
+building on top of `Game` instead of re-implementing it completely.
+
+### Not Enough For GUI Applications
+If you are building a GUI application for a simple version of HappyHex and deeply hated the original Java codebase, you possibly have pondered upon this package for performance, as it advertises itself as a high-performance implementation of the Python `hpyhex` package, which has a simple and useful API. Unless you already did a lot of work in Python, however, you should not use Python for your GUI applications, as it is not well-suited for GUI development and may lead to performance issues and a poor user experience. The [hpyhex-rs](https://crates.io/crates/hpyhex-rs) Rust crate, which is inspired by the Python API, not only provides similar functionality and abstractions, which make your transition to that package easier, but also provides further abstractions such as thread-safe guards, extended HexEngine with potential attributes for each cell, and integrated game evironment designed specifically for GUI threading needs. Consider using Rust as your main programming language for GUI applications, or integrate with C++ via FFI to use existing C++ GUI frameworks.
+
 ## Main Classes
 
 - **Hex**: Represents a hexagonal grid coordinate using a custom line-based system. Supports arithmetic, hashing, and tuple compatibility.
