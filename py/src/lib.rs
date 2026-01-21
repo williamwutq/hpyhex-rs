@@ -10,6 +10,7 @@ fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<HexEngine>()?;
     m.add_function(wrap_pyfunction!(random_engine, m)?)?;
     m.add_class::<PieceFactory>()?;
+    m.add_class::<Game>()?;
     Ok(())
 }
 
@@ -2407,4 +2408,36 @@ impl PieceFactory {
     pub fn all_pieces() -> Vec<Piece> {
         PIECE_MAP.values().map(|&byte| Piece { state: byte }).collect()
     }
+}
+
+// Note for underscoring and getter, setters in Game class:
+// The python implementation has those private attributes with double underscores
+// Although attributes in Game are never intended to be modified directly from outside,
+// Some code with bad practice may depend on them. To not break compatibility with the
+// original hpyhex, we provide getters and setters with the same names.
+
+/// Game is a class that represents the game environment for Hex.
+/// It manages the game engine, the queue of pieces, and the game state.
+/// It provides methods to add pieces, make moves, and check the game status.
+/// Its methods are intended to catch exceptions and handle errors gracefully.
+///
+/// Attributes:
+/// - engine (HexEngine): The game engine that manages the game state.
+/// - queue (list[Piece]): The queue of pieces available for placement.
+/// - result (tuple[int, int]): The current result of the game, including the score and turn number.
+/// - score (int): The current score of the game.
+/// - turn (int): The current turn number in the game.
+/// - end (bool): Whether the game has ended.
+#[pyclass]
+pub struct Game {
+    #[pyo3(get, set)]
+    __engine: HexEngine,
+    #[pyo3(get, set)]
+    __queue: Vec<Piece>,
+    #[pyo3(get, set)]
+    __score: u64,
+    #[pyo3(get, set)]
+    __turn: u32,
+    #[pyo3(get, set)]
+    __end: bool,
 }
