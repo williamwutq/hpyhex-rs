@@ -7,6 +7,7 @@ use pyo3::types::{PyList, PyAny, PyType};
 fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Hex>()?;
     m.add_class::<Piece>()?;
+    m.add_class::<HexEngine>()?;
     Ok(())
 }
 
@@ -913,6 +914,7 @@ impl HexEngine {
     /// - index: Linear index of the block to get.
     /// Returns:
     /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
+    #[allow(unused)]
     fn get_state_from_index(&self, index: usize) -> PyResult<bool> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
@@ -1206,6 +1208,30 @@ impl HexEngine {
             }
         }
         eliminated
+    }
+    /// Check if a Piece can be added at the given Hex coordinate without overlapping existing occupied blocks.
+    /// 
+    /// Arguments:
+    /// - coo: Hex coordinate where the Piece is to be added.
+    /// - piece: The Piece to be added.
+    /// Returns:
+    /// - bool: True if the Piece can be added without overlap, False otherwise.
+    fn check_add_of(&self, coo: &Hex, piece: &Piece) -> PyResult<bool> {
+        for (i, state) in piece.states().iter().enumerate() {
+            let pos = &Piece::positions[i];
+            let target_i = pos.i + coo.i;
+            let target_k = pos.k + coo.k;
+            if *state {
+                if !Self::check_range_coords(target_i, target_k, self.radius)? {
+                    return Ok(false);
+                }
+                let index = self.linear_index_of(target_i, target_k)?;
+                if index == -1 || self.states[index as usize] {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
     }
 }
 
@@ -1730,27 +1756,23 @@ impl HexEngine {
     /// Raises:
     /// - TypeError: If the piece is not a valid Piece instance.
     pub fn check_positions(&self, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<Vec<Py<Hex>>> {
-        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
-            p
-        } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
-        };
-        let mut positions = Vec::new();
-        for a in 0..(self.radius * 2) as i32 {
-            for b in 0..(self.radius * 2) as i32 {
-                let hex = get_hex(a, b); // TODO: could be unnecessary use of get_hex
-                Python::with_gil(|py| { // TODO: could be unnecessary use of GIL
-                    // TO optimize this, only create hex_any once check succeeds
-                    let hex_any = hex.clone_ref(py).into_bound(py);
-                    if self.check_add(&hex_any, &piece.into_py(py).into_bound(py)).unwrap_or(false) {
-                        positions.push(hex);
+        if let Ok(piece) = piece.extract::<Piece>() {
+            let mut positions = Vec::new();
+            for a in 0..(self.radius * 2) as i32 {
+                for b in 0..(self.radius * 2) as i32 {
+                    let hex = Hex{i: a, k: b};
+                    if self.check_add_of(&hex, &piece)? {
+                        positions.push(get_hex(hex.i, hex.k));
                     }
-                });
+                }
             }
+            Ok(positions)
+        } else if let Ok(state) = piece.extract::<u8>() {
+            todo!()
+            // Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
+        } else {
+            Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
         }
-        Ok(positions)
     }
 
     /// Eliminate fully occupied lines along I, J, or K axes and return eliminated coordinates.
