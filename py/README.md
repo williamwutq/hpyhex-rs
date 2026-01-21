@@ -64,6 +64,23 @@ Developed by William Wu.
 ## License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
+## Quickstart
+
+1. Install the package:
+   ```bash
+   pip install hpyhex
+   ```
+2. Import and use the main classes as shown above.
+3. Create custom algorithms to interact with the game environment.
+
+## Main Classes
+
+- **Hex**: Represents a hexagonal grid coordinate using a custom line-based system. Supports arithmetic, hashing, and tuple compatibility.
+- **Piece**: Represents a shape made of 7 blocks, optimized for memory and performance. Use `PieceFactory` to create pieces by name or byte value.
+- **HexEngine**: Manages the hexagonal grid, supports adding pieces, eliminating lines, and computing entropy.
+- **PieceFactory**: Utility for creating pieces by name, byte, or randomly. Provides access to all predefined pieces.
+- **Game**: Manages the game state, piece queue, score, and turn. Supports adding pieces and making moves with algorithms.
+
 ## Usage
 ```python
 from hpyhex import Hex, Piece, HexEngine
@@ -133,23 +150,6 @@ It is tempting to implement your own versions of the various abstractions provid
 ### Not Enough for GUI Applications
 If you are building a GUI application for a simple version of HappyHex and deeply hated the original Java codebase, you possibly have pondered upon this package for performance, as it advertises itself as a high-performance implementation of the Python `hpyhex` package, which has a simple and useful API. Unless you already did a lot of work in Python, however, you should not use Python for your GUI applications, as it is not well-suited for GUI development and may lead to performance issues and a poor user experience. The [hpyhex-rs](https://crates.io/crates/hpyhex-rs) Rust crate, which is inspired by the Python API, not only provides similar functionality and abstractions, which make your transition to that package easier, but also provides further abstractions such as thread-safe guards, extended HexEngine with potential attributes for each cell, and an integrated game environment designed specifically for GUI threading needs. Consider using Rust as your main programming language for GUI applications, or integrate with C++ via FFI to use existing C++ GUI frameworks.
 
-## Main Classes
-
-- **Hex**: Represents a hexagonal grid coordinate using a custom line-based system. Supports arithmetic, hashing, and tuple compatibility.
-- **Piece**: Represents a shape made of 7 blocks, optimized for memory and performance. Use `PieceFactory` to create pieces by name or byte value.
-- **HexEngine**: Manages the hexagonal grid, supports adding pieces, eliminating lines, and computing entropy.
-- **PieceFactory**: Utility for creating pieces by name, byte, or randomly. Provides access to all predefined pieces.
-- **Game**: Manages the game state, piece queue, score, and turn. Supports adding pieces and making moves with algorithms.
-
-## Quickstart
-
-1. Install the package:
-   ```bash
-   pip install hpyhex
-   ```
-2. Import and use the main classes as shown above.
-3. Create custom algorithms to interact with the game environment.
-
 ## Benchmarking Algorithms
 
 The package includes benchmarking tools to evaluate and compare algorithms:
@@ -163,3 +163,8 @@ avg_score, avg_turn = benchmark(simple_algorithm, engine_radius=3, queue_size=5,
 # Compare two algorithms
 similarity = compare(alg1, alg2, engine_radius=3, queue_size=5, eval_times=100)
 ```
+
+## The Statistics
+
+(See [bench directory](./bench/) for full benchmarking code and results.)
+
