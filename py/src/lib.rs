@@ -9,6 +9,7 @@ fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Piece>()?;
     m.add_class::<HexEngine>()?;
     m.add_function(wrap_pyfunction!(random_engine, m)?)?;
+    m.add_class::<PieceFactory>()?;
     Ok(())
 }
 
@@ -2142,4 +2143,268 @@ pub fn random_engine(radius: usize) -> PyResult<HexEngine> {
     let mut engine = HexEngine { radius, states };
     let _ = engine.eliminate();
     Ok(engine)
+}
+
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
+
+/// PieceFactory is a utility class that provides methods for creating and managing game pieces.
+/// It includes a predefined set of pieces, their corresponding byte values, and reverse mappings
+/// to retrieve piece names from byte values. The class also supports generating random pieces
+/// based on predefined probabilities.
+///
+/// Attributes:
+/// - pieces (dict): A dictionary mapping piece names (str) to their corresponding byte values (int).
+/// - reverse_pieces (dict): A reverse mapping of `pieces`, mapping byte values (int) to piece names (str).
+#[pyclass]
+pub struct PieceFactory {}
+
+static PIECE_MAP: Lazy<HashMap<&'static str, u8>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert("uno", 8);
+    m.insert("full", 127);
+    m.insert("hallow", 119);
+    m.insert("triangle_3_a", 13);
+    m.insert("triangle_3_b", 88);
+    m.insert("line_3_i", 28);
+    m.insert("line_3_j", 73);
+    m.insert("line_3_k", 42);
+    m.insert("corner_3_i_l", 74);
+    m.insert("corner_3_i_r", 41);
+    m.insert("corner_3_j_l", 56);
+    m.insert("corner_3_j_r", 14);
+    m.insert("corner_3_k_l", 76);
+    m.insert("corner_3_k_r", 25);
+    m.insert("fan_4_a", 78);
+    m.insert("fan_4_b", 57);
+    m.insert("rhombus_4_i", 27);
+    m.insert("rhombus_4_j", 120);
+    m.insert("rhombus_4_k", 90);
+    m.insert("corner_4_i_l", 39);
+    m.insert("corner_4_i_r", 114);
+    m.insert("corner_4_j_l", 101);
+    m.insert("corner_4_j_r", 83);
+    m.insert("corner_4_k_l", 23);
+    m.insert("corner_4_k_r", 116);
+    m.insert("asym_4_i_a", 92);
+    m.insert("asym_4_i_b", 30);
+    m.insert("asym_4_i_c", 60);
+    m.insert("asym_4_i_d", 29);
+    m.insert("asym_4_j_a", 75);
+    m.insert("asym_4_j_b", 77);
+    m.insert("asym_4_j_c", 89);
+    m.insert("asym_4_j_d", 105);
+    m.insert("asym_4_k_a", 46);
+    m.insert("asym_4_k_b", 106);
+    m.insert("asym_4_k_c", 43);
+    m.insert("asym_4_k_d", 58);
+    m
+});
+
+static REVERSE_PIECE_MAP: Lazy<HashMap<u8, &'static str>> = Lazy::new(|| {
+    let mut rev = HashMap::new();
+    for (&k, &v) in PIECE_MAP.iter() {
+        rev.insert(v, k);
+    }
+    rev
+});
+
+#[pymethods]
+impl PieceFactory {
+    #[classattr]
+    /// Mapping from piece name to byte value
+    fn pieces(py: pyo3::Python<'_>) -> pyo3::PyObject {
+        let dict = pyo3::types::PyDict::new_bound(py);
+        for (&k, &v) in PIECE_MAP.iter() {
+            dict.set_item(k, v).unwrap();
+        }
+        dict.into()
+    }
+
+    #[classattr]
+    /// Reverse mapping from byte value to piece name
+    fn reverse_pieces(py: pyo3::Python<'_>) -> pyo3::PyObject {
+        let dict = pyo3::types::PyDict::new_bound(py);
+        for (&k, &v) in REVERSE_PIECE_MAP.iter() {
+            dict.set_item(k, v).unwrap();
+        }
+        dict.into()
+    }
+
+    /// Get a piece by its name.
+    ///
+    /// # Arguments
+    /// - name (str): The name of the piece to retrieve.
+    /// # Returns
+    /// - Piece: The piece object corresponding to the given name.
+    /// # Raises
+    /// - ValueError: If the piece name is not found in the factory.
+    #[staticmethod]
+    pub fn get_piece(name: &str) -> PyResult<Piece> {
+        if let Some(&byte) = PIECE_MAP.get(name) {
+            Ok(Piece { state: byte })
+        } else {
+            Err(pyo3::exceptions::PyValueError::new_err(format!("Piece '{}' not found in factory.", name)))
+        }
+    }
+
+    /// Get the name of a piece based on its byte value.
+    ///
+    /// # Arguments
+    /// - p (Piece): The piece object whose name is to be retrieved.
+    /// # Returns
+    /// - String: The name of the piece corresponding to the given byte value.
+    /// # Raises
+    /// - ValueError: If the piece byte value is not found in the factory.
+    #[staticmethod]
+    pub fn get_piece_name(p: &Piece) -> PyResult<String> {
+        let byte = p.state as u8;
+        if let Some(name) = REVERSE_PIECE_MAP.get(&byte) {
+            Ok(name.to_string())
+        } else {
+            Err(pyo3::exceptions::PyValueError::new_err(format!("Piece with byte value {} not found in factory.", byte)))
+        }
+    }
+
+    // Rust note: can also be used as a backend function.
+
+    /// Generate a random piece based on frequency distribution.
+    ///
+    /// # Returns
+    /// - Piece: A randomly selected piece object.
+    #[staticmethod]
+    pub fn generate_piece() -> PyResult<Piece> {
+        use rand::Rng;
+        let mut rng = rand::rng();
+        if rng.random_bool(0.5) {
+            let i = rng.random_range(0..74);
+            if i < 8 {
+                return Self::get_piece("triangle_3_a");
+            } else if i < 16 {
+                return Self::get_piece("triangle_3_b");
+            } else if i < 22 {
+                return Self::get_piece("line_3_i");
+            } else if i < 28 {
+                return Self::get_piece("line_3_j");
+            } else if i < 34 {
+                return Self::get_piece("line_3_k");
+            } else if i < 37 {
+                return Self::get_piece("corner_3_i_r");
+            } else if i < 40 {
+                return Self::get_piece("corner_3_j_r");
+            } else if i < 43 {
+                return Self::get_piece("corner_3_k_r");
+            } else if i < 46 {
+                return Self::get_piece("corner_3_i_l");
+            } else if i < 49 {
+                return Self::get_piece("corner_3_j_l");
+            } else if i < 52 {
+                return Self::get_piece("corner_3_k_l");
+            } else if i < 56 {
+                return Self::get_piece("rhombus_4_i");
+            } else if i < 60 {
+                return Self::get_piece("rhombus_4_j");
+            } else if i < 64 {
+                return Self::get_piece("rhombus_4_k");
+            }
+            let j = rng.random_range(0..25);
+            if j == 0 || j == 1 {
+                return Self::get_piece("fan_4_a");
+            } else if j == 2 || j == 3 {
+                return Self::get_piece("fan_4_b");
+            } else if j == 4 {
+                return Self::get_piece("corner_4_i_l");
+            } else if j == 5 {
+                return Self::get_piece("corner_4_i_r");
+            } else if j == 6 {
+                return Self::get_piece("corner_4_j_l");
+            } else if j == 7 {
+                return Self::get_piece("corner_4_j_r");
+            } else if j == 8 {
+                return Self::get_piece("corner_4_k_l");
+            } else if j == 9 {
+                return Self::get_piece("corner_4_k_r");
+            } else if j < 14 {
+                let c = (b'a' + (j - 10) as u8) as char;
+                return Self::get_piece(&format!("asym_4_i_{}", c));
+            } else if j < 18 {
+                let c = (b'a' + (j - 14) as u8) as char;
+                return Self::get_piece(&format!("asym_4_j_{}", c));
+            } else if j < 22 {
+                let c = (b'a' + (j - 18) as u8) as char;
+                return Self::get_piece(&format!("asym_4_k_{}", c));
+            } else {
+                return Self::get_piece("uno");
+            }
+        } else {
+            let i = rng.random_range(0..86);
+            if i < 6 {
+                return Self::get_piece("triangle_3_a");
+            } else if i < 12 {
+                return Self::get_piece("triangle_3_b");
+            } else if i < 16 {
+                return Self::get_piece("line_3_i");
+            } else if i < 20 {
+                return Self::get_piece("line_3_j");
+            } else if i < 24 {
+                return Self::get_piece("line_3_k");
+            } else if i < 26 {
+                return Self::get_piece("corner_3_i_r");
+            } else if i < 28 {
+                return Self::get_piece("corner_3_j_r");
+            } else if i < 30 {
+                return Self::get_piece("corner_3_k_r");
+            } else if i < 32 {
+                return Self::get_piece("corner_3_i_l");
+            } else if i < 34 {
+                return Self::get_piece("corner_3_j_l");
+            } else if i < 36 {
+                return Self::get_piece("corner_3_k_l");
+            } else if i < 40 {
+                return Self::get_piece("rhombus_4_i");
+            } else if i < 44 {
+                return Self::get_piece("rhombus_4_j");
+            } else if i < 48 {
+                return Self::get_piece("rhombus_4_k");
+            } else if i < 54 {
+                return Self::get_piece("fan_4_a");
+            } else if i < 60 {
+                return Self::get_piece("fan_4_b");
+            } else if i < 62 {
+                return Self::get_piece("corner_4_i_l");
+            } else if i < 64 {
+                return Self::get_piece("corner_4_i_r");
+            } else if i < 66 {
+                return Self::get_piece("corner_4_j_l");
+            } else if i < 68 {
+                return Self::get_piece("corner_4_j_r");
+            } else if i < 70 {
+                return Self::get_piece("corner_4_k_l");
+            } else if i < 72 {
+                return Self::get_piece("corner_4_k_r");
+            } else if i < 76 {
+                let c = (b'a' + (i - 72) as u8) as char;
+                return Self::get_piece(&format!("asym_4_i_{}", c));
+            } else if i < 80 {
+                let c = (b'a' + (i - 76) as u8) as char;
+                return Self::get_piece(&format!("asym_4_j_{}", c));
+            } else if i < 84 {
+                let c = (b'a' + (i - 80) as u8) as char;
+                return Self::get_piece(&format!("asym_4_k_{}", c));
+            } else {
+                return Self::get_piece("full");
+            }
+        }
+    }
+
+    // Rust note: can also be used as a backend function.
+
+    /// Return all pieces that are defined in this factory.
+    ///
+    /// # Returns
+    /// - list[Piece]: A list of all Piece instances defined in the factory.
+    #[staticmethod]
+    pub fn all_pieces() -> Vec<Piece> {
+        PIECE_MAP.values().map(|&byte| Piece { state: byte }).collect()
+    }
 }
