@@ -834,8 +834,52 @@ impl PartialEq for HexEngine {
     }
 }
 
+impl TryFrom<[bool]> for HexEngine {
+    type Error = PyErr;
+
+    fn try_from(value: [bool]) -> Result<Self, Self::Error> {
+        let radius = calc_radius(value.len()).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Invalid state length: {}", value.len())
+            )
+        })?;
+        Ok(HexEngine {
+            radius,
+            states: value.to_vec(),
+        })
+    }
+}
+
 // This is the backend scope, nothing is exposed to Python here
 impl HexEngine {
+    /// Calculate the radius of the hexagonal grid from the length of the state vector.
+    /// 
+    /// This method derives the radius based on the formula for the total number of blocks
+    /// in a hexagonal grid of radius r: A_r = 1 + 3*r*(r-1).
+    /// 
+    /// Arguments:
+    /// - length: The length of the state vector
+    /// Returns:
+    /// - An Option containing the radius if valid, or None if the length does not correspond
+    ///   to a valid hexagonal grid size.
+    fn calc_radius(length: usize) -> Option<usize> {
+        if length == 0 {
+            return Some(0);
+        }
+        if length % 3 != 1 {
+            return None;
+        }
+        
+        let target = (length - 1) / 3;
+        let u = target * 4 + 1;
+        let r = ((u as f64).sqrt() as usize + 1) / 2;
+        
+        if r > 0 && r * (r - 1) == target {
+            Some(r)
+        } else {
+            None
+        }
+    }
     /// Converts linear index to coordinate
     /// 
     /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate.
@@ -2069,3 +2113,5 @@ impl HexEngine {
         Ok(result)
     }
 }
+
+
