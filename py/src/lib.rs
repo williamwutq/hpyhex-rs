@@ -506,6 +506,37 @@ impl PartialEq for Piece {
     }
 }
 
+impl std::fmt::Display for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for i in 0..7 {
+            let b = (self.state & (1 << (6 - i))) != 0;
+            write!(f, "{}", if b { '1' } else { '0' })?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Debug for Piece {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = String::from("Piece{");
+        for i in 0..7 {
+            if i > 0 {
+                s.push_str(", ");
+            }
+            let hex = &Piece::positions[i];
+            let occupied = (self.state & (1 << (6 - i))) != 0;
+            s.push_str(&format!(
+                "({}, {}, {})",
+                hex.i(),
+                hex.k(),
+                occupied
+            ));
+        }
+        s.push('}');
+        write!(f, "{s}")
+    }
+}
+
 #[pymethods]
 impl Piece {
     /// The fixed positions of the 7 blocks in a standard Piece.
@@ -837,6 +868,34 @@ impl PartialEq for HexEngine {
     }
 }
 
+impl std::fmt::Display for HexEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HexEngine[blocks = {{")?;
+        for (i, &state) in self.states.iter().enumerate() {
+            let hex = self.hex_coordinate_of(i).unwrap_or(Hex { i: -1, k: -1 });
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "({}, {}, {})", hex.i, hex.k, state)?;
+        }
+        write!(f, "}}]")
+    }
+}
+
+impl std::fmt::Debug for HexEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HexEngine[blocks = {{")?;
+        for (i, &state) in self.states.iter().enumerate() {
+            let hex = self.hex_coordinate_of(i).unwrap_or(Hex { i: -1, k: -1 });
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "({}, {}, {})", hex.i, hex.k, state)?;
+        }
+        write!(f, "}}]")
+    }
+}
+
 impl TryFrom<Vec<bool>> for HexEngine {
     type Error = PyErr;
 
@@ -849,6 +908,22 @@ impl TryFrom<Vec<bool>> for HexEngine {
         Ok(HexEngine {
             radius,
             states: value
+        })
+    }
+}
+
+impl TryFrom<usize> for HexEngine {
+    type Error = PyErr;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        let radius = HexEngine::calc_radius(value).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Invalid state length: {}", value)
+            )
+        })?;
+        Ok(HexEngine {
+            radius,
+            states: vec![false; value]
         })
     }
 }
@@ -2431,13 +2506,192 @@ impl PieceFactory {
 #[pyclass]
 pub struct Game {
     #[pyo3(get, set)]
-    __engine: HexEngine,
+    __engine: Py<HexEngine>,
     #[pyo3(get, set)]
     __queue: Vec<Piece>,
     #[pyo3(get, set)]
     __score: u64,
     #[pyo3(get, set)]
-    __turn: u32,
+    __turn: u64,
     #[pyo3(get, set)]
     __end: bool,
+}
+
+#[pymethods]
+impl Game {
+    /// Initialize the game with a game engine of radius r and game queue of length q.
+    ///
+    /// Parameters:
+    /// - engine (HexEngine | int): The game engine to use, either as a HexEngine instance or an integer representing the radius.
+    /// - queue (list[Piece] | int): The queue of pieces to use, either as a list of Piece instances or an integer representing the size of the queue.
+    /// - initial_turn (int): The initial turn number of the game, default is 0.
+    /// - initial_score (int): The initial score of the game, default is 0.
+    /// Returns:
+    /// - None
+    /// Raises:
+    /// - ValueError: If the engine radius is less than 2 or if the queue size is less than 1.
+    /// - TypeError: If the engine is not a HexEngine instance or an integer, or if the queue is not a list of Piece instances or an integer, or if initial_turn or initial_score is not a non-negative integer.
+    #[new]
+    pub fn new(
+        engine: &pyo3::Bound<'_, pyo3::PyAny>,
+        queue: &pyo3::Bound<'_, pyo3::PyAny>,
+        initial_turn: Option<i64>,
+        initial_score: Option<i64>,
+        // Those accept i64 to check for negative values
+    ) -> pyo3::PyResult<Self> {
+        // Engine: HexEngine or int (radius)
+        let __engine = if let Ok(engine_ref) = engine.extract::<Py<HexEngine>>() {
+            engine_ref
+        } else if let Ok(radius) = engine.extract::<usize>() {
+            if radius < 2 {
+                return Err(pyo3::exceptions::PyValueError::new_err("Radius must be greater than or equals two"));
+            }
+            let engine_raw = HexEngine::try_from(radius)?;
+            Py::new(engine.py(), engine_raw)?
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Engine must be a HexEngine instance or an integer representing the radius"));
+        };
+
+        // Queue: list[Piece] or int (queue size)
+        let __queue: Vec<Piece> = if let Ok(list) = queue.extract::<Vec<Piece>>() {
+            list
+        } else if let Ok(qsize) = queue.extract::<usize>() {
+            if qsize < 1 {
+                return Err(pyo3::exceptions::PyValueError::new_err("Queue size must be greater than or equals one"));
+            }
+            let mut pieces = Vec::with_capacity(qsize);
+            for _ in 0..qsize {
+                pieces.push(PieceFactory::generate_piece()?);
+            }
+            pieces
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Queue must be a list of Piece instances or an integer representing the size of the queue"));
+        };
+
+        // initial_turn: Option<u32> (default 0)
+        let __turn = match initial_turn {
+            Some(t) => t,
+            None => 0,
+        };
+
+        // initial_score: Option<u64> (default 0)
+        let __score = match initial_score {
+            Some(s) => s,
+            None => 0,
+        };
+
+        // Validate initial_turn and initial_score
+        let __turn = if __turn < 0 {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Initial turn must be a non-negative integer"));
+        } else {
+            __turn as u64
+        };
+        let __score = if __score < 0 {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Initial score must be a non-negative integer"));
+        } else {
+            __score as u64
+        };
+
+        Ok(Game {
+            __engine,
+            __queue,
+            __score,
+            __turn,
+            __end: false,
+        })
+    }
+
+    
+    /// Return a string representation of the game state.
+    /// 
+    /// Returns:
+    /// - str: A string representation of the game state, including engine, queue, score, turn, and whether the game has ended.
+    fn __str__(&self) -> String {
+        // Format queue with []
+        let mut queue_str = String::from("[");
+        for (i, piece) in self.__queue.iter().enumerate() {
+            if i > 0 {
+                queue_str.push_str(", ");
+            }
+            queue_str.push_str(&format!("{:?}", piece));
+        }
+        queue_str.push(']');
+        format!(
+            "Game(engine={:?}, queue={}, score={}, turn={}, end={})",
+            self.__engine, queue_str, self.__score, self.__turn, self.__end
+        )
+    }
+
+    /// Return a string representation of the game state.
+    /// 
+    /// Returns:
+    /// - str: A string representation of the game state.
+    fn __repr__(&self) -> String {
+        format!("({:?}, {:?})", self.__engine, self.__queue)
+    }
+
+    /// Returns whether this game has ended.
+    /// 
+    /// Returns:
+    /// - is_end (bool): True if the game has ended, False otherwise.
+    #[getter]
+    fn end(&self) -> bool {
+        self.__end
+    }
+
+    /// Returns the current result of this game.
+    /// 
+    /// Returns:
+    /// - result (tuple[int, int]): A tuple containing the current turn number and score, in the order (turn, score).
+    #[getter]
+    fn result(&self) -> (u64, u64) {
+        (self.__turn, self.__score)
+    }
+
+    /// Returns the current turn number of this game.
+    /// 
+    /// Returns:
+    /// - turn (int): The current turn number in the game.
+    #[getter]
+    fn turn(&self) -> u64 {
+        self.__turn
+    }
+
+    /// Returns the current score of this game.
+    /// 
+    /// Returns:
+    /// - score (int): The current score in the game.
+    #[getter]
+    fn score(&self) -> u64 {
+        self.__score
+    }
+
+    /// Returns the reference to game engine of this game.
+    ///
+    /// Returns:
+    /// - engine (HexEngine): The HexEngine instance used in this game.
+    #[getter]
+    fn engine<'py>(&self, py: Python<'py>) -> Py<HexEngine> {
+        self.__engine.clone_ref(py)
+    }
+
+    /// Returns the reference to the queue of pieces available in this game.
+    /// 
+    /// Returns:
+    /// - queue (list[Piece]): The list of pieces currently in the queue.
+    #[getter]
+    fn queue<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let list = PyList::empty_bound(py);
+        for piece in &self.__queue {
+            match Py::new(py, piece.clone()) {
+                Ok(obj) => {
+                    if let Err(e) = list.append(obj.bind(py)) {
+                        return Err(e);
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(list)
+    }
 }
