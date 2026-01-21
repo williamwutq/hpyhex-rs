@@ -1674,22 +1674,22 @@ impl HexEngine {
             return Err(pyo3::exceptions::PyValueError::new_err("Cannot add piece due to overlaps or out-of-range coordinates"));
         }
         if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
-        for i in 0..7 {
+            for i in 0..7 {
                 if piece_ref.states()[i] {
-                let (placed_i, placed_k) = Python::with_gil(|_py| {
-                    let pos = &Piece::positions[i];
+                    let (placed_i, placed_k) = Python::with_gil(|_py| {
+                        let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
                         let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
-                    (pos.i + base.0, pos.k + base.1)
-                });
-                let idx = self.linear_index_of(placed_i, placed_k)?;
-                if idx == -1 {
-                    return Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"));
+                        (pos.i + base.0, pos.k + base.1)
+                    });
+                    let idx = self.linear_index_of(placed_i, placed_k)?;
+                    if idx == -1 {
+                        return Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"));
+                    }
+                    self.states[idx as usize] = true;
                 }
-                self.states[idx as usize] = true;
             }
-        }
-        Ok(())
+            Ok(())
         } else if let Ok(state) = piece.extract::<u8>() {
             Python::with_gil(|py| {
                 let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
@@ -1903,37 +1903,53 @@ impl HexEngine {
     /// Returns:
     /// - float: Density index (0 to 1), or 0 if placement is invalid or no neighbors exist.
     pub fn compute_dense_index(&self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<f64> {
-        let piece = if let Ok(p) = piece.extract::<PyRef<Piece>>() {
-            p
-        } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
-        };
-        let mut total_possible = 0;
-        let mut total_populated = 0;
-        for i in 0..7 {
-            if piece.states()[i] {
-                let (placed_i, placed_k) = Python::with_gil(|_py| {
-                    let pos = &Piece::positions[i];
-                    let base = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
-                        (h.i, h.k)
-                    } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
-                        (tuple.0, tuple.1)
-                    } else {
-                        (0, 0)
-                    };
-                    (pos.i + base.0, pos.k + base.1)
-                });
-                let placed_block = get_hex(placed_i, placed_k); // TODO: unnecessary use of get_hex involking Python GIL
-                if !HexEngine::check_range_coords(placed_i, placed_k, self.radius).unwrap_or(false) || self.state_of(placed_i, placed_k).unwrap_or(false) {
-                    return Ok(0.0);
+        if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
+            let mut total_possible = 0;
+            let mut total_populated = 0;
+            let piece_piece = piece.extract::<Piece>()?;
+            for i in 0..7 {
+                if piece_ref.states()[i] {
+                    let (placed_i, placed_k) = Python::with_gil(|_py| {
+                        let pos = &Piece::positions[i];
+                        let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                        let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                        (pos.i + base.0, pos.k + base.1)
+                    });
+                    if !HexEngine::check_range_coords(placed_i, placed_k, self.radius).unwrap_or(false) || self.state_of(placed_i, placed_k).unwrap_or(false) {
+                        return Ok(0.0);
+                    }
+                    total_possible += 6 - piece_neighbors_of(piece_piece.clone(), placed_i, placed_k);
+                    total_populated += self.count_neighbors_coordinate(placed_i, placed_k).unwrap_or(0);
                 }
-                total_possible += 6 - piece.count_neighbors(&placed_block.borrow(Python::with_gil(|py| py)));
-                total_populated += self.count_neighbors_coordinate(placed_i, placed_k).unwrap_or(0);
             }
+            Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
+        } else if let Ok(state) = piece.extract::<u8>() {
+            Python::with_gil(|py| {
+                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
+                let piece_ref = piece_obj.borrow(py);
+                // let piece = Piece {state: state};
+                let mut total_possible = 0;
+                let mut total_populated = 0;
+                for i in 0..7 {
+                    if piece_ref.states()[i] {
+                        let (placed_i, placed_k) = {
+                            let pos = &Piece::positions[i];
+                            let coo_val = coo.extract::<PyRef<Hex>>().ok();
+                            let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                            (pos.i + base.0, pos.k + base.1)
+                        };
+                        if !HexEngine::check_range_coords(placed_i, placed_k, self.radius).unwrap_or(false) || self.state_of(placed_i, placed_k).unwrap_or(false) {
+                            return Ok(0.0);
+                        }
+                        total_possible += 6 - piece_neighbors_of(Piece {state: state}, placed_i, placed_k);
+                        total_populated += self.count_neighbors_coordinate(placed_i, placed_k).unwrap_or(0);
+                    }
+                }
+                Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
+            })
+        } else {
+            Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
         }
-        Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
     }
 
     /// Compute the entropy of the hexagonal grid based on the distribution of 7-block patterns.
