@@ -1768,8 +1768,21 @@ impl HexEngine {
             }
             Ok(positions)
         } else if let Ok(state) = piece.extract::<u8>() {
-            todo!()
-            // Python::with_gil(|py| PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py))
+            Python::with_gil(|py|
+                {
+                    let piece = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py);
+                    let mut positions = Vec::new();
+                    for a in 0..(self.radius * 2) as i32 {
+                        for b in 0..(self.radius * 2) as i32 {
+                            let hex = Hex{i: a, k: b};
+                            if self.check_add_of(&hex, &piece)? {
+                                positions.push(get_hex(hex.i, hex.k));
+                            }
+                        }
+                    }
+                    Ok(positions)
+                }
+            )
         } else {
             Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
         }
