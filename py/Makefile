@@ -21,7 +21,7 @@ help:
 
 # Build the Rust extension module
 build:
-	maturin build --release --interpreter "$(PYVERSION)" --out dist/
+	maturin build --release --interpreter "$(PYVERSION)" --out dist/ --features full
 
 # Compile docs for HTML
 html:
