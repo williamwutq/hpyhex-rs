@@ -2497,6 +2497,7 @@ impl PieceFactory {
     }
 }
 
+#[allow(non_snake_case)]
 // Note for underscoring and getter, setters in Game class:
 // The python implementation has those private attributes with double underscores
 // Although attributes in Game are never intended to be modified directly from outside,
@@ -2518,17 +2519,74 @@ impl PieceFactory {
 #[pyclass]
 pub struct Game {
     #[pyo3(get, set)]
-    __engine: Py<HexEngine>,
+    _Game__engine: Py<HexEngine>,
     #[pyo3(get, set)]
-    __queue: Vec<Piece>,
+    _Game__queue: Vec<Piece>,
     #[pyo3(get, set)]
-    __score: u64,
+    _Game__score: u64,
     #[pyo3(get, set)]
-    __turn: u64,
+    _Game__turn: u64,
     #[pyo3(get, set)]
-    __end: bool,
+    _Game__end: bool,
 }
 
+#[allow(non_snake_case)]
+impl Game {
+    /// Add a piece from the queue to the game engine at the specified coordinates.
+    /// 
+    /// This method updates the game state, including the score and turn number,
+    /// and checks for eliminations and game end conditions.
+    /// 
+    /// Arguments:
+    /// - python (Python): The Python interpreter context.
+    /// - piece_index (usize): The index of the piece in the queue to add.
+    /// - coord (Bound[Hex]): The coordinates where the piece should be added.
+    /// Returns:
+    /// - bool: True if the piece was successfully added, False otherwise.
+    pub fn add_piece_checked(&mut self, python: Python, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
+        // Check piece exists
+        if piece_index >= self._Game__queue.len() {
+            return Ok(false);
+        }
+        let piece = self._Game__queue[piece_index].clone();
+        // Add piece to engine and increment score and turn
+        let engine_bound = self._Game__engine.bind(python);
+        let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
+        if let Err(ref e) = add_result {
+            if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
+                return Ok(false);
+            } else {
+                return Err(e.clone_ref(python));
+            }
+        }
+        self._Game__score += piece.count() as u64;
+        // Replace used piece
+        let new_piece = PieceFactory::generate_piece()?;
+        self._Game__queue[piece_index] = new_piece;
+        // Eliminate and add score TODO: inefficient
+        let eliminated = engine_bound.call_method0("eliminate")?;
+        let eliminated_len = eliminated.len().unwrap_or(0);
+        self._Game__score += (eliminated_len as u64) * 5;
+        self._Game__turn += 1;
+        // Check whether the game has ended
+        let mut has_move = false;
+        for p in &self._Game__queue {
+            let positions = engine_bound.call_method1("check_positions", (p.clone(),));
+            if let Ok(pos) = positions {
+                if pos.len().unwrap_or(0) > 0 {
+                    has_move = true;
+                    break;
+                }
+            }
+        }
+        if !has_move {
+            self._Game__end = true;
+        }
+        Ok(true)
+    }
+}
+
+#[allow(non_snake_case)]
 #[pymethods]
 impl Game {
     /// Initialize the game with a game engine of radius r and game queue of length q.
@@ -2552,7 +2610,7 @@ impl Game {
         // Those accept i64 to check for negative values
     ) -> pyo3::PyResult<Self> {
         // Engine: HexEngine or int (radius)
-        let __engine = if let Ok(engine_ref) = engine.extract::<Py<HexEngine>>() {
+        let _Game__engine = if let Ok(engine_ref) = engine.extract::<Py<HexEngine>>() {
             engine_ref
         } else if let Ok(radius) = engine.extract::<usize>() {
             if radius < 2 {
@@ -2565,7 +2623,7 @@ impl Game {
         };
 
         // Queue: list[Piece] or int (queue size)
-        let __queue: Vec<Piece> = if let Ok(list) = queue.extract::<Vec<Piece>>() {
+        let _Game__queue: Vec<Piece> = if let Ok(list) = queue.extract::<Vec<Piece>>() {
             list
         } else if let Ok(qsize) = queue.extract::<usize>() {
             if qsize < 1 {
@@ -2581,35 +2639,35 @@ impl Game {
         };
 
         // initial_turn: Option<u32> (default 0)
-        let __turn = match initial_turn {
+        let _Game__turn = match initial_turn {
             Some(t) => t,
             None => 0,
         };
 
         // initial_score: Option<u64> (default 0)
-        let __score = match initial_score {
+        let _Game__score = match initial_score {
             Some(s) => s,
             None => 0,
         };
 
         // Validate initial_turn and initial_score
-        let __turn = if __turn < 0 {
+        let _Game__turn = if _Game__turn < 0 {
             return Err(pyo3::exceptions::PyTypeError::new_err("Initial turn must be a non-negative integer"));
         } else {
-            __turn as u64
+            _Game__turn as u64
         };
-        let __score = if __score < 0 {
+        let _Game__score = if _Game__score < 0 {
             return Err(pyo3::exceptions::PyTypeError::new_err("Initial score must be a non-negative integer"));
         } else {
-            __score as u64
+            _Game__score as u64
         };
 
         Ok(Game {
-            __engine,
-            __queue,
-            __score,
-            __turn,
-            __end: false,
+            _Game__engine,
+            _Game__queue,
+            _Game__score,
+            _Game__turn,
+            _Game__end: false,
         })
     }
 
@@ -2620,46 +2678,18 @@ impl Game {
     /// - coord (Hex): The coordinates where the piece should be placed.
     /// Returns:
     /// - bool: True if the piece was successfully added, False otherwise.
-    pub fn add_piece(&mut self, python: Python, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
-        // Check piece exists
-        if piece_index >= self.__queue.len() {
-            return Ok(false);
-        }
-        let piece = self.__queue[piece_index].clone();
-        // Add piece to engine and increment score and turn
-        let engine_bound = self.__engine.bind(python);
-        let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
-        if let Err(ref e) = add_result {
-            if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
-                return Ok(false);
-            } else {
-                return Err(e.clone_ref(python));
-            }
-        }
-        self.__score += piece.count() as u64;
-        // Replace used piece
-        let new_piece = PieceFactory::generate_piece()?;
-        self.__queue[piece_index] = new_piece;
-        // Eliminate and add score TODO: inefficient
-        let eliminated = engine_bound.call_method0("eliminate")?;
-        let eliminated_len = eliminated.len().unwrap_or(0);
-        self.__score += (eliminated_len as u64) * 5;
-        self.__turn += 1;
-        // Check whether the game has ended
-        let mut has_move = false;
-        for p in &self.__queue {
-            let positions = engine_bound.call_method1("check_positions", (p.clone(),));
-            if let Ok(pos) = positions {
-                if pos.len().unwrap_or(0) > 0 {
-                    has_move = true;
-                    break;
-                }
-            }
-        }
-        if !has_move {
-            self.__end = true;
-        }
-        Ok(true)
+    pub fn add_piece(&mut self, python: Python, piece_index: &Bound<'_, PyAny>, coord: &Bound<'_, PyAny>) -> PyResult<bool> {
+        // Extract piece_index
+        let piece_index: usize = match piece_index.extract() {
+            Ok(idx) => idx,
+            Err(_) => return Ok(false),
+        };
+        // Extract coord
+        let coord: Bound<'_, Hex> = match coord.extract() {
+            Ok(c) => c,
+            Err(_) => return Ok(false),
+        };
+        self.add_piece_checked(python, piece_index, &coord)
     }
 
     /// Make a move using the specified algorithm.
@@ -2670,8 +2700,8 @@ impl Game {
     /// Returns:
     /// - bool: True if the move was successfully made, False otherwise.
     pub fn make_move(&mut self, python: Python, algorithm: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if self.__end { return Ok(false); }
-        let engine_bound = self.__engine.bind(python);
+        if self._Game__end { return Ok(false); }
+        let engine_bound = self._Game__engine.bind(python);
         let queue_py = self.queue(python)?;
         let result = algorithm.call1((engine_bound, queue_py));
         let (index, coord) = match result {
@@ -2697,7 +2727,7 @@ impl Game {
         if index == usize::MAX {
             return Ok(false);
         }
-        self.add_piece(python, index, &coord)
+        self.add_piece_checked(python, index, &coord)
     }
 
     /// Return a string representation of the game state.
@@ -2707,7 +2737,7 @@ impl Game {
     fn __str__(&self) -> String {
         // Format queue with []
         let mut queue_str = String::from("[");
-        for (i, piece) in self.__queue.iter().enumerate() {
+        for (i, piece) in self._Game__queue.iter().enumerate() {
             if i > 0 {
                 queue_str.push_str(", ");
             }
@@ -2716,7 +2746,7 @@ impl Game {
         queue_str.push(']');
         format!(
             "Game(engine={:?}, queue={}, score={}, turn={}, end={})",
-            self.__engine, queue_str, self.__score, self.__turn, self.__end
+            self._Game__engine, queue_str, self._Game__score, self._Game__turn, self._Game__end
         )
     }
 
@@ -2725,7 +2755,7 @@ impl Game {
     /// Returns:
     /// - str: A string representation of the game state.
     fn __repr__(&self) -> String {
-        format!("({:?}, {:?})", self.__engine, self.__queue)
+        format!("({:?}, {:?})", self._Game__engine, self._Game__queue)
     }
 
     /// Returns whether this game has ended.
@@ -2734,7 +2764,7 @@ impl Game {
     /// - is_end (bool): True if the game has ended, False otherwise.
     #[getter]
     fn end(&self) -> bool {
-        self.__end
+        self._Game__end
     }
 
     /// Returns the current result of this game.
@@ -2743,7 +2773,7 @@ impl Game {
     /// - result (tuple[int, int]): A tuple containing the current turn number and score, in the order (turn, score).
     #[getter]
     fn result(&self) -> (u64, u64) {
-        (self.__turn, self.__score)
+        (self._Game__turn, self._Game__score)
     }
 
     /// Returns the current turn number of this game.
@@ -2752,7 +2782,7 @@ impl Game {
     /// - turn (int): The current turn number in the game.
     #[getter]
     fn turn(&self) -> u64 {
-        self.__turn
+        self._Game__turn
     }
 
     /// Returns the current score of this game.
@@ -2761,7 +2791,7 @@ impl Game {
     /// - score (int): The current score in the game.
     #[getter]
     fn score(&self) -> u64 {
-        self.__score
+        self._Game__score
     }
 
     /// Returns the reference to game engine of this game.
@@ -2770,7 +2800,7 @@ impl Game {
     /// - engine (HexEngine): The HexEngine instance used in this game.
     #[getter]
     fn engine<'py>(&self, py: Python<'py>) -> Py<HexEngine> {
-        self.__engine.clone_ref(py)
+        self._Game__engine.clone_ref(py)
     }
 
     /// Returns the reference to the queue of pieces available in this game.
@@ -2780,7 +2810,7 @@ impl Game {
     #[getter]
     fn queue<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let list = PyList::empty_bound(py);
-        for piece in &self.__queue {
+        for piece in &self._Game__queue {
             match Py::new(py, piece.clone()) {
                 Ok(obj) => {
                     if let Err(e) = list.append(obj.bind(py)) {
