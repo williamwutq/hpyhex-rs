@@ -1,6 +1,6 @@
 # hpyhex-rs
 Simplified implementations of the HappyHex game components and hexagonal system in Rust.
-This is a drop-in replacement for the original `hpyhex` package, optimized for performance and memory usage.
+This is a drop-in replacement for the original `hpyhex` package, optimized for performance and memory usage. Offers up to 200x speed improvements in critical operations and around 60x speed improvements in essential gameplay workflows.
 
 ## Installation
 ```bash
@@ -168,7 +168,7 @@ The Rust implementation of `hpyhex-rs` delivers dramatic performance improvement
 
 The following table summarizes the performance improvements across major operation categories. All measurements represent typical use cases from each category, with speedup calculated as the ratio of Python execution time to Rust execution time.
 
-| Category                | Representative Operation      | Python (µs) | Rust (µs) | Speedup    |
+| Category                | Representative Operation     | Python (µs) | Rust (µs) | Speedup    |
 |-------------------------|------------------------------|-------------|-----------|------------|
 | Hex Creation            | Cached hex creation          | 4.52        | 2.73      | 1.7x       |
 | Hex Arithmetic          | Addition                     | 0.655       | 0.082     | 8.0x       |
