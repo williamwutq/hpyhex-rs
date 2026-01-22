@@ -1,7 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 #[cfg(feature = "numpy")]
-use numpy::{PyArray1, PyArray, PyArrayDescr, dtype_bound};
+use numpy::{PyArray1, PyArray, PyArrayMethods, PyArrayDescr, dtype_bound};
 #[cfg(feature = "numpy")]
 use numpy::ndarray::array;
 
@@ -595,6 +595,20 @@ impl Piece {
     pub const fn count(&self) -> u32 {
         self.state.count_ones()
     }
+
+    /// Get the cached Piece instance for the given state.
+    /// 
+    /// # Arguments
+    /// - state (u8): The state byte representing the occupancy of the blocks.
+    /// 
+    /// # Returns
+    /// - Py<Piece>: The cached Piece instance corresponding to the given state.
+    #[inline]
+    pub fn get_cached(state: u8) -> Py<Piece> {
+        let truncated = state & 0b0111_1111; // Only 7 bits used
+        let cache = PIECE_CACHE.get_or_init(|| initialize_piece_cache());
+        cache[truncated as usize].clone()
+    }
 }
 
 #[pymethods]
@@ -776,6 +790,12 @@ impl Piece {
     /// 
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of float16 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
     #[cfg(all(feature = "numpy", feature = "half"))]
     pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
         let arr = array![
@@ -824,6 +844,300 @@ impl Piece {
             if (self.state & 0b0000001) != 0 { 1f64 } else { 0f64 },
         ];
         PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of boolean values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_bool(arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &b) in slice.iter().enumerate() {
+            if b {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of int8 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int8 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int8(arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v > 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of uint8 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint8 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint8(arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v != 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of int16 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int16 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int16(arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v > 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of uint16 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint16 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint16(arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v != 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of int32 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int32 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int32(arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v > 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of uint32 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint32 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint32(arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v != 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of int64 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int64 values representing the block states.
+    ///
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int64(arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v > 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of uint64 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint64 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint64(arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v != 0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of float16 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of float16 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (values > 0.0 are true, else false).
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause a segmentation fault.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn from_numpy_float16(arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v.to_f32() > 0.0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of float32 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of float32 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (values > 0.0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_float32(arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v > 0.0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
+    }
+
+    /// Create a Piece instance from a NumPy ndarray of float64 values.
+    ///
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of float64 values representing the block states.
+    /// Returns:
+    /// - Piece: A Piece instance corresponding to the given block states (values > 0.0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_float64(arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Piece>> {
+        let slice = unsafe { arr.as_slice()? };
+        if slice.len() != 7 {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "Input array must have exactly 7 elements",
+            ));
+        }
+        let mut state: u8 = 0;
+        for (i, &v) in slice.iter().enumerate() {
+            if v > 0.0 {
+                state |= 1 << (6 - i);
+            }
+        }
+        Ok(Piece::get_cached(state))
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
