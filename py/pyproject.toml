@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "hpyhex-rs"
+description = "Simplified implementations of the HappyHex game components and hexagonal system in Rust."
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -11,5 +12,17 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "William Wu", email = "williamwutq@gmail.com"},
+]
+keywords = ["grid", "game", "happyhex", "hex", "pyo3", "rust"]
+
+[project.urls]
+Homepage = "https://github.com/williamwutq/hpyhex-rs"
+Repository = "https://github.com/williamwutq/hpyhex-rs"
+
 [tool.maturin]
 bindings = "pyo3"

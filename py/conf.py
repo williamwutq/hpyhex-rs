@@ -20,7 +20,7 @@ def setup(app):
 project = 'hpyhex_rs'
 copyright = '2026, William Wu'
 author = 'William Wu'
-release = '0.1.0'
+release = '0.1.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
