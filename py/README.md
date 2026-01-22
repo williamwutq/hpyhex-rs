@@ -48,8 +48,12 @@ pip install hpyhex-rs
    If you are using built-in APIs in `hpyhex` to serialize data structures (e.g., `int(piece_value)`, `Piece(integer_value)`), you can load them back using `hpyhex-rs`, and vice versa. The byte representation of pieces is compatible between the two packages.
    
    However, if you use a python tool to serialize data structures from `hpyhex` as Python objects (e.g., `pickle`), you cannot load them back using `hpyhex-rs`, and vice versa. `hpyhex-rs` offers `serialize` and `deserialize` functions for its own data structures.
+
+5. **Does Not Contain `benchmark` Module (Yet)**
    
-5. **Updates Can Lag Behind Original Package**
+   The original `hpyhex` package contains a `benchmark` module for performance testing of machine learned, heuristic, determinstic, and random algorithms. This module is not yet implemented in `hpyhex-rs`, but may be added in future releases. The source code for the benchmark module is very short and can be found [online](https://raw.githubusercontent.com/williamwutq/hpyhexml/main/hpyhex/hpyhex/benchmark.py). You may copy it into your project if needed.
+   
+6. **Updates Can Lag Behind Original Package**
    
    This package currently targets the [0.2.0](https://pypi.org/project/hpyhex/0.2.0/) version of `hpyhex`. Features from later versions may not be fully supported yet, but may be added in future releases.
 
@@ -149,20 +153,6 @@ It is tempting to implement your own versions of the various abstractions provid
 
 ### Not Enough for GUI Applications
 If you are building a GUI application for a simple version of HappyHex and deeply hated the original Java codebase, you possibly have pondered upon this package for performance, as it advertises itself as a high-performance implementation of the Python `hpyhex` package, which has a simple and useful API. Unless you already did a lot of work in Python, however, you should not use Python for your GUI applications, as it is not well-suited for GUI development and may lead to performance issues and a poor user experience. The [hpyhex-rs](https://crates.io/crates/hpyhex-rs) Rust crate, which is inspired by the Python API, not only provides similar functionality and abstractions, which make your transition to that package easier, but also provides further abstractions such as thread-safe guards, extended HexEngine with potential attributes for each cell, and an integrated game environment designed specifically for GUI threading needs. Consider using Rust as your main programming language for GUI applications, or integrate with C++ via FFI to use existing C++ GUI frameworks.
-
-## Benchmarking Algorithms
-
-The package includes benchmarking tools to evaluate and compare algorithms:
-
-```python
-from hpyhex.benchmark import benchmark, compare
-
-# Benchmark a single algorithm
-avg_score, avg_turn = benchmark(simple_algorithm, engine_radius=3, queue_size=5, eval_times=10)
-
-# Compare two algorithms
-similarity = compare(alg1, alg2, engine_radius=3, queue_size=5, eval_times=100)
-```
 
 ## The Statistics
 
