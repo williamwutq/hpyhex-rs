@@ -1,6 +1,10 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-use numpy::{IntoPyArray, PyArray1, PyArray};
+
+#[cfg(feature = "numpy")]
+use numpy::{PyArray1, PyArray, PyArrayDescr, dtype_bound};
+#[cfg(feature = "numpy")]
 use numpy::ndarray::array;
+
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyAny, PyType};
 
@@ -16,9 +20,52 @@ fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[cfg(all(feature = "numpy", feature = "half"))]
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct F16(pub half::f16);
+
+#[cfg(all(feature = "numpy", feature = "half"))]
+impl F16 {
+    #[inline]
+    pub fn from_f32(v: f32) -> Self {
+        F16(half::f16::from_f32(v))
+    }
+}
+
+#[cfg(all(feature = "numpy", feature = "half"))]
+unsafe impl numpy::Element for F16 {
+    const IS_COPY: bool = true;
+    fn get_dtype_bound(py: pyo3::Python<'_>) -> pyo3::Bound<'_, PyArrayDescr> {
+        dtype_bound::<F16>(py)
+    }
+}
+
+#[cfg(all(feature = "numpy", feature = "half"))]
+impl From<half::f16> for F16 {
+    #[inline]
+    fn from(v: half::f16) -> Self { F16(v) }
+}
+
+#[cfg(all(feature = "numpy", feature = "half"))]
+impl From<F16> for half::f16 {
+    #[inline]
+    fn from(v: F16) -> Self { v.0 }
+}
+
+#[cfg(all(feature = "numpy", feature = "half"))]
+impl std::ops::Deref for F16 {
+    type Target = half::f16;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 
 use std::sync::OnceLock;
 use std::hash::{Hash, Hasher};
+
+// Note: Hex has no need for serialization to numpy arrays, as it is just a coordinate container.
 
 /// Represents a hexagonal grid coordinate using a custom line-based coordinate system.
 ///
@@ -550,10 +597,25 @@ impl Piece {
     }
 }
 
-impl IntoPyArray for Piece {
-    type Item = bool;
-    type Dim = numpy::ndarray::Ix1;
-    fn into_pyarray_bound<'py>(self, py: Python<'py>) -> Bound<'py, PyArray<bool, Self::Dim>> {
+#[pymethods]
+impl Piece {
+    /* ---------------------------------------- NUMPY EXPORTS ---------------------------------------- */
+
+    /// Get the default NumPy ndarray representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy(&self, py: Python) -> Py<PyArray1<bool>> {
+        self.to_numpy_bool(py)
+    }
+
+    /// Get the NumPy ndarray boolean representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_bool(&self, py: Python) -> Py<PyArray1<bool>> {
         let arr = array![
             (self.state & 0b1000000) != 0,
             (self.state & 0b0100000) != 0,
@@ -563,12 +625,209 @@ impl IntoPyArray for Piece {
             (self.state & 0b0000010) != 0,
             (self.state & 0b0000001) != 0,
         ];
-        PyArray1::from_array_bound(py, &arr)
+        PyArray1::from_array_bound(py, &arr).unbind()
     }
-}
 
-#[pymethods]
-impl Piece {
+    /// Get the NumPy ndarray int8 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int8 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<i8>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1i8 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray uint8 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint8 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint8(&self, py: Python) -> Py<PyArray1<u8>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1u8 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray int16 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int16 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int16(&self, py: Python) -> Py<PyArray1<i16>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1i16 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray uint16 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint16 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint16(&self, py: Python) -> Py<PyArray1<u16>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1u16 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray int32 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int32 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int32(&self, py: Python) -> Py<PyArray1<i32>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1i32 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray uint32 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint32 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint32(&self, py: Python) -> Py<PyArray1<u32>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1u32 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray int64 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int64 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int64(&self, py: Python) -> Py<PyArray1<i64>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1i64 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray uint64 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint64 values (1 for occupied, 0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint64(&self, py: Python) -> Py<PyArray1<u64>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1u64 } else { 0 },
+            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
+            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray float16 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float16 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+            if (self.state & 0b0100000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+            if (self.state & 0b0010000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+            if (self.state & 0b0001000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+            if (self.state & 0b0000100) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+            if (self.state & 0b0000010) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+            if (self.state & 0b0000001) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray float32 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float32 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_float32(&self, py: Python) -> Py<PyArray1<f32>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1f32 } else { 0f32 },
+            if (self.state & 0b0100000) != 0 { 1f32 } else { 0f32 },
+            if (self.state & 0b0010000) != 0 { 1f32 } else { 0f32 },
+            if (self.state & 0b0001000) != 0 { 1f32 } else { 0f32 },
+            if (self.state & 0b0000100) != 0 { 1f32 } else { 0f32 },
+            if (self.state & 0b0000010) != 0 { 1f32 } else { 0f32 },
+            if (self.state & 0b0000001) != 0 { 1f32 } else { 0f32 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Get the NumPy ndarray float64 representation of the Piece's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float64 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_float64(&self, py: Python) -> Py<PyArray1<f64>> {
+        let arr = array![
+            if (self.state & 0b1000000) != 0 { 1f64 } else { 0f64 },
+            if (self.state & 0b0100000) != 0 { 1f64 } else { 0f64 },
+            if (self.state & 0b0010000) != 0 { 1f64 } else { 0f64 },
+            if (self.state & 0b0001000) != 0 { 1f64 } else { 0f64 },
+            if (self.state & 0b0000100) != 0 { 1f64 } else { 0f64 },
+            if (self.state & 0b0000010) != 0 { 1f64 } else { 0f64 },
+            if (self.state & 0b0000001) != 0 { 1f64 } else { 0f64 },
+        ];
+        PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
+
     /// The fixed positions of the 7 blocks in a standard Piece.
     /// 
     /// Returns:

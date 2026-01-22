@@ -7,7 +7,7 @@ edition = "2024"
 default = []
 numpy = ["dep:numpy"]
 half = ["dep:half"]
-full = ["numpy"]
+full = ["numpy", "half"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
