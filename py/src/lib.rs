@@ -1987,6 +1987,144 @@ impl HexEngine {
 
 #[pymethods]
 impl HexEngine {
+    /* ---------------------------------------- NUMPY ---------------------------------------- */
+
+    /// Get the default NumPy ndarray representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy(&self, py: Python) -> Py<PyArray1<bool>> {
+        self.to_numpy_bool(py)
+    }
+
+    /// Get the NumPy ndarray boolean representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_bool(&self, py: Python) -> Py<PyArray1<bool>> {
+        PyArray1::from_vec_bound(py, self.states.clone()).into()
+    }
+
+    /// Get the NumPy ndarray int8 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int8 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<u8>> {
+        let int_states: Vec<u8> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, int_states).into()
+    }
+
+    /// Get the NumPy ndarray uint8 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint8(&self, py: Python) -> Py<PyArray1<u8>> {
+        let uint_states: Vec<u8> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, uint_states).into()
+    }
+
+    /// Get the NumPy ndarray int16 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int16 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int16(&self, py: Python) -> Py<PyArray1<i16>> {
+        let int_states: Vec<i16> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, int_states).into()
+    }
+
+    /// Get the NumPy ndarray uint16 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint16(&self, py: Python) -> Py<PyArray1<u16>> {
+        let uint_states: Vec<u16> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, uint_states).into()
+    }
+
+    /// Get the NumPy ndarray int32 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int32 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int32(&self, py: Python) -> Py<PyArray1<i32>> {
+        let int_states: Vec<i32> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, int_states).into()
+    }
+
+    /// Get the NumPy ndarray uint32 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint32(&self, py: Python) -> Py<PyArray1<u32>> {
+        let uint_states: Vec<u32> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, uint_states).into()
+    }
+
+    /// Get the NumPy ndarray int64 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int64 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int64(&self, py: Python) -> Py<PyArray1<i64>> {
+        let int_states: Vec<i64> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, int_states).into()
+    }
+
+    /// Get the NumPy ndarray uint64 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint64(&self, py: Python) -> Py<PyArray1<u64>> {
+        let uint_states: Vec<u64> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
+        PyArray1::from_vec_bound(py, uint_states).into()
+    }
+
+    /// Get the NumPy ndarray float32 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_float32(&self, py: Python) -> Py<PyArray1<f32>> {
+        let float_states: Vec<f32> = self.states.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect();
+        PyArray1::from_vec_bound(py, float_states).into()
+    }
+
+    /// Get the NumPy ndarray float64 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_float64(&self, py: Python) -> Py<PyArray1<f64>> {
+        let float_states: Vec<f64> = self.states.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect();
+        PyArray1::from_vec_bound(py, float_states).into()
+    }
+
+    /// Get the NumPy ndarray float16 representation of the HexEngine's block states.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float16 values (0.0 or 1.0) representing the block states.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
+        let float_states: Vec<F16> = self.states.iter().map(|&b| if b { F16::from_f32(1.0) } else { F16::from_f32(0.0) }).collect();
+        PyArray1::from_vec_bound(py, float_states).into()
+    }
+
+    /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
+
     /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
     ///
     /// Arguments:
