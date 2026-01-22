@@ -927,12 +927,12 @@ impl TryFrom<Vec<bool>> for HexEngine {
 impl TryFrom<usize> for HexEngine {
     type Error = PyErr;
 
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        let radius = HexEngine::calc_radius(value).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Invalid state length: {}", value)
-            )
-        })?;
+    fn try_from(radius: usize) -> Result<Self, Self::Error> {
+        let value = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
         Ok(HexEngine {
             radius,
             states: vec![false; value]
@@ -2620,20 +2620,20 @@ impl Game {
     /// - coord (Hex): The coordinates where the piece should be placed.
     /// Returns:
     /// - bool: True if the piece was successfully added, False otherwise.
-    pub fn add_piece(&mut self, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
+    pub fn add_piece(&mut self, python: Python, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
         // Check piece exists
         if piece_index >= self.__queue.len() {
             return Ok(false);
         }
         let piece = self.__queue[piece_index].clone();
         // Add piece to engine and increment score and turn
-        let engine_bound = Python::with_gil(|py| self.__engine.bind(py));
+        let engine_bound = self.__engine.bind(python);
         let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
         if let Err(ref e) = add_result {
-            if e.is_instance_of::<pyo3::exceptions::PyValueError>(engine_bound.py()) {
+            if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
                 return Ok(false);
             } else {
-                return Err(e.clone_ref(engine_bound.py()));
+                return Err(e.clone_ref(python));
             }
         }
         self.__score += piece.count() as u64;
@@ -2669,10 +2669,10 @@ impl Game {
     ///   The algorithm should follow the signature: `algorithm(engine: HexEngine, queue: list[Piece]) -> tuple[int, Hex]`.
     /// Returns:
     /// - bool: True if the move was successfully made, False otherwise.
-    pub fn make_move(&mut self, algorithm: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn make_move(&mut self, python: Python, algorithm: &Bound<'_, PyAny>) -> PyResult<bool> {
         if self.__end { return Ok(false); }
-        let engine_bound = Python::with_gil(|py| self.__engine.bind(py));
-        let queue_py = self.queue(engine_bound.py())?;
+        let engine_bound = self.__engine.bind(python);
+        let queue_py = self.queue(python)?;
         let result = algorithm.call1((engine_bound, queue_py));
         let (index, coord) = match result {
             Ok(tuple) => {
@@ -2682,8 +2682,12 @@ impl Game {
                     Err(_) => usize::MAX,
                 };
                 let item1 = tuple.get_item(1);
-                let coord = match &item1 {
-                    Ok(val) => val.extract::<Py<Hex>>()?.bind(val.py()),
+                let coord: Bound<'_, Hex>;
+                match &item1 {
+                    Ok(val) => {
+                        let py_hex = val.extract::<Py<Hex>>()?;
+                        coord = py_hex.bind(python).clone();
+                    },
                     Err(_) => return Ok(false),
                 };
                 (index, coord)
@@ -2693,7 +2697,7 @@ impl Game {
         if index == usize::MAX {
             return Ok(false);
         }
-        self.add_piece(index, &coord)
+        self.add_piece(python, index, &coord)
     }
 
     /// Return a string representation of the game state.
