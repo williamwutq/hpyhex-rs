@@ -12,3 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added comprehensive documentation and project description.
 
+## [0.2.0] - 2026-01-23
+### Added
+- Provided further documentation on various classes and methods.
+- Provide comprehensive benchmark suite and results to demonstrate performance improvements over original hpyhex.
+- Added NumPy integration for seamless conversion between Piece instances and NumPy arrays.
