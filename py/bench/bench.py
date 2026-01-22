@@ -3,10 +3,10 @@ import statistics
 from typing import Callable, Any
 try:
     from hpyhex.hex import Hex, Piece, HexEngine
-    from hpyhex.game import random_engine
+    from hpyhex.game import random_engine, PieceFactory, Game
     version = "Native Python"
 except ImportError:
-    from hpyhex import Hex, Piece, HexEngine, random_engine
+    from hpyhex import Hex, Piece, HexEngine, random_engine, PieceFactory, Game
     version = "Rust"
 
 class Benchmark:
@@ -703,6 +703,410 @@ def benchmark_random_engine_creation():
     print_result(result)
 
 
+def benchmark_piecefactory_lookups():
+    """Benchmark PieceFactory lookup operations."""
+    print("\n" + "="*60)
+    print("PIECEFACTORY LOOKUP BENCHMARKS")
+    print("="*60)
+    
+    # get_piece by name
+    bench = Benchmark("PieceFactory get_piece (by name)", iterations=100000)
+    result = bench.run(lambda: PieceFactory.get_piece("triangle_3_a"))
+    print_result(result)
+    
+    # get_piece_name
+    piece = PieceFactory.get_piece("triangle_3_a")
+    bench = Benchmark("PieceFactory get_piece_name", iterations=100000)
+    result = bench.run(lambda: PieceFactory.get_piece_name(piece))
+    print_result(result)
+    
+    # Dictionary lookup (pieces)
+    bench = Benchmark("PieceFactory direct dict access (pieces)", iterations=100000)
+    result = bench.run(lambda: PieceFactory.pieces["triangle_3_a"])
+    print_result(result)
+    
+    # Dictionary lookup (reverse_pieces)
+    bench = Benchmark("PieceFactory direct dict access (reverse)", iterations=100000)
+    result = bench.run(lambda: PieceFactory.reverse_pieces[13])
+    print_result(result)
+
+
+def benchmark_piecefactory_generation():
+    """Benchmark PieceFactory piece generation."""
+    print("\n" + "="*60)
+    print("PIECEFACTORY GENERATION BENCHMARKS")
+    print("="*60)
+    
+    # generate_piece (random)
+    bench = Benchmark("PieceFactory generate_piece", iterations=50000)
+    result = bench.run(lambda: PieceFactory.generate_piece())
+    print_result(result)
+    
+    # all_pieces
+    bench = Benchmark("PieceFactory all_pieces", iterations=10000)
+    result = bench.run(lambda: PieceFactory.all_pieces())
+    print_result(result)
+    
+    # Generate batch of pieces
+    bench = Benchmark("PieceFactory generate 10 pieces", iterations=10000)
+    result = bench.run(lambda: [PieceFactory.generate_piece() for _ in range(10)])
+    print_result(result)
+    
+    bench = Benchmark("PieceFactory generate 100 pieces", iterations=1000)
+    result = bench.run(lambda: [PieceFactory.generate_piece() for _ in range(100)])
+    print_result(result)
+
+
+def benchmark_piecefactory_validation():
+    """Benchmark PieceFactory validation and error handling."""
+    print("\n" + "="*60)
+    print("PIECEFACTORY VALIDATION BENCHMARKS")
+    print("="*60)
+    
+    # Valid piece lookup
+    bench = Benchmark("PieceFactory get_piece (valid)", iterations=50000)
+    result = bench.run(lambda: PieceFactory.get_piece("rhombus_4_i"))
+    print_result(result)
+    
+    # Invalid piece lookup (with exception handling)
+    def safe_get_piece():
+        try:
+            PieceFactory.get_piece("invalid_piece")
+        except ValueError:
+            pass
+    
+    bench = Benchmark("PieceFactory get_piece (invalid, caught)", iterations=10000)
+    result = bench.run(safe_get_piece)
+    print_result(result)
+    
+    # Valid piece name lookup
+    piece = PieceFactory.get_piece("full")
+    bench = Benchmark("PieceFactory get_piece_name (valid)", iterations=50000)
+    result = bench.run(lambda: PieceFactory.get_piece_name(piece))
+    print_result(result)
+
+
+def benchmark_game_creation():
+    """Benchmark Game creation."""
+    print("\n" + "="*60)
+    print("GAME CREATION BENCHMARKS")
+    print("="*60)
+    
+    # Create game with int parameters
+    bench = Benchmark("Game creation (radius=3, queue=3)", iterations=1000)
+    result = bench.run(lambda: Game(3, 3))
+    print_result(result)
+    
+    bench = Benchmark("Game creation (radius=5, queue=5)", iterations=1000)
+    result = bench.run(lambda: Game(5, 5))
+    print_result(result)
+    
+    bench = Benchmark("Game creation (radius=7, queue=7)", iterations=500)
+    result = bench.run(lambda: Game(7, 7))
+    print_result(result)
+    
+    # Create game with HexEngine
+    engine = HexEngine(5)
+    bench = Benchmark("Game creation (with HexEngine, queue=5)", iterations=1000)
+    result = bench.run(lambda: Game(engine, 5))
+    print_result(result)
+    
+    # Create game with piece list
+    pieces = [PieceFactory.generate_piece() for _ in range(5)]
+    bench = Benchmark("Game creation (with piece list)", iterations=5000)
+    result = bench.run(lambda: Game(5, pieces))
+    print_result(result)
+
+
+def benchmark_game_properties():
+    """Benchmark Game property access."""
+    print("\n" + "="*60)
+    print("GAME PROPERTY BENCHMARKS")
+    print("="*60)
+    
+    game = Game(5, 5)
+    
+    # Property access
+    bench = Benchmark("Game .end property", iterations=100000)
+    result = bench.run(lambda: game.end)
+    print_result(result)
+    
+    bench = Benchmark("Game .result property", iterations=100000)
+    result = bench.run(lambda: game.result)
+    print_result(result)
+    
+    bench = Benchmark("Game .turn property", iterations=100000)
+    result = bench.run(lambda: game.turn)
+    print_result(result)
+    
+    bench = Benchmark("Game .score property", iterations=100000)
+    result = bench.run(lambda: game.score)
+    print_result(result)
+    
+    bench = Benchmark("Game .engine property", iterations=100000)
+    result = bench.run(lambda: game.engine)
+    print_result(result)
+    
+    bench = Benchmark("Game .queue property", iterations=100000)
+    result = bench.run(lambda: game.queue)
+    print_result(result)
+
+
+def benchmark_game_add_piece():
+    """Benchmark Game add_piece operation."""
+    print("\n" + "="*60)
+    print("GAME ADD_PIECE BENCHMARKS")
+    print("="*60)
+    
+    # Successful add
+    def add_piece_success():
+        game = Game(5, 5)
+        positions = game.engine.check_positions(game.queue[0])
+        if positions:
+            return game.add_piece(0, positions[0])
+        return False
+    
+    bench = Benchmark("Game add_piece (successful)", iterations=5000)
+    result = bench.run(add_piece_success)
+    print_result(result)
+    
+    # Failed add (overlap)
+    def add_piece_fail():
+        game = Game(5, 5)
+        # Try to add at occupied position
+        return game.add_piece(0, Hex(0, 0))
+    
+    bench = Benchmark("Game add_piece (failed, overlap)", iterations=5000)
+    result = bench.run(add_piece_fail)
+    print_result(result)
+    
+    # Multiple sequential adds
+    def add_multiple_pieces():
+        game = Game(5, 5)
+        for i in range(3):
+            positions = game.engine.check_positions(game.queue[0])
+            if positions:
+                game.add_piece(0, positions[0])
+        return game
+    
+    bench = Benchmark("Game add 3 pieces sequentially", iterations=1000)
+    result = bench.run(add_multiple_pieces)
+    print_result(result)
+
+
+def benchmark_game_make_move():
+    """Benchmark Game make_move with different algorithms."""
+    print("\n" + "="*60)
+    print("GAME MAKE_MOVE BENCHMARKS")
+    print("="*60)
+    
+    # Simple random algorithm
+    def random_algorithm(engine, queue):
+        import random
+        piece_idx = random.randint(0, len(queue) - 1)
+        positions = engine.check_positions(queue[piece_idx])
+        if positions:
+            return piece_idx, random.choice(positions)
+        return 0, Hex(0, 0)
+    
+    bench = Benchmark("Game make_move (random algorithm)", iterations=5000)
+    result = bench.run(lambda: Game(5, 5).make_move(random_algorithm))
+    print_result(result)
+    
+    # First available position algorithm
+    def first_available_algorithm(engine, queue):
+        for i, piece in enumerate(queue):
+            positions = engine.check_positions(piece)
+            if positions:
+                return i, positions[0]
+        return 0, Hex(0, 0)
+    
+    bench = Benchmark("Game make_move (first available)", iterations=5000)
+    result = bench.run(lambda: Game(5, 5).make_move(first_available_algorithm))
+    print_result(result)
+    
+    # Density-based algorithm
+    def density_algorithm(engine, queue):
+        best_score = -1
+        best_move = (0, Hex(0, 0))
+        for i, piece in enumerate(queue):
+            positions = engine.check_positions(piece)
+            for pos in positions[:5]:  # Check first 5 positions
+                score = engine.compute_dense_index(pos, piece)
+                if score > best_score:
+                    best_score = score
+                    best_move = (i, pos)
+        return best_move
+    
+    bench = Benchmark("Game make_move (density-based)", iterations=500)
+    result = bench.run(lambda: Game(5, 5).make_move(density_algorithm))
+    print_result(result)
+
+
+def benchmark_game_full_game():
+    """Benchmark complete game simulations."""
+    print("\n" + "="*60)
+    print("GAME FULL SIMULATION BENCHMARKS")
+    print("="*60)
+    
+    # Play until game ends (random)
+    def play_random_game():
+        import random
+        game = Game(4, 3)
+        moves = 0
+        while not game.end and moves < 50:  # Limit to 50 moves
+            piece_idx = random.randint(0, len(game.queue) - 1)
+            positions = game.engine.check_positions(game.queue[piece_idx])
+            if positions:
+                game.add_piece(piece_idx, random.choice(positions))
+            moves += 1
+        return game.result
+    
+    bench = Benchmark("Game play random game (max 50 moves)", iterations=100)
+    result = bench.run(play_random_game)
+    print_result(result)
+    
+    # Play with first-available strategy
+    def play_greedy_game():
+        game = Game(4, 3)
+        moves = 0
+        while not game.end and moves < 50:
+            for i, piece in enumerate(game.queue):
+                positions = game.engine.check_positions(piece)
+                if positions:
+                    game.add_piece(i, positions[0])
+                    break
+            moves += 1
+        return game.result
+    
+    bench = Benchmark("Game play greedy game (max 50 moves)", iterations=100)
+    result = bench.run(play_greedy_game)
+    print_result(result)
+    
+    # Play 10 moves
+    def play_10_moves():
+        import random
+        game = Game(5, 5)
+        for _ in range(10):
+            if game.end:
+                break
+            piece_idx = random.randint(0, len(game.queue) - 1)
+            positions = game.engine.check_positions(game.queue[piece_idx])
+            if positions:
+                game.add_piece(piece_idx, random.choice(positions))
+        return game.result
+    
+    bench = Benchmark("Game play 10 moves (random)", iterations=500)
+    result = bench.run(play_10_moves)
+    print_result(result)
+
+
+def benchmark_game_serialization():
+    """Benchmark Game serialization and representation."""
+    print("\n" + "="*60)
+    print("GAME SERIALIZATION BENCHMARKS")
+    print("="*60)
+    
+    game = Game(5, 5)
+    # Add a few pieces
+    for i in range(3):
+        positions = game.engine.check_positions(game.queue[0])
+        if positions:
+            game.add_piece(0, positions[0])
+    
+    # String representation
+    bench = Benchmark("Game __str__", iterations=10000)
+    result = bench.run(lambda: str(game))
+    print_result(result)
+    
+    # Repr
+    bench = Benchmark("Game __repr__", iterations=10000)
+    result = bench.run(lambda: repr(game))
+    print_result(result)
+
+
+def benchmark_game_edge_cases():
+    """Benchmark Game edge cases and error handling."""
+    print("\n" + "="*60)
+    print("GAME EDGE CASE BENCHMARKS")
+    print("="*60)
+    
+    # Invalid piece index
+    game = Game(5, 5)
+    bench = Benchmark("Game add_piece (invalid index)", iterations=50000)
+    result = bench.run(lambda: game.add_piece(99, Hex(0, 0)))
+    print_result(result)
+    
+    # Invalid coordinate type
+    bench = Benchmark("Game add_piece (invalid coord type)", iterations=50000)
+    result = bench.run(lambda: game.add_piece(0, (0, 0)))
+    print_result(result)
+    
+    # Make move on ended game
+    ended_game = Game(2, 1)
+    # Force game to end
+    ended_game._Game__end = True
+    bench = Benchmark("Game make_move (on ended game)", iterations=50000)
+    def dummy_algo(e, q):
+        return 0, Hex(0, 0)
+    result = bench.run(lambda: ended_game.make_move(dummy_algo))
+    print_result(result)
+
+
+def benchmark_integration():
+    """Benchmark integrated PieceFactory and Game operations."""
+    print("\n" + "="*60)
+    print("INTEGRATION BENCHMARKS")
+    print("="*60)
+    
+    # Create game and play with generated pieces
+    def integrated_workflow():
+        game = Game(5, 5)
+        import random
+        for _ in range(5):
+            if game.end:
+                break
+            piece_idx = random.randint(0, len(game.queue) - 1)
+            positions = game.engine.check_positions(game.queue[piece_idx])
+            if positions:
+                game.add_piece(piece_idx, random.choice(positions))
+        return game.score
+    
+    bench = Benchmark("Integrated: Create game + 5 moves", iterations=500)
+    result = bench.run(integrated_workflow)
+    print_result(result)
+    
+    # Piece generation and validation
+    def piece_generation_validation():
+        pieces = [PieceFactory.generate_piece() for _ in range(10)]
+        names = [PieceFactory.get_piece_name(p) for p in pieces]
+        return len(set(names))  # Unique pieces
+    
+    bench = Benchmark("Generate 10 pieces + get names", iterations=5000)
+    result = bench.run(piece_generation_validation)
+    print_result(result)
+    
+    # Full game with piece tracking
+    def full_game_with_tracking():
+        import random
+        game = Game(4, 3)
+        piece_history = []
+        moves = 0
+        while not game.end and moves < 30:
+            piece_idx = random.randint(0, len(game.queue) - 1)
+            piece = game.queue[piece_idx]
+            positions = game.engine.check_positions(piece)
+            if positions:
+                piece_history.append(PieceFactory.get_piece_name(piece))
+                game.add_piece(piece_idx, random.choice(positions))
+            moves += 1
+        return len(piece_history)
+    
+    bench = Benchmark("Full game with piece name tracking", iterations=50)
+    result = bench.run(full_game_with_tracking)
+    print_result(result)
+
+
 def run_all_benchmarks():
     """Run all benchmark suites."""
     print("\n" + "="*60)
@@ -730,6 +1134,17 @@ def run_all_benchmarks():
     benchmark_hexengine_collections()
     benchmark_hexengine_mixed()
     benchmark_random_engine_creation()
+    benchmark_piecefactory_lookups()
+    benchmark_piecefactory_generation()
+    benchmark_piecefactory_validation()
+    benchmark_game_creation()
+    benchmark_game_properties()
+    benchmark_game_add_piece()
+    benchmark_game_make_move()
+    benchmark_game_full_game()
+    benchmark_game_serialization()
+    benchmark_game_edge_cases()
+    benchmark_integration()
     
     total_time = time.perf_counter() - start_time
     
