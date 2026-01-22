@@ -1,5 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
-
+use numpy::{IntoPyArray, PyArray1, PyArray};
+use numpy::ndarray::array;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyAny, PyType};
 
@@ -546,6 +547,23 @@ impl Piece {
     #[inline]
     pub const fn count(&self) -> u32 {
         self.state.count_ones()
+    }
+}
+
+impl IntoPyArray for Piece {
+    type Item = bool;
+    type Dim = numpy::ndarray::Ix1;
+    fn into_pyarray_bound<'py>(self, py: Python<'py>) -> Bound<'py, PyArray<bool, Self::Dim>> {
+        let arr = array![
+            (self.state & 0b1000000) != 0,
+            (self.state & 0b0100000) != 0,
+            (self.state & 0b0010000) != 0,
+            (self.state & 0b0001000) != 0,
+            (self.state & 0b0000100) != 0,
+            (self.state & 0b0000010) != 0,
+            (self.state & 0b0000001) != 0,
+        ];
+        PyArray1::from_array_bound(py, &arr)
     }
 }
 
