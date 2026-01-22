@@ -528,6 +528,31 @@ impl Hex {
 /// Attributes:
 /// - positions (list[Hex]): A list of Hex coordinates representing the positions of the blocks in the piece.
 /// - state (u8): A byte value representing the occupancy state of each block in the piece.
+/// 
+/// Numpy Support (Requires "numpy" feature):
+/// 
+/// Offer methods to convert the Piece's block states to NumPy ndarray representations and vice versa.
+/// The conversion will always be to an ndarray of shape (7,).
+/// 
+/// Support the following NumPy array types:
+/// - bool
+/// - int8
+/// - uint8
+/// - int16
+/// - uint16
+/// - int32
+/// - uint32
+/// - int64
+/// - uint64
+/// - half (f16) [Requires "half" feature, experimental]
+/// - float32
+/// - float64
+/// 
+/// The from_numpy_* methods will validate the input array shape and types, and raise a ValueError if the
+/// input is invalid. The to_numpy_* methods will return a new NumPy ndarray representing the block states.
+/// 
+/// to_numpy() defaults to bool representation, but there are no from_numpy that can take in different types,
+/// because numpy ndarrays cannot be easily casted into each other.
 pub struct Piece {
     state: u8, // Only 7 bits used
 }

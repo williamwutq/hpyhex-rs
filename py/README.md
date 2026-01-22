@@ -216,3 +216,155 @@ Several operation categories demonstrate exceptional performance gains:
 - **Piece count_neighbors** operations are **44x faster**.
 
 These improvements are achieved through Rust's ability to perform raw arithmetic and bit operations in native code, combined with intelligent caching strategies that keep frequently-used data structures in Rust memory outside the GIL's control.
+
+## NumPy Integration
+
+`hpyhex-rs` provides NumPy integration for machine learning and development of fast game-playing heuristics agents. This is what makes `hpyhex-rs` stand out from the original `hpyhex` package, which does not provide any NumPy integration.
+
+### Installation
+
+The default pre-built wheels on PyPI include NumPy support. Simply install via pip:
+```bash
+pip install hpyhex-rs
+```
+
+Or if building from source, enable the `numpy` feature in your `Cargo.toml`.
+
+### Experimental Features
+
+Float16 (half precision) support is experimental and requires enabling the `half` feature flag during build. To use float16 serialization methods, ensure you have NumPy installed with float16 support, and compile the library from source with the `half` feature enabled:
+
+```toml
+[dependencies.hpyhex-rs]
+version = "..."
+features = ["numpy", "half"]
+```
+
+Note that the feature is experimental and not officially supported nor tested extensively. On machines that does not support float16 or installed with a version of numpy that does not support float16, this function may lead to undefined behavior or crashes. Those unintended behaviors could be subtle and hard to debug, so even if code with this feature seems to work, make sure to check the output as it has known to misintepret memory or lead to silent data corruption in some cases.
+
+### No Serialization for Hex
+
+Hex has no need for serialization to numpy arrays, as it is just a coordinate container. Batch serialization of hex coordinates are needed, but an array of hexagonal coordinates only has meaning in the context of a grid, which is either a HexEngine or a Piece. Therefore, serialization from and to NumPy is only implemented for HexEngine or a Piece, but not Hex.
+
+### Serialization for Piece
+
+The `Piece` class provides efficient conversion to and from NumPy arrays representing its 7 block states. All conversions produce or consume 1-dimensional arrays of shape `(7,)`, where each element represents whether the corresponding block is occupied.
+
+#### Converting to NumPy
+
+The `to_numpy()` method returns a boolean array by default:
+```python
+from hpyhex import PieceFactory
+import numpy as np
+
+piece = PieceFactory.get_piece("triangle_3_a")
+
+# Default: boolean array
+arr = piece.to_numpy()
+# arr.dtype == np.bool_
+# arr.shape == (7,)
+# arr = [True, True, False, True, False, False, False]
+```
+
+For specific numeric types, use the typed conversion methods:
+```python
+# Integer types
+arr_i8 = piece.to_numpy_int8()      # dtype: int8
+arr_u8 = piece.to_numpy_uint8()     # dtype: uint8
+arr_i16 = piece.to_numpy_int16()    # dtype: int16
+arr_u16 = piece.to_numpy_uint16()   # dtype: uint16
+arr_i32 = piece.to_numpy_int32()    # dtype: int32
+arr_u32 = piece.to_numpy_uint32()   # dtype: uint32
+arr_i64 = piece.to_numpy_int64()    # dtype: int64
+arr_u64 = piece.to_numpy_uint64()   # dtype: uint64
+
+# Floating point types
+arr_f32 = piece.to_numpy_float32()  # dtype: float32
+arr_f64 = piece.to_numpy_float64()  # dtype: float64
+
+# Half precision (requires "half" feature, experimental)
+arr_f16 = piece.to_numpy_half()     # dtype: float16
+```
+
+#### Converting from NumPy
+
+Use the corresponding `from_numpy_*` methods to construct a Piece from a NumPy array. The array must have shape `(7,)` and the appropriate dtype. For unsigned integer types, non-zero values are treated as occupied blocks, for signed integers and floating point types, positive values are treated as occupied blocks and zero or negative values as empty blocks. This design aims to make conversion from a softmax output of a neural network straightforward.
+```python
+# From boolean array
+arr = np.array([True, True, True, False, False, False, False])
+piece = Piece.from_numpy_bool(arr)
+
+# From integer arrays
+arr_u8 = np.array([1, 1, 1, 0, 0, 0, 0], dtype=np.uint8)
+piece = Piece.from_numpy_uint8(arr_u8)
+
+arr_i32 = np.array([1, 1, 1, 0, 0, 0, 0], dtype=np.int32)
+piece = Piece.from_numpy_int32(arr_i32)
+
+# From floating point arrays
+arr_f64 = np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0])
+piece = Piece.from_numpy_float64(arr_f64)
+```
+
+#### Validation and Error Handling
+
+All `from_numpy_*` methods validate the input array:
+
+- **Shape validation**: Array must have exactly shape `(7,)` 
+- **Type validation**: Array dtype must match the method's expected type
+
+If validation fails, a `ValueError` is raised:
+```python
+# Wrong shape
+arr = np.array([1, 1, 1, 0, 0])  # Only 5 elements
+try:
+    piece = Piece.from_numpy_uint8(arr)
+except ValueError as e:
+    print(f"Error: {e}")  # Shape mismatch
+# Wrong dtype
+arr = np.array([1, 1, 1, 0, 0, 0, 0], dtype=np.float32)
+try:
+    piece = Piece.from_numpy_uint8(arr)
+except ValueError as e:
+    print(f"Error: {e}")  # Dtype mismatch
+```
+
+#### Type Casting Considerations
+
+NumPy arrays cannot be easily cast between types at the Rust/Python boundary. Therefore, **there is no universal `from_numpy()` method**. You must use the specific typed method that matches your array's dtype:
+```python
+# No automatic type detection
+arr = np.array([1, 1, 1, 0, 0, 0, 0], dtype=np.int32)
+# piece = Piece.from_numpy(arr)  # This method doesn't exist!
+
+# Use the typed method matching your dtype
+piece = Piece.from_numpy_int32(arr)
+
+# If you need to convert between types, do it in NumPy first:
+arr_f32 = arr.astype(np.float32) # Note that Numpy does a copy here
+piece = Piece.from_numpy_float32(arr_f32)
+```
+
+### Supported Data Types
+
+The following table summarizes all supported NumPy dtypes for Piece serialization:
+
+| NumPy dtype | `to_numpy_*` method     | `from_numpy_*` method    | Notes                                  |
+|-------------|-------------------------|--------------------------|----------------------------------------|
+| `bool_`     | `to_numpy()` (default)  | `from_numpy_bool()`      | Most memory efficient                  |
+| `int8`      | `to_numpy_int8()`       | `from_numpy_int8()`      | Signed 8-bit integer                   |
+| `uint8`     | `to_numpy_uint8()`      | `from_numpy_uint8()`     | Unsigned 8-bit integer                 |
+| `int16`     | `to_numpy_int16()`      | `from_numpy_int16()`     | Signed 16-bit integer                  |
+| `uint16`    | `to_numpy_uint16()`     | `from_numpy_uint16()`    | Unsigned 16-bit integer                |
+| `int32`     | `to_numpy_int32()`      | `from_numpy_int32()`     | Signed 32-bit integer                  |
+| `uint32`    | `to_numpy_uint32()`     | `from_numpy_uint32()`    | Unsigned 32-bit integer                |
+| `int64`     | `to_numpy_int64()`      | `from_numpy_int64()`     | Signed 64-bit integer                  |
+| `uint64`    | `to_numpy_uint64()`     | `from_numpy_uint64()`    | Unsigned 64-bit integer                |
+| `float16`   | `to_numpy_half()`       | `from_numpy_half()`      | Requires "half" feature (experimental) |
+| `float32`   | `to_numpy_float32()`    | `from_numpy_float32()`   | Common for ML applications             |
+| `float64`   | `to_numpy_float64()`    | `from_numpy_float64()`   | Double precision                       |
+
+**Recommended types:**
+- Use `bool_` for minimal memory footprint or in machine learning
+- Use `uint8` for serialization to compact integer formats
+- Use `float32` for general machine learning (PyTorch, TensorFlow default)
