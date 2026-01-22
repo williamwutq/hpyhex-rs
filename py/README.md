@@ -158,3 +158,61 @@ If you are building a GUI application for a simple version of HappyHex and deepl
 
 (See [bench directory](./bench/) for full benchmarking code and results.)
 
+All are tested on Apple M2 Pro with 16GB RAM, Python 3.11, Rust 1.92.0, macOS Sonoma 14.5.
+
+### Speed Improvements
+
+The Rust implementation of `hpyhex-rs` delivers dramatic performance improvements over the native Python `hpyhex` package. By leveraging Rust's zero-cost abstractions, efficient memory management, and ability to operate outside Python's Global Interpreter Lock (GIL), `hpyhex-rs` achieves speedups ranging from 2x to over 200x across different operations. These improvements are particularly significant for computationally intensive tasks like position checking, neighbor counting, and game simulations, making `hpyhex-rs` ideal for AI training, Monte Carlo simulations, and other performance-critical applications.
+
+### Benchmark Comparison
+
+The following table summarizes the performance improvements across major operation categories. All measurements represent typical use cases from each category, with speedup calculated as the ratio of Python execution time to Rust execution time.
+
+| Category                | Representative Operation      | Python (µs) | Rust (µs) | Speedup    |
+|-------------------------|------------------------------|-------------|-----------|------------|
+| Hex Creation            | Cached hex creation          | 4.52        | 2.73      | 1.7x       |
+| Hex Arithmetic          | Addition                     | 0.655       | 0.082     | 8.0x       |
+| Hex Methods             | shift_i/j/k operations       | 0.272       | 0.068     | 4.0x       |
+| Hex Collections         | Create set of hexes          | 108.01      | 58.41     | 1.8x       |
+| Piece Creation          | From integer                 | 13.88       | 5.12      | 2.7x       |
+| Piece Methods           | Count neighbors              | 3.37        | 0.077     | **43.8x**  |
+| Piece Iteration         | Get contiguous pieces        | 47.65       | 0.990     | **48.1x**  |
+| Mixed Operations        | Hex + Piece workflow         | 355.70      | 103.08    | 3.5x       |
+| HexEngine Creation      | Radius 3 engine              | 0.195       | 0.131     | 1.5x       |
+| HexEngine Coordinates   | index_block operation        | 0.412       | 0.087     | 4.7x       |
+| HexEngine State         | get_state by hex             | 0.474       | 0.187     | 2.5x       |
+| HexEngine Piece Ops     | check_positions (r=3)        | 73.69       | 0.459     | **160.5x** |
+| HexEngine Neighbors     | count_neighbors              | 6.56        | 0.101     | **64.9x**  |
+| HexEngine Eliminate     | eliminate (r=3, 1 line)      | 6.71        | 0.461     | 14.6x      |
+| HexEngine Analysis      | compute_dense_index          | 32.63       | 0.214     | **152.5x** |
+| HexEngine Serialization | From string                  | 3.44        | 0.462     | 7.4x       |
+| HexEngine Collections   | Create set of engines        | 2.48        | 1.68      | 1.5x       |
+| HexEngine Mixed         | AI evaluation                | 282.37      | 2.12      | **133.2x** |
+| Random Creation         | Random engine (r=100)        | 11,980      | 302.38    | **39.6x**  |
+| PieceFactory Lookup     | get_piece by name            | 0.206       | 0.133     | 1.5x       |
+| PieceFactory Generation | Generate 100 pieces          | 54.15       | 10.57     | 5.1x       |
+| PieceFactory Validation | get_piece (valid)            | 0.199       | 0.132     | 1.5x       |
+| Game Creation           | Radius 3, queue 3            | 2.30        | 0.467     | 4.9x       |
+| Game Properties         | Queue property access        | 0.074       | 0.237     | 0.3x*      |
+| Game Add Piece          | Successful add               | 463.95      | 3.86      | **120.1x** |
+| Game Make Move          | Random algorithm             | 451.23      | 4.40      | **102.6x** |
+| Game Full Simulation    | 10 random moves              | 3,730       | 38.32     | **97.3x**  |
+| Game Serialization      | __str__ method               | 75.25       | 6.10      | 12.3x      |
+| Game Edge Cases         | Invalid index handling       | 0.306       | 0.191     | 1.6x       |
+| Integration             | Create game + 5 moves        | 2,050       | 21.29     | **96.3x**  |
+
+*Note: The queue property shows slower performance in Rust due to the overhead of converting Rust data structures to Python objects.*
+
+### Highlights
+
+Several operation categories demonstrate exceptional performance gains:
+
+- **HexEngine check_positions** is **160x** faster. check_positions is a critical operation used by many heuristic algorithms and optimizers to gather valid piece placements. This speedup hugely benefits all downstream algorithms relying on position checking.
+- **HexEngine compute_dense_index** is **152x** faster. A few critical algorithms, such as `nrsearch`, depends on Density Index computations. This speedup makes those algorithms significantly faster.
+- **HexEngine AI evaluation** (checking and scoring positions) is **133x** faster. This is mainly due to the combined speedups in various critical HexEngine operations used to play the game.
+- **Game add_piece** operation are **120x** faster. The core of the game is adding pieces to the engine, and this speedup directly translates to faster game simulations and AI training.
+- **Game make_move** operations are **102x** faster, enabling rapid turn-based simulations.
+- **Full game simulations** run **97x** faster, reducing a 3.7ms Python game to just 38µs in Rust. This benefits reinforcement learning, Monte Carlo Tree Search, test data generation, and other scenarios requiring many game simulations.
+- **Piece count_neighbors** operations are **44x faster**.
+
+These improvements are achieved through Rust's ability to perform raw arithmetic and bit operations in native code, combined with intelligent caching strategies that keep frequently-used data structures in Rust memory outside the GIL's control.
