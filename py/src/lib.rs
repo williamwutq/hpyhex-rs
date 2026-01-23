@@ -38,6 +38,13 @@ impl F16 {
 }
 
 #[cfg(all(feature = "numpy", feature = "half"))]
+impl PartialOrd for F16 {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.to_f32().partial_cmp(&other.0.to_f32())
+    }
+}
+
+#[cfg(all(feature = "numpy", feature = "half"))]
 unsafe impl numpy::Element for F16 {
     const IS_COPY: bool = true;
     fn get_dtype_bound(py: pyo3::Python<'_>) -> pyo3::Bound<'_, PyArrayDescr> {
@@ -4972,6 +4979,124 @@ impl Game {
         Ok(Py::new(py, game)?.to_owned())
     }
 
+    /// Make a move in the game using a NumPy ndarray mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A value of true in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one true value in the entire mask. If there are multiple or no true values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one true value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask<T>(&mut self, py: Python, array: Bound<'_, PyArray2<T>>) -> PyResult<bool>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        // Let's say the mask is of shape (M, N), we find the position (m, n) where the value is true
+        // Then call hpyhex_rs_add_piece_with_index with m as the piece index and n as the coordinate index
+        use numpy::PyUntypedArrayMethods;
+        let slice = unsafe { array.as_slice().unwrap() };
+        let shape = array.shape();
+        // Validate shape
+        let expected_queue_length = self._Game__queue.len();
+        let expected_engine_length = {
+            let engine = self._Game__engine.borrow(py);
+            engine.__len__()
+        };
+        if shape[0] != expected_queue_length || shape[1] != expected_engine_length {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array shape {:?} does not match expected shape ({}, {})", shape, expected_queue_length, expected_engine_length)));
+        }
+        let mut piece_index: Option<usize> = None;
+        let mut coord_index: Option<usize> = None;
+        let mut found = false;
+        for i in 0..shape[0] {
+            for j in 0..shape[1] {
+                let val = slice[i * shape[1] + j];
+                if T::predicate(val) {
+                    if found {
+                        return Err(pyo3::exceptions::PyValueError::new_err("Mask contains multiple true values; exactly one is required"));
+                    }
+                    found = true;
+                    piece_index = Some(i);
+                    coord_index = Some(j);
+                    break;
+                }
+            }
+            if piece_index.is_some() {
+                break;
+            }
+        }
+        if piece_index.is_none() || coord_index.is_none() {
+            return Err(pyo3::exceptions::PyValueError::new_err("No valid move found in the mask"));
+        }
+        let piece_index = piece_index.unwrap();
+        let coord_index = coord_index.unwrap();
+
+        Self::hpyhex_rs_add_piece_with_index(self, py, piece_index, coord_index)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max<T>(&mut self, py: Python, array: Bound<'_, PyArray2<T>>) -> PyResult<bool>
+    where
+        T: BitScalar + Copy + numpy::Element + PartialOrd,
+    {
+        // Find the maximum value in the array and its position
+        use numpy::PyUntypedArrayMethods;
+        let slice = unsafe { array.as_slice().unwrap() };
+        let shape = array.shape();
+        // Validate shape
+        let expected_queue_length = self._Game__queue.len();
+        let expected_engine_length = {
+            let engine = self._Game__engine.borrow(py);
+            engine.__len__()
+        };
+        if shape[0] != expected_queue_length || shape[1] != expected_engine_length {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array shape {:?} does not match expected shape ({}, {})", shape, expected_queue_length, expected_engine_length)));
+        }
+        let mut max_value: Option<T> = None;
+        let mut piece_index: Option<usize> = None;
+        let mut coord_index: Option<usize> = None;
+        for i in 0..shape[0] {
+            for j in 0..shape[1] {
+                let val = slice[i * shape[1] + j];
+                if max_value.is_none() || val > max_value.unwrap() {
+                    max_value = Some(val);
+                    piece_index = Some(i);
+                    coord_index = Some(j);
+                }
+            }
+        }
+        if piece_index.is_none() || coord_index.is_none() {
+            return Err(pyo3::exceptions::PyValueError::new_err("Input array is empty"));
+        }
+        let piece_index = piece_index.unwrap();
+        let coord_index = coord_index.unwrap();
+
+        Self::hpyhex_rs_add_piece_with_index(self, py, piece_index, coord_index)
+    }
+
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
 
     /// Add a piece from the queue to the game engine at the specified coordinates.
@@ -5032,6 +5157,419 @@ impl Game {
 #[pymethods]
 impl Game {
     /* ---------------------------------------- NUMPY ---------------------------------------- */
+    /// Make a move in the game using a NumPy ndarray boolean mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A value of true in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one true value in the entire mask. If there are multiple or no true values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one true value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_bool(&mut self, py: Python, array: Bound<'_, PyArray2<bool>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<bool>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy bool ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_bool(&mut self, py: Python, array: Bound<'_, PyArray2<bool>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<bool>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray int8 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_int8(&mut self, py: Python, array: Bound<'_, PyArray2<i8>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<i8>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy int8 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_int8(&mut self, py: Python, array: Bound<'_, PyArray2<i8>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<i8>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray uint8 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_uint8(&mut self, py: Python, array: Bound<'_, PyArray2<u8>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<u8>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy uint8 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_uint8(&mut self, py: Python, array: Bound<'_, PyArray2<u8>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<u8>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray int16 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_int16(&mut self, py: Python, array: Bound<'_, PyArray2<i16>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<i16>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy int16 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_int16(&mut self, py: Python, array: Bound<'_, PyArray2<i16>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<i16>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray uint16 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_uint16(&mut self, py: Python, array: Bound<'_, PyArray2<u16>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<u16>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy uint16 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_uint16(&mut self, py: Python, array: Bound<'_, PyArray2<u16>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<u16>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray int32 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_int32(&mut self, py: Python, array: Bound<'_, PyArray2<i32>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<i32>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy int32 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_int32(&mut self, py: Python, array: Bound<'_, PyArray2<i32>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<i32>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray uint32 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_uint32(&mut self, py: Python, array: Bound<'_, PyArray2<u32>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<u32>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy uint32 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_uint32(&mut self, py: Python, array: Bound<'_, PyArray2<u32>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<u32>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray float16 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn move_with_numpy_mask_float16(&mut self, py: Python, array: Bound<'_, PyArray2<F16>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<F16>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy float16 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn move_with_numpy_max_float16(&mut self, py: Python, array: Bound<'_, PyArray2<F16>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<F16>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray float32 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_float32(&mut self, py: Python, array: Bound<'_, PyArray2<f32>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<f32>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy float32 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_float32(&mut self, py: Python, array: Bound<'_, PyArray2<f32>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<f32>(py, array)
+    }
+
+    /// Make a move in the game using a NumPy ndarray float64 mask.
+    /// The mask should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// A non-zero value in the mask indicates the position where the piece should be placed.
+    /// 
+    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
+    /// an error will be raised.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
+    ///   or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_mask_float64(&mut self, py: Python, array: Bound<'_, PyArray2<f64>>) -> PyResult<bool> {
+        self.move_with_numpy_mask::<f64>(py, array)
+    }
+
+    /// Make a move in the game by selecting the maximum value in a NumPy float64 ndarray.
+    /// The array should be a 2D array where the first dimension corresponds to the piece index
+    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+    /// The position of the maximum value in the array indicates where the piece should be placed.
+    /// 
+    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+    /// If there are multiple maximum values, the first occurrence will be used.
+    /// 
+    /// Arguments:
+    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+    /// Returns:
+    /// - bool: True if the move was successfully made, False otherwise.
+    /// Raises:
+    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
+    #[cfg(feature = "numpy")]
+    pub fn move_with_numpy_max_float64(&mut self, py: Python, array: Bound<'_, PyArray2<f64>>) -> PyResult<bool> {
+        self.move_with_numpy_max::<f64>(py, array)
+    }
+
+    
     /// Get the NumPy ndarray boolean representation of the entire Game state.
     /// Because there is no way for engine and queue to have the same shape,
     /// the returned array is a 1D array representing the engine followed by the queue.
