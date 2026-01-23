@@ -796,6 +796,66 @@ where
 }
 
 #[cfg(feature = "numpy")]
+fn vec_from_numpy_flat_impl<T>(
+    array: &Bound<'_, PyArray1<T>>,
+) -> PyResult<Vec<Py<Piece>>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    let slice = unsafe { array.as_slice()? };
+    if slice.len() % 7 != 0 {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "Input array length must be a multiple of 7",
+        ));
+    }
+    let mut pieces = Vec::with_capacity(slice.len() / 7);
+    for chunk in slice.chunks(7) {
+        let mut state: u8 = 0;
+        for (i, &value) in chunk.iter().enumerate() {
+            if T::predicate(value) {
+                state |= 1 << (6 - i);
+            }
+        }
+        pieces.push(Piece::get_cached(state));
+    }
+    Ok(pieces)
+}
+
+#[cfg(feature = "numpy")]
+fn vec_from_numpy_stacked_impl<T>(
+    array: &Bound<'_, PyArray2<T>>,
+) -> PyResult<Vec<Py<Piece>>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    use numpy::PyUntypedArrayMethods;
+    let shape = array.shape();
+    if shape.len() != 2 || shape[1] != 7 {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "Input array must have shape (n, 7)",
+        ));
+    }
+    let n = shape[0];
+    let c = array.strides()[0] as usize;
+    let mut pieces = Vec::with_capacity(n);
+    for i in 0..n {
+        let row = unsafe { array.as_slice()?.get(
+            i * c..(i * c + 7)
+        ).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>("Failed to access row in input array")
+        })? };
+        let mut state: u8 = 0;
+        for (j, &value) in row.iter().enumerate() {
+            if T::predicate(value) {
+                state |= 1 << (6 - j);
+            }
+        }
+        pieces.push(Piece::get_cached(state));
+    }
+    Ok(pieces)
+}
+
+#[cfg(feature = "numpy")]
 fn to_numpy_piece_impl<'py, T>(
     py: Python<'py>,
     piece: &Piece,
@@ -1346,6 +1406,366 @@ impl Piece {
     #[staticmethod]
     pub fn vec_to_numpy_float16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<F16>> {
         vec_to_numpy_stacked_impl::<F16>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of boolean values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_bool_flat<'py>(
+        arr: Bound<'_, PyArray1<bool>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<bool>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of boolean values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_bool_stacked<'py>(
+        arr: Bound<'_, PyArray2<bool>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<bool>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of int8 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int8 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int8_flat<'py>(
+        arr: Bound<'_, PyArray1<i8>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<i8>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of int8 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of int8 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int8_stacked<'py>(
+        arr: Bound<'_, PyArray2<i8>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<i8>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of uint8 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint8 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint8_flat<'py>(
+        arr: Bound<'_, PyArray1<u8>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<u8>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint8 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of uint8 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint8_stacked<'py>(
+        arr: Bound<'_, PyArray2<u8>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<u8>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of int16 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int16 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int16_flat<'py>(
+        arr: Bound<'_, PyArray1<i16>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<i16>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of int16 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of int16 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int16_stacked<'py>(
+        arr: Bound<'_, PyArray2<i16>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<i16>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of uint16 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint16 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint16_flat<'py>(
+        arr: Bound<'_, PyArray1<u16>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<u16>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint16 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of uint16 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint16_stacked<'py>(
+        arr: Bound<'_, PyArray2<u16>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<u16>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of int32 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int32 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int32_flat<'py>(
+        arr: Bound<'_, PyArray1<i32>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<i32>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of int32 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of int32 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int32_stacked<'py>(
+        arr: Bound<'_, PyArray2<i32>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<i32>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of uint32 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint32 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint32_flat<'py>(
+        arr: Bound<'_, PyArray1<u32>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<u32>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint32 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of uint32 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint32_stacked<'py>(
+        arr: Bound<'_, PyArray2<u32>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<u32>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of int64 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of int64 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int64_flat<'py>(
+        arr: Bound<'_, PyArray1<i64>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<i64>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of int64 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of int64 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_int64_stacked<'py>(
+        arr: Bound<'_, PyArray2<i64>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<i64>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of uint64 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of uint64 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint64_flat<'py>(
+        arr: Bound<'_, PyArray1<u64>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<u64>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint64 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of uint64 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_uint64_stacked<'py>(
+        arr: Bound<'_, PyArray2<u64>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<u64>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of float32 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of float32 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_float32_flat<'py>(
+        arr: Bound<'_, PyArray1<f32>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<f32>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of float32 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of float32 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_float32_stacked<'py>(
+        arr: Bound<'_, PyArray2<f32>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<f32>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of float64 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of float64 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_float64_flat<'py>(
+        arr: Bound<'_, PyArray1<f64>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<f64>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of float64 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of float64 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_from_numpy_float64_stacked<'py>(
+        arr: Bound<'_, PyArray2<f64>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<f64>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a flat NumPy ndarray of float16 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 1D NumPy array of float16 values representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn vec_from_numpy_float16_flat<'py>(
+        arr: Bound<'_, PyArray1<F16>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_flat_impl::<F16>(&arr)
+    }
+
+    /// Create a vector of Piece instances from a stacked NumPy ndarray of float16 values.
+    /// 
+    /// Arguments:
+    /// - arr (numpy.ndarray): A 2D NumPy array of float16 values with shape (num_pieces, 7)
+    ///   representing the block states.
+    /// Returns:
+    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn vec_from_numpy_float16_stacked<'py>(
+        arr: Bound<'_, PyArray2<F16>>,
+    ) -> PyResult<Vec<Py<Piece>>> {
+        vec_from_numpy_stacked_impl::<F16>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of boolean values.
