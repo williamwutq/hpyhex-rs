@@ -2807,6 +2807,25 @@ impl HexEngine {
         Ok(true)
     }
 
+    /// Check if there exists at least one position in the HexEngine where the given Piece can be added without overlap
+    /// or going out of bounds.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to be checked for possible addition.
+    /// Returns:
+    /// - bool: True if there is at least one valid position for the Piece, False otherwise.
+    fn check_has_positions(&self, piece: &Piece) -> bool {
+        for a in 0..(self.radius * 2) as i32 {
+            for b in 0..(self.radius * 2) as i32 {
+                let hex = Hex{i: a, k: b};
+                if self.check_add_of(&hex, &piece).unwrap_or(false) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     #[cfg(feature = "numpy")]
     fn from_numpy_engine_impl<T>(array: Bound<'_, PyArray1<T>>)
         -> PyResult<HexEngine>
@@ -4717,6 +4736,9 @@ impl PieceFactory {
 /// - turn (int): The current turn number in the game.
 /// - end (bool): Whether the game has ended.
 /// 
+/// Special Methods:
+/// - hpyhex_rs_add_piece_with_index: Adds a piece to the queue at a specified index.
+/// 
 /// NumPy Integration:
 /// If the 'numpy' feature is enabled, Game provides methods to convert the piece queue, the engine,
 /// and the whole game state into NumPy ndarray representations for efficient numerical processing.
@@ -5752,6 +5774,60 @@ impl Game {
     #[cfg(all(feature = "numpy", feature = "half"))]
     pub fn queue_to_numpy_float16_stacked(&self, py: Python) -> Py<PyArray2<F16>> {
         queue_to_numpy_stacked_impl::<F16>(py, &self._Game__queue)
+    }
+
+    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
+
+    /// Special convenient method not provided in the standard hpyhex API. This method allows adding a piece using
+    /// the piece index in the queue and the position index in the engine directly.
+    ///
+    /// Parameters:
+    /// - piece_index (int): The index of the piece in the queue to be added.
+    /// - position_index (int): The index of the position in the engine where the piece should be placed.
+    /// Returns:
+    /// - bool: True if the piece was successfully added, False otherwise.
+    pub fn hpyhex_rs_add_piece_with_index(&mut self, python: Python, piece_index: usize, position_index: usize) -> PyResult<bool> {
+        let engine_bound = self._Game__engine.bind(python);
+        let mut engine = engine_bound.extract::<HexEngine>()?;
+        // Check piece and position exists
+        if piece_index >= self._Game__queue.len() {
+            return Ok(false);
+        }
+        if position_index >= engine.__len__() {
+            return Ok(false);
+        }
+        let piece = self._Game__queue[piece_index].clone();
+        let coo = engine.hex_coordinate_of(position_index)?;
+        // Add piece to engine and increment score and turn
+        let add_result = engine_bound.call_method1("add_piece", (coo, piece.clone()));
+        if let Err(ref e) = add_result {
+            if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
+                return Ok(false);
+            } else {
+                return Err(e.clone_ref(python));
+            }
+        }
+        self._Game__score += piece.count() as u64;
+        // Replace used piece
+        let new_piece = PieceFactory::generate_piece()?;
+        self._Game__queue[piece_index] = new_piece;
+        // Eliminate and add score
+        let eliminated = engine.eliminate();
+        let eliminated_len = eliminated?.len();
+        self._Game__score += (eliminated_len as u64) * 5;
+        self._Game__turn += 1;
+        // Check whether the game has ended
+        let mut has_move = false;
+        for p in &self._Game__queue {
+            if engine.check_has_positions(p) {
+                has_move = true;
+                break;
+            }
+        }
+        if !has_move {
+            self._Game__end = true;
+        }
+        Ok(true)
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */

@@ -17,3 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provided further documentation on various classes and methods.
 - Provide comprehensive benchmark suite and results to demonstrate performance improvements over original hpyhex.
 - Added NumPy integration for seamless conversion between Piece instances and NumPy arrays.
+- Added NumPy integration for seamless conversion between HexEngine instances and NumPy arrays.
+- Support serialization to `hpyhex-rs` crate compatible binary format for Piece, HexEngine, and Game classes via `hpyhex_rs_serialize` and `hpyhex_rs_deserialize` methods.
+- Added NumPy integration for seamless conversion between a vector of Piece instances and stacked or flat NumPy arrays.
+- Added NumPy integration for seamless conversion between Game instances and NumPy arrays.
+- Added NumPy integration for seamless conversion between Game queues and stacked or flat NumPy arrays.
+- Added special `hpyhex_rs_add_piece_with_index` method to Game class for adding pieces using indices directly.
