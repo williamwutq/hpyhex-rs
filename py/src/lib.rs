@@ -4830,6 +4830,65 @@ where
 
 #[allow(non_snake_case)]
 impl Game {
+    /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
+
+    /// Add a piece from the queue to the game engine at the specified coordinates.
+    /// 
+    /// This method updates the game state, including the score and turn number,
+    /// and checks for eliminations and game end conditions.
+    /// 
+    /// Arguments:
+    /// - python (Python): The Python interpreter context.
+    /// - piece_index (usize): The index of the piece in the queue to add.
+    /// - coord (Bound[Hex]): The coordinates where the piece should be added.
+    /// Returns:
+    /// - bool: True if the piece was successfully added, False otherwise.
+    pub fn add_piece_checked(&mut self, python: Python, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
+        // Check piece exists
+        if piece_index >= self._Game__queue.len() {
+            return Ok(false);
+        }
+        let piece = self._Game__queue[piece_index].clone();
+        // Add piece to engine and increment score and turn
+        let engine_bound = self._Game__engine.bind(python);
+        let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
+        if let Err(ref e) = add_result {
+            if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
+                return Ok(false);
+            } else {
+                return Err(e.clone_ref(python));
+            }
+        }
+        self._Game__score += piece.count() as u64;
+        // Replace used piece
+        let new_piece = PieceFactory::generate_piece()?;
+        self._Game__queue[piece_index] = new_piece;
+        // Eliminate and add score TODO: inefficient
+        let eliminated = engine_bound.call_method0("eliminate")?;
+        let eliminated_len = eliminated.len().unwrap_or(0);
+        self._Game__score += (eliminated_len as u64) * 5;
+        self._Game__turn += 1;
+        // Check whether the game has ended
+        let mut has_move = false;
+        for p in &self._Game__queue {
+            let positions = engine_bound.call_method1("check_positions", (p.clone(),));
+            if let Ok(pos) = positions {
+                if pos.len().unwrap_or(0) > 0 {
+                    has_move = true;
+                    break;
+                }
+            }
+        }
+        if !has_move {
+            self._Game__end = true;
+        }
+        Ok(true)
+    }
+}
+
+#[allow(non_snake_case)]
+#[pymethods]
+impl Game {
     /* ---------------------------------------- NUMPY ---------------------------------------- */
     /// Get the flat NumPy ndarray boolean representation of the Game queue.
     /// 
@@ -5078,64 +5137,7 @@ impl Game {
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
-
-    /// Add a piece from the queue to the game engine at the specified coordinates.
-    /// 
-    /// This method updates the game state, including the score and turn number,
-    /// and checks for eliminations and game end conditions.
-    /// 
-    /// Arguments:
-    /// - python (Python): The Python interpreter context.
-    /// - piece_index (usize): The index of the piece in the queue to add.
-    /// - coord (Bound[Hex]): The coordinates where the piece should be added.
-    /// Returns:
-    /// - bool: True if the piece was successfully added, False otherwise.
-    pub fn add_piece_checked(&mut self, python: Python, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
-        // Check piece exists
-        if piece_index >= self._Game__queue.len() {
-            return Ok(false);
-        }
-        let piece = self._Game__queue[piece_index].clone();
-        // Add piece to engine and increment score and turn
-        let engine_bound = self._Game__engine.bind(python);
-        let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
-        if let Err(ref e) = add_result {
-            if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
-                return Ok(false);
-            } else {
-                return Err(e.clone_ref(python));
-            }
-        }
-        self._Game__score += piece.count() as u64;
-        // Replace used piece
-        let new_piece = PieceFactory::generate_piece()?;
-        self._Game__queue[piece_index] = new_piece;
-        // Eliminate and add score TODO: inefficient
-        let eliminated = engine_bound.call_method0("eliminate")?;
-        let eliminated_len = eliminated.len().unwrap_or(0);
-        self._Game__score += (eliminated_len as u64) * 5;
-        self._Game__turn += 1;
-        // Check whether the game has ended
-        let mut has_move = false;
-        for p in &self._Game__queue {
-            let positions = engine_bound.call_method1("check_positions", (p.clone(),));
-            if let Ok(pos) = positions {
-                if pos.len().unwrap_or(0) > 0 {
-                    has_move = true;
-                    break;
-                }
-            }
-        }
-        if !has_move {
-            self._Game__end = true;
-        }
-        Ok(true)
-    }
-}
-
-#[allow(non_snake_case)]
-#[pymethods]
-impl Game {
+    
     /// Initialize the game with a game engine of radius r and game queue of length q.
     ///
     /// Parameters:
