@@ -1,11 +1,13 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 #[cfg(feature = "numpy")]
-use numpy::{PyArray1, PyArray2, PyArray, PyArrayMethods, PyArrayDescr, dtype_bound};
+use numpy::{PyArray1, PyArray2, PyArray, PyArrayMethods};
 #[cfg(feature = "numpy")]
 use numpy::ndarray::array;
 #[cfg(feature = "numpy")]
 use numpy::ndarray;
+#[cfg(all(feature = "numpy", feature = "half"))]
+use numpy::{PyArrayDescr, dtype_bound};
 
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyAny, PyType};

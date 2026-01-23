@@ -21,6 +21,10 @@ help:
 
 # Build the Rust extension module
 build:
+	maturin build --release --interpreter "$(PYVERSION)" --out dist/ --features numpy
+
+# Build the Rust extension module with half-precision support
+build-half:
 	maturin build --release --interpreter "$(PYVERSION)" --out dist/ --features full
 
 # Compile docs for HTML
