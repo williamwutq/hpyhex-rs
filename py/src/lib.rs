@@ -100,6 +100,7 @@ impl BitScalar for bool {
     #[inline] fn predicate(self) -> bool { self }
 }
 
+#[cfg(feature = "half")]
 impl BitScalar for F16 {
     #[inline] fn zero() -> Self { F16(half::f16::from_f32(0.0)) }
     #[inline] fn one() -> Self { F16(half::f16::from_f32(1.0)) }
