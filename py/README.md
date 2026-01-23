@@ -61,6 +61,9 @@ pip install hpyhex-rs
 - Hexagonal grid representation
 - Basic game mechanics for HappyHex
 - Utility functions for hexagonal calculations
+- High performance through Rust implementation
+- Native serialization and deserialization methods compatible with Rust hpyhex-rs crate
+- NumPy integration for machine learning applications
 
 ## Author
 Developed by William Wu.
@@ -88,7 +91,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Usage
 ```python
 from hpyhex import Hex, Piece, HexEngine
-from hpyhex import Game, PieceFactory
+from hpyhex import Game, PieceFactory, random_engine
 
 # Create a hexagonal coordinate
 coo = Hex(0, 1)
@@ -114,7 +117,53 @@ def simple_algorithm(engine, queue):
 	# Always place the first piece at the center
 	return 0, Hex(0, 0)
 game.make_move(simple_algorithm)
+
+# Serialize and save the game state compatibly with hpyhex-rs crate
+serialized_engine = engine.hpyhex_rs_serialize()
+serialized_pieces = [p.hpyhex_rs_serialize() for p in game.piece_queue]
+with open("my_game_data.bin", "wb") as binary_file:
+   binary_file.write(serialized_engine)
+   for piece_bytes in serialized_pieces:
+      binary_file.write(piece_bytes)
+
+# Interact with NumPy
+import numpy as np
+
+# Convert a piece to a NumPy boolean array
+piece_array = piece.to_numpy()
+
+# Create a piece from a NumPy uint8 array
+arr = np.array([1, 1, 1, 0, 0, 0, 0], dtype=np.uint8)
+new_piece = Piece.from_numpy_uint8(arr)
+
+# Convert a random engine to a NumPy array
+a_random_engine = random_engine(6)
+engine_array = a_random_engine.to_numpy_uint32()
+
+# Create an engine from a NumPy uint32 array
+arr_engine = np.random.randint(0, 2**42, size=(169,), dtype=np.uint32)  # Example for radius 6
+new_engine = HexEngine.from_numpy_uint32(arr_engine, radius=6)
+
+# Note that all dtypes listed in the NumPy Integration section are supported, and float16 is also supported if compiled with the "half" feature.
 ```
+
+## Native Serialization
+
+`hpyhex-rs` provides native serialization and deserialization methods for `HexEngine` and `Piece` classes, compatible with the Rust `hpyhex-rs` crate's `TryFrom<Vec<u8>>` and `Into<Vec<u8>>` implementations.
+
+The serialization methods are named `hpyhex_rs_serialize()` and `hpyhex_rs_deserialize(data: bytes)`, and are available as instance methods for serialization and class methods for deserialization. The naming are prefixed with `hpyhex_rs_` to be future-proof against potential naming conflicts with other serialization methods that might be provided by the target package, `hpyhex`, in the future.
+
+### Hex Serialization
+- `hpyhex_rs_serialize() -> bytes`: Serializes the `Hex` coordinate into a byte vector.
+- `hpyhex_rs_deserialize(data: bytes) -> Hex`: Deserializes a byte vector into a `Hex` instance.
+
+### Piece Serialization
+- `hpyhex_rs_serialize() -> bytes`: Serializes the `Piece` into a single byte representing the occupancy state of its blocks.
+- `hpyhex_rs_deserialize(data: bytes) -> Piece`: Deserializes a byte vector into a `Piece` instance.
+
+### HexEngine Serialization
+- `hpyhex_rs_serialize() -> bytes`: Serializes the `HexEngine` into a byte vector. The format includes the radius as a 4-byte little-endian integer followed by the block states.
+- `hpyhex_rs_deserialize(data: bytes) -> HexEngine`: Deserializes a byte vector into a `HexEngine` instance.
 
 ## Usage Advices
 
