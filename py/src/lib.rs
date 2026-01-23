@@ -738,6 +738,7 @@ impl Piece {
     }
 }
 
+#[cfg(feature = "numpy")]
 fn vec_to_numpy_flat_impl<'py, T>(
     py: Python<'py>,
     pieces: Vec<Py<Piece>>,
@@ -793,6 +794,7 @@ where
     PyArray2::from_owned_array_bound(py, array).unbind()
 }
 
+#[cfg(feature = "numpy")]
 fn to_numpy_piece_impl<'py, T>(
     py: Python<'py>,
     piece: &Piece,
@@ -812,6 +814,7 @@ where
     PyArray1::from_array_bound(py, &arr).unbind()
 }
 
+#[cfg(feature = "numpy")]
 fn from_numpy_piece_impl<T>(
     array: &Bound<'_, PyArray<T, ndarray::Dim<[usize; 1]>>>,
 ) -> PyResult<Py<Piece>>
@@ -2371,6 +2374,36 @@ impl HexEngine {
         }
         Ok(true)
     }
+
+    #[cfg(feature = "numpy")]
+    fn from_numpy_engine_impl<T>(array: Bound<'_, PyArray1<T>>)
+        -> PyResult<HexEngine>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| T::predicate(b)).collect::<Vec<bool>>();
+        Self::try_from(vec)
+    }
+
+    #[cfg(feature = "numpy")]
+    unsafe fn from_numpy_engine_unchecked_impl<T>(array: Bound<'_, PyArray1<T>>) -> Self
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| T::predicate(b)).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    #[cfg(feature = "numpy")]
+    fn to_numpy_engine_impl<T>(&self, py: Python) -> Py<PyArray1<T>>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
+        PyArray1::from_vec_bound(py, int_states).into()
+    }
 }
 
 #[pymethods]
@@ -2486,9 +2519,8 @@ impl HexEngine {
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of int8 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
-    pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<u8>> {
-        let int_states: Vec<u8> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, int_states).into()
+    pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<i8>> {
+        Self::to_numpy_engine_impl::<i8>(self, py)
     }
 
     /// Get the NumPy ndarray uint8 representation of the HexEngine's block states.
@@ -2497,8 +2529,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint8(&self, py: Python) -> Py<PyArray1<u8>> {
-        let uint_states: Vec<u8> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, uint_states).into()
+        Self::to_numpy_engine_impl::<u8>(self, py)
     }
 
     /// Get the NumPy ndarray int16 representation of the HexEngine's block states.
@@ -2507,8 +2538,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of int16 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int16(&self, py: Python) -> Py<PyArray1<i16>> {
-        let int_states: Vec<i16> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, int_states).into()
+        Self::to_numpy_engine_impl::<i16>(self, py)
     }
 
     /// Get the NumPy ndarray uint16 representation of the HexEngine's block states.
@@ -2517,8 +2547,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint16(&self, py: Python) -> Py<PyArray1<u16>> {
-        let uint_states: Vec<u16> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, uint_states).into()
+        Self::to_numpy_engine_impl::<u16>(self, py)
     }
 
     /// Get the NumPy ndarray int32 representation of the HexEngine's block states.
@@ -2527,8 +2556,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of int32 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int32(&self, py: Python) -> Py<PyArray1<i32>> {
-        let int_states: Vec<i32> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, int_states).into()
+        Self::to_numpy_engine_impl::<i32>(self, py)
     }
 
     /// Get the NumPy ndarray uint32 representation of the HexEngine's block states.
@@ -2537,8 +2565,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint32(&self, py: Python) -> Py<PyArray1<u32>> {
-        let uint_states: Vec<u32> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, uint_states).into()
+        Self::to_numpy_engine_impl::<u32>(self, py)
     }
 
     /// Get the NumPy ndarray int64 representation of the HexEngine's block states.
@@ -2547,8 +2574,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of int64 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int64(&self, py: Python) -> Py<PyArray1<i64>> {
-        let int_states: Vec<i64> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, int_states).into()
+        Self::to_numpy_engine_impl::<i64>(self, py)
     }
 
     /// Get the NumPy ndarray uint64 representation of the HexEngine's block states.
@@ -2557,8 +2583,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint64(&self, py: Python) -> Py<PyArray1<u64>> {
-        let uint_states: Vec<u64> = self.states.iter().map(|&b| if b { 1 } else { 0 }).collect();
-        PyArray1::from_vec_bound(py, uint_states).into()
+        Self::to_numpy_engine_impl::<u64>(self, py)
     }
 
     /// Get the NumPy ndarray float32 representation of the HexEngine's block states.
@@ -2567,8 +2592,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_float32(&self, py: Python) -> Py<PyArray1<f32>> {
-        let float_states: Vec<f32> = self.states.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect();
-        PyArray1::from_vec_bound(py, float_states).into()
+        Self::to_numpy_engine_impl::<f32>(self, py)
     }
 
     /// Get the NumPy ndarray float64 representation of the HexEngine's block states.
@@ -2577,8 +2601,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_float64(&self, py: Python) -> Py<PyArray1<f64>> {
-        let float_states: Vec<f64> = self.states.iter().map(|&b| if b { 1.0 } else { 0.0 }).collect();
-        PyArray1::from_vec_bound(py, float_states).into()
+        Self::to_numpy_engine_impl::<f64>(self, py)
     }
 
     /// Get the NumPy ndarray float16 representation of the HexEngine's block states.
@@ -2593,8 +2616,7 @@ impl HexEngine {
     /// Use with caution.
     #[cfg(all(feature = "numpy", feature = "half"))]
     pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
-        let float_states: Vec<F16> = self.states.iter().map(|&b| if b { F16::from_f32(1.0) } else { F16::from_f32(0.0) }).collect();
-        PyArray1::from_vec_bound(py, float_states).into()
+        Self::to_numpy_engine_impl::<F16>(self, py)
     }
 
     /// Create a NumPy ndarray boolean representation of the HexEngine's block states
@@ -2742,10 +2764,8 @@ impl HexEngine {
     /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
     #[cfg(feature = "numpy")]
     #[staticmethod]
-    pub fn from_numpy_int8(array: Bound<'_, PyArray1<u8>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+    pub fn from_numpy_int8(array: Bound<'_, PyArray1<i8>>) -> PyResult<Self> {
+        Self::from_numpy_engine_impl::<i8>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int8 representation of the block states without validation.
@@ -2762,10 +2782,8 @@ impl HexEngine {
     /// - HexEngine: A HexEngine instance initialized with the given state vector.
     #[cfg(feature = "numpy")]
     #[staticmethod]
-    pub unsafe fn from_numpy_int8_unchecked(array: Bound<'_, PyArray1<u8>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+    pub unsafe fn from_numpy_int8_unchecked(array: Bound<'_, PyArray1<i8>>) -> Self {
+        Self::from_numpy_engine_unchecked_impl::<i8>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint8 representation of the block states.
@@ -2777,9 +2795,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint8(array: Bound<'_, PyArray1<u8>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<u8>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint8 representation of the block states without validation.
@@ -2797,9 +2813,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_uint8_unchecked(array: Bound<'_, PyArray1<u8>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<u8>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int16 representation of the block states.
@@ -2811,9 +2825,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int16(array: Bound<'_, PyArray1<i16>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<i16>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int16 representation of the block states without validation.
@@ -2831,9 +2843,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_int16_unchecked(array: Bound<'_, PyArray1<i16>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<i16>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint16 representation of the block states.
@@ -2845,9 +2855,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint16(array: Bound<'_, PyArray1<u16>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<u16>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint16 representation of the block states without validation.
@@ -2865,9 +2873,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_uint16_unchecked(array: Bound<'_, PyArray1<u16>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<u16>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int32 representation of the block states.
@@ -2879,9 +2885,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int32(array: Bound<'_, PyArray1<i32>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<i32>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int32 representation of the block states without validation.
@@ -2899,9 +2903,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_int32_unchecked(array: Bound<'_, PyArray1<i32>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<i32>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint32 representation of the block states.
@@ -2913,9 +2915,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint32(array: Bound<'_, PyArray1<u32>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<u32>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint32 representation of the block states without validation.
@@ -2933,9 +2933,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_uint32_unchecked(array: Bound<'_, PyArray1<u32>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<u32>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int64 representation of the block states.
@@ -2947,9 +2945,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int64(array: Bound<'_, PyArray1<i64>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<i64>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray int64 representation of the block states without validation.
@@ -2967,9 +2963,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_int64_unchecked(array: Bound<'_, PyArray1<i64>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<i64>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint64 representation of the block states.
@@ -2981,9 +2975,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint64(array: Bound<'_, PyArray1<u64>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<u64>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray uint64 representation of the block states without validation.
@@ -3001,9 +2993,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_uint64_unchecked(array: Bound<'_, PyArray1<u64>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<u64>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray float32 representation of the block states.
@@ -3015,9 +3005,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_float32(array: Bound<'_, PyArray1<f32>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<f32>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray float32 representation of the block states without validation.
@@ -3035,9 +3023,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_float32_unchecked(array: Bound<'_, PyArray1<f32>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<f32>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray float64 representation of the block states.
@@ -3049,9 +3035,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_float64(array: Bound<'_, PyArray1<f64>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<f64>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray float64 representation of the block states without validation.
@@ -3069,9 +3053,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_float64_unchecked(array: Bound<'_, PyArray1<f64>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<f64>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray float16 representation of the block states.
@@ -3089,9 +3071,7 @@ impl HexEngine {
     #[cfg(all(feature = "numpy", feature = "half"))]
     #[staticmethod]
     pub fn from_numpy_float16(array: Bound<'_, PyArray1<F16>>) -> PyResult<Self> {
-        let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| b.to_f32() > 0.0).collect::<Vec<bool>>();
-        HexEngine::try_from(vec)
+        Self::from_numpy_engine_impl::<F16>(array)
     }
 
     /// Construct a HexEngine from a NumPy ndarray float16 representation of the block states without validation.
@@ -3116,9 +3096,7 @@ impl HexEngine {
     #[cfg(all(feature = "numpy", feature = "half"))]
     #[staticmethod]
     pub unsafe fn from_numpy_float16_unchecked(array: Bound<'_, PyArray1<F16>>) -> Self {
-        let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| b.to_f32() > 0.0).collect::<Vec<bool>>();
-        unsafe { HexEngine::from_raw_state(vec) }
+        Self::from_numpy_engine_unchecked_impl::<F16>(array)
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
