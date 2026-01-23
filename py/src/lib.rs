@@ -95,6 +95,11 @@ use std::hash::{Hash, Hasher};
 /// - i (int): The line i coordinate.
 /// - j (int): The computed line j coordinate (k - i).
 /// - k (int): The line k coordinate.
+/// 
+/// Hpyhex-rs Serialization:
+/// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
+/// - hpyhex_rs_serialize(): Serialize the Hex to a byte vector in the format used by the Rust hpyhex-rs crate.
+/// - hpyhex_rs_deserialize(data): Deserialize a Hex from a byte vector in the format used by the Rust hpyhex-rs crate.
 #[pyclass(frozen)]
 #[derive(Eq, Clone)]
 pub struct Hex {
@@ -211,6 +216,54 @@ impl Hex {
 
 #[pymethods]
 impl Hex {
+    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
+
+    /// Serialize the Piece to a byte vector according the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The serialization format is 4 bytes for i (i32) followed by 4 bytes for k (i32), both in little-endian order.
+    /// 
+    /// Returns:
+    /// - bytes: A byte vector containing the serialized Piece data.
+    pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
+        let mut bytes = Vec::with_capacity(8);
+        bytes.extend_from_slice(&self.i.to_le_bytes());
+        bytes.extend_from_slice(&self.k.to_le_bytes());
+        pyo3::types::PyBytes::new_bound(py, &bytes)
+    }
+
+    /// Deserialize a Hex from a byte vector according the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The deserialization format expects 8 bytes: 4 bytes for i (i32) followed by 4 bytes for k (i32), both in little-endian order.
+    /// 
+    /// Arguments:
+    /// - data (bytes, bytearray, or list[int]): The byte vector containing the serialized Hex data.
+    /// Returns:
+    /// - Hex: The deserialized Hex instance.
+    #[staticmethod]
+    pub fn hpyhex_rs_deserialize(data: &Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
+        use pyo3::types::{PyBytes, PyByteArray};
+        // Extract PyBytes, PyByteArray, or Vec<u8>
+        let value: Vec<u8> = if let Ok(py_bytes) = data.extract::<&PyBytes>() {
+            py_bytes.as_bytes().to_vec()
+        } else if let Ok(py_bytearray) = data.extract::<&PyByteArray>() {
+            unsafe { py_bytearray.as_bytes() }.to_vec()
+        } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
+            vec_u8
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Input must be bytes, bytearray, or list of integers"));
+        };
+
+        if value.len() != 8 {
+            return Err(pyo3::exceptions::PyValueError::new_err("Invalid data length for Hex deserialization"));
+        }
+
+        let i = i32::from_le_bytes([value[0], value[1], value[2], value[3]]);
+        let k = i32::from_le_bytes([value[4], value[5], value[6], value[7]]);
+        Ok(get_hex(i, k))
+    }
+
+    /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
+
     /// Initialize a Hex coordinate at (i, k). Defaults to (0, 0).
     ///
     /// Arguments:
@@ -529,6 +582,11 @@ impl Hex {
 /// - positions (list[Hex]): A list of Hex coordinates representing the positions of the blocks in the piece.
 /// - state (u8): A byte value representing the occupancy state of each block in the piece.
 /// 
+/// Hpyhex-rs Serialization:
+/// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
+/// - hpyhex_rs_serialize(): Serialize the Piece to a byte vector in the format used by the Rust hpyhex-rs crate.
+/// - hpyhex_rs_deserialize(data): Deserialize a Piece from a byte vector in the format used by the Rust hpyhex-rs crate.
+/// 
 /// Numpy Support (Requires "numpy" feature):
 /// 
 /// Offer methods to convert the Piece's block states to NumPy ndarray representations and vice versa.
@@ -638,6 +696,49 @@ impl Piece {
 
 #[pymethods]
 impl Piece {
+    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
+
+    /// Serialize the Piece to a byte vector according the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The serialization format is a single byte representing the occupancy state of the blocks.
+    /// 
+    /// Returns:
+    /// - bytes: A byte vector containing the serialized Piece data.
+    pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
+        pyo3::types::PyBytes::new_bound(py, &[self.state])
+    }
+
+    /// Deserialize a Piece from a byte vector according the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The deserialization format expects a single byte representing the occupancy state of the blocks.
+    /// 
+    /// Arguments:
+    /// - data (bytes): A byte vector containing the serialized Piece data.
+    /// 
+    /// Returns:
+    /// - Piece: The deserialized Piece instance.
+    /// Raises:
+    /// - ValueError: If the input data length is invalid.
+    #[staticmethod]
+    pub fn hpyhex_rs_deserialize(data: &Bound<'_, PyAny>) -> PyResult<Py<Piece>> {
+        use pyo3::types::{PyBytes, PyByteArray};
+        // Extract PyBytes, PyByteArray, or Vec<u8>
+        let value: Vec<u8> = if let Ok(py_bytes) = data.downcast::<PyBytes>() {
+            py_bytes.as_bytes().to_vec()
+        } else if let Ok(py_bytearray) = data.downcast::<PyByteArray>() {
+            unsafe { py_bytearray.as_bytes() }.to_vec()
+        } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
+            vec_u8
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Input must be bytes, bytearray, or list of integers"));
+        };
+        if value.len() != 1 {
+            return Err(pyo3::exceptions::PyValueError::new_err("Invalid data length for Piece deserialization"));
+        }
+        let state = value[0] & 0b0111_1111; // Only 7 bits used
+        Ok(Piece::get_cached(state))
+    }
+
     /* ---------------------------------------- NUMPY EXPORTS ---------------------------------------- */
 
     /// Get the default NumPy ndarray representation of the Piece's block states.
@@ -1485,6 +1586,45 @@ fn piece_neighbors_of(p: Piece, target_i: i32, target_k: i32) -> usize {
 /// Attributes:
 /// - radius (int): The radius of the hexagonal grid, defining the size of the grid.
 /// - states (list[bool]): A list of booleans representing the occupancy state of each block in the grid.
+/// 
+/// Hpyhex-rs Serialization:
+/// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
+/// - hpyhex_rs_serialize(): Serialize the Piece to a byte vector in the format used by the Rust hpyhex-rs crate.
+/// - hpyhex_rs_deserialize(data): Deserialize a Piece from a byte vector in the format used by the Rust hpyhex-rs crate.
+/// 
+/// Numpy Support (Requires "numpy" feature):
+/// 
+/// Offer methods to convert the Piece's block states to NumPy ndarray representations and vice versa.
+/// These include safe conversion to and from, unchecked conversion, and even zero-copy views where applicable.
+///
+/// Support the following NumPy array types:
+/// - bool
+/// - int8
+/// - uint8
+/// - int16
+/// - uint16
+/// - int32
+/// - uint32
+/// - int64
+/// - uint64
+/// - half (f16) [Requires "half" feature, experimental]
+/// - float32
+/// - float64
+/// 
+/// The from_numpy_* methods will validate the input array shape and types, and raise a ValueError if the
+/// input is invalid. The from_numpy_*_unchecked methods will skip validation for performance, but may lead to
+/// undefined behavior if the input length does not correspond to a valid hexagonal grid size. The to_numpy_*
+/// methods will return a new NumPy ndarray representing the block states of the HexEngine.
+/// 
+/// to_numpy() defaults to bool representation, but there are no from_numpy that can take in different types,
+/// because numpy ndarrays cannot be easily casted into each other.
+/// 
+/// The from_numpy_raw_view and to_numpy_raw_view methods, which are *extremely unsafe*, provide zero-copy views
+/// into the internal state vector as a NumPy ndarray of the specified type. These methods should
+/// be used with caution, as they can lead to undefined behavior if the internal state vector is modified
+/// while the view is still in use, or if the type does not match the expected representation. They may not work
+/// correctly on all platforms due to differences in memory alignment and representation, but should work correctly
+/// on most common platforms with correct installation of Python and NumPy and carefully managed memory usage.
 pub struct HexEngine {
     radius: usize,
     states: Vec<bool>,
@@ -2007,6 +2147,92 @@ impl HexEngine {
 
 #[pymethods]
 impl HexEngine {
+    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
+
+    /// Serialize the HexEngine state into a byte vector according the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The serialization format is as follows:
+    /// - The first four bytes represent the radius of the hexagonal grid as a little-endian u16.
+    /// - The subsequent bytes represent the occupancy states of the blocks in the grid, packed into bits.
+    ///   Each byte contains the states of up to 8 blocks, with the least significant bit corresponding to the first block.
+    /// 
+    /// Returns:
+    /// - bytes: A byte vector containing the serialized state of the HexEngine.
+    pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
+        let mut bytes = Vec::new();
+        let radius_u16 = self.radius as u32;
+        bytes.extend_from_slice(&radius_u16.to_le_bytes());
+        
+        let mut byte: u8 = 0;
+        for (i, &state) in self.states.iter().enumerate() {
+            if state {
+                byte |= 1 << (i % 8);
+            }
+            if i % 8 == 7 {
+                bytes.push(byte);
+                byte = 0;
+            }
+        }
+        if self.states.len() % 8 != 0 {
+            bytes.push(byte);
+        }
+        
+        pyo3::types::PyBytes::new_bound(py, &bytes)
+    }
+
+    /// Deserialize a byte vector into a HexEngine instance according to the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The deserialization format is as follows:
+    /// - The first four bytes represent the radius of the hexagonal grid as a little-endian u16.
+    /// - The subsequent bytes represent the occupancy states of the blocks in the grid, packed into bits.
+    ///   Each byte contains the states of up to 8 blocks, with the least significant bit corresponding to the first block.
+    /// 
+    /// Arguments:
+    /// - data: A byte vector containing the serialized state of the HexEngine.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance reconstructed from the byte vector.
+    #[staticmethod]
+    pub fn hpyhex_rs_deserialize(data: Bound<'_, PyAny>) -> PyResult<Self> {
+        use pyo3::types::{PyBytes, PyByteArray};
+        // Extract PyBytes, PyByteArray, or Vec<u8>
+        let bytes: Vec<u8> = if let Ok(py_bytes) = data.downcast::<PyBytes>() {
+            py_bytes.as_bytes().to_vec()
+        } else if let Ok(py_bytearray) = data.downcast::<PyByteArray>() {
+            unsafe { py_bytearray.as_bytes() }.to_vec()
+        } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
+            vec_u8
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err("Input must be bytes, bytearray, or list of integers"));
+        };
+        if bytes.len() < 4 {
+            return Err(pyo3::exceptions::PyValueError::new_err("Byte vector too short to contain radius"));
+        }
+        
+        let radius = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let total_blocks = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
+        
+        let mut states = Vec::with_capacity(total_blocks);
+        for i in 0..total_blocks {
+            let byte_index = 4 + (i / 8);
+            let bit_index = i % 8;
+            if byte_index < bytes.len() {
+                let state = (bytes[byte_index] & (1 << bit_index)) != 0;
+                states.push(state);
+            } else {
+                states.push(false);
+            }
+        }
+        
+        Ok(HexEngine {
+            radius,
+            states,
+        })
+    }
+
     /* ---------------------------------------- NUMPY ---------------------------------------- */
 
     /// Get the default NumPy ndarray representation of the HexEngine's block states.
