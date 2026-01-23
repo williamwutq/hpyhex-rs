@@ -4778,6 +4778,13 @@ impl PieceFactory {
 /// 
 /// For specific dtype, the methods are named game_to_numpy_{dtype}, game_from_numpy_with_radius_{dtype},
 /// and game_from_numpy_with_queue_length_{dtype}, where {dtype} can be 'bool', 'int8', etc.
+/// 
+/// Accept a move as a NumPy ndarray mask or max tensor:
+/// - move_with_numpy_mask_*: Accepts a move represented as a NumPy ndarray mask.
+/// - move_with_numpy_max_*: Accepts a move represented as a NumPy ndarray max tensor.
+/// 
+/// For specific dtype, the methods are named move_with_numpy_mask_{dtype} and move_with_numpy_max_{dtype},
+/// where {dtype} can be 'bool', 'int8', etc.
 #[pyclass]
 pub struct Game {
     #[pyo3(get, set)]

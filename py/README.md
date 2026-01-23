@@ -1033,3 +1033,46 @@ See [Queue serialization documentation](#serialization-for-vector-of-piece-piece
 - Use `bool_` for minimal memory footprint
 - Use `uint8` for compact integer formats
 - Use `float32` for machine learning applications
+
+### Making Moves with NumPy Arrays
+
+The `Game` class provides methods to make moves using 2D NumPy arrays representing piece selection and placement positions. These methods are useful for machine learning applications where moves are encoded as arrays.
+
+#### Mask-Based Moves
+
+Use `move_with_numpy_mask_<type>()` methods to make a move by specifying a boolean-like mask where exactly one non-zero value indicates the selected piece and placement position:
+
+```python
+import numpy as np
+from hpyhex import Game
+
+game = Game(radius=3, queue=3)
+# Create a 2D mask: (queue_length, engine_cells)
+mask = np.zeros((3, 37), dtype=np.bool_)
+mask[1, 10] = True  # Select piece 1, place at engine position 10
+
+success = game.move_with_numpy_mask_bool(mask)
+```
+
+Available for all numeric types:
+- `move_with_numpy_mask_bool()` - Boolean mask
+- `move_with_numpy_mask_int8()`, `move_with_numpy_mask_uint8()`
+- `move_with_numpy_mask_int16()`, `move_with_numpy_mask_uint16()`
+- `move_with_numpy_mask_int32()`, `move_with_numpy_mask_uint32()`
+- `move_with_numpy_mask_float32()`, `move_with_numpy_mask_float64()`
+- `move_with_numpy_mask_float16()` (requires "half" feature)
+
+#### Maximum Value Moves
+
+Use `move_with_numpy_max_<type>()` methods to make a move by selecting the position with the maximum value in the array:
+
+```python
+# Create a 2D array with move values/scores
+move_scores = np.random.rand(3, 37).astype(np.float32)
+# The position with the highest score will be selected
+success = game.move_with_numpy_max_float32(move_scores)
+```
+
+Available for the same types as mask methods.
+
+Both methods return `True` if the move was successful, `False` otherwise. They raise `ValueError` for invalid inputs or impossible moves.
