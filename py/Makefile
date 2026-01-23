@@ -12,6 +12,7 @@ help:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build      Build the Rust extension module using maturin"
+	@echo "  build-half Build the Rust extension module with half-precision support"
 	@echo "  html       Build HTML documentation"
 	@echo "  latex      Build LaTeX documentation"
 	@echo "  man		Build man page documentation"
