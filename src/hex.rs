@@ -327,6 +327,48 @@ impl fmt::Debug for Hex {
     }
 }
 
+impl Into<Vec<u8>> for Hex {
+    /// Converts Hex to a vector of bytes
+    /// 
+    /// The exact format is:
+    /// - First 4 bytes: little-endian representation of `i`
+    /// - Next 4 bytes: little-endian representation of `k`
+    /// 
+    /// ## Returns
+    /// A vector containing the byte representation of the (i, k) coordinates.
+    #[inline]
+    fn into(self) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(8);
+        vec.extend_from_slice(&self.i.to_le_bytes());
+        vec.extend_from_slice(&self.k.to_le_bytes());
+        vec
+    }
+}
+
+impl TryFrom<Vec<u8>> for Hex {
+    type Error = String;
+
+    /// Creates a Hex from a vector of bytes
+    /// 
+    /// The expected format is:
+    /// - First 4 bytes: little-endian representation of `i`
+    /// - Next 4 bytes: little-endian representation of `k`
+    /// 
+    /// ## Parameters
+    /// - `bytes`: Vector of bytes representing the (i, k) coordinates
+    /// 
+    /// ## Returns
+    /// A new `Hex` instance or an error if the byte vector is invalid.
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        if bytes.len() != 8 {
+            return Err("Byte vector must be exactly 8 bytes long".to_string());
+        }
+        let i = i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let k = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        Ok(Hex::new(i, k))
+    }
+}
+
 /// Represents a shape or unit made up of multiple blocks in a fixed hexagonal pattern.
 ///
 /// A `Piece` is a compact, immutable structure representing a small, self-contained hexagonal grid of up to 7 blocks.
@@ -713,6 +755,45 @@ impl Into<Vec<Hex>> for Piece {
     fn into(self) -> Vec<Hex> {
         self.coordinates()
     }   
+}
+
+impl Into<Vec<u8>> for Piece {
+    /// Converts Piece to a vector of bytes
+    /// 
+    /// The exact format is:
+    /// - First byte: bitfield representing block occupancy (0-127)
+    /// 
+    /// ## Returns
+    /// A vector containing the byte representation of the piece.
+    #[inline]
+    fn into(self) -> Vec<u8> {
+        vec![self.states]
+    }
+}
+
+impl TryFrom<Vec<u8>> for Piece {
+    type Error = String;
+
+    /// Creates a Piece from a vector of bytes
+    /// 
+    /// The expected format is:
+    /// - First byte: bitfield representing block occupancy (0-127)
+    /// 
+    /// ## Parameters
+    /// - `bytes`: Vector of bytes representing the piece
+    /// 
+    /// ## Returns
+    /// A new `Piece` instance or an error if the byte vector is invalid.
+    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        if bytes.len() != 1 {
+            return Err("Byte vector must be exactly 1 byte long".to_string());
+        }
+        let states = bytes[0];
+        if states >= 128 {
+            return Err("Piece state must be in range 0-127".to_string());
+        }
+        Ok(Piece::new(states))
+    }
 }
 
 impl TryFrom<Vec<Hex>> for Piece {
