@@ -66,6 +66,7 @@ impl std::ops::Deref for F16 {
 pub trait BitScalar: Copy {
     fn zero() -> Self;
     fn one() -> Self;
+    fn predicate(self) -> bool;
 }
 
 macro_rules! int_bitscalar {
@@ -73,6 +74,9 @@ macro_rules! int_bitscalar {
         $(impl BitScalar for $t {
             #[inline] fn zero() -> Self { 0 }
             #[inline] fn one() -> Self { 1 }
+            #[inline] fn predicate(self) -> bool { self > 0 }
+            // For unsigned integers, non-zero means true, only zero means false
+            // For signed integers, positive means true, zero and negative means false
         })*
     };
 }
@@ -82,6 +86,7 @@ macro_rules! float_bitscalar {
         $(impl BitScalar for $t {
             #[inline] fn zero() -> Self { 0.0 }
             #[inline] fn one() -> Self { 1.0 }
+            #[inline] fn predicate(self) -> bool { self > 0.0 }
         })*
     };
 }
@@ -92,11 +97,13 @@ float_bitscalar!(f32, f64);
 impl BitScalar for bool {
     #[inline] fn zero() -> Self { false }
     #[inline] fn one() -> Self { true }
+    #[inline] fn predicate(self) -> bool { self }
 }
 
 impl BitScalar for F16 {
     #[inline] fn zero() -> Self { F16(half::f16::from_f32(0.0)) }
     #[inline] fn one() -> Self { F16(half::f16::from_f32(1.0)) }
+    #[inline] fn predicate(self) -> bool { self.0.to_f32() > 0.0 }
 }
 
 use std::sync::OnceLock;
@@ -786,6 +793,46 @@ where
     PyArray2::from_owned_array_bound(py, array).unbind()
 }
 
+fn to_numpy_piece_impl<'py, T>(
+    py: Python<'py>,
+    piece: &Piece,
+) -> Py<PyArray1<T>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    let arr = array![
+        if (piece.state & 0b1000000) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b0100000) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b0010000) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b0001000) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b0000100) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b0000010) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b0000001) != 0 { T::one() } else { T::zero() },
+    ];
+    PyArray1::from_array_bound(py, &arr).unbind()
+}
+
+fn from_numpy_piece_impl<T>(
+    array: &Bound<'_, PyArray<T, ndarray::Dim<[usize; 1]>>>,
+) -> PyResult<Py<Piece>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    let slice = unsafe { array.as_slice()? };
+    if slice.len() != 7 {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "Input array must have exactly 7 elements",
+        ));
+    }
+    let mut state: u8 = 0;
+    for (i, &value) in slice.iter().enumerate() {
+        if T::predicate(value) {
+            state |= 1 << (6 - i);
+        }
+    }
+    Ok(Piece::get_cached(state))
+}
+
 #[pymethods]
 impl Piece {
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
@@ -848,16 +895,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_bool(&self, py: Python) -> Py<PyArray1<bool>> {
-        let arr = array![
-            (self.state & 0b1000000) != 0,
-            (self.state & 0b0100000) != 0,
-            (self.state & 0b0010000) != 0,
-            (self.state & 0b0001000) != 0,
-            (self.state & 0b0000100) != 0,
-            (self.state & 0b0000010) != 0,
-            (self.state & 0b0000001) != 0,
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<bool>(py, self)
     }
 
     /// Get the NumPy ndarray int8 representation of the Piece's block states.
@@ -866,16 +904,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of int8 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<i8>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1i8 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<i8>(py, self)
     }
 
     /// Get the NumPy ndarray uint8 representation of the Piece's block states.
@@ -884,16 +913,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of uint8 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint8(&self, py: Python) -> Py<PyArray1<u8>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1u8 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<u8>(py, self)
     }
 
     /// Get the NumPy ndarray int16 representation of the Piece's block states.
@@ -902,16 +922,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of int16 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int16(&self, py: Python) -> Py<PyArray1<i16>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1i16 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<i16>(py, self)
     }
 
     /// Get the NumPy ndarray uint16 representation of the Piece's block states.
@@ -920,16 +931,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of uint16 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint16(&self, py: Python) -> Py<PyArray1<u16>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1u16 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<u16>(py, self)
     }
 
     /// Get the NumPy ndarray int32 representation of the Piece's block states.
@@ -938,16 +940,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of int32 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int32(&self, py: Python) -> Py<PyArray1<i32>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1i32 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<i32>(py, self)
     }
 
     /// Get the NumPy ndarray uint32 representation of the Piece's block states.
@@ -956,16 +949,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of uint32 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint32(&self, py: Python) -> Py<PyArray1<u32>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1u32 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<u32>(py, self)
     }
 
     /// Get the NumPy ndarray int64 representation of the Piece's block states.
@@ -974,16 +958,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of int64 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_int64(&self, py: Python) -> Py<PyArray1<i64>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1i64 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<i64>(py, self)
     }
 
     /// Get the NumPy ndarray uint64 representation of the Piece's block states.
@@ -992,16 +967,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of uint64 values (1 for occupied, 0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_uint64(&self, py: Python) -> Py<PyArray1<u64>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1u64 } else { 0 },
-            if (self.state & 0b0100000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0010000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0001000) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000100) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000010) != 0 { 1 } else { 0 },
-            if (self.state & 0b0000001) != 0 { 1 } else { 0 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<u64>(py, self)
     }
 
     /// Get the NumPy ndarray float16 representation of the Piece's block states.
@@ -1016,16 +982,7 @@ impl Piece {
     /// Use with caution.
     #[cfg(all(feature = "numpy", feature = "half"))]
     pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-            if (self.state & 0b0100000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-            if (self.state & 0b0010000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-            if (self.state & 0b0001000) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-            if (self.state & 0b0000100) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-            if (self.state & 0b0000010) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-            if (self.state & 0b0000001) != 0 { F16::from_f32(1.0) } else { F16::from_f32(0.0) },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<F16>(py, self)
     }
 
     /// Get the NumPy ndarray float32 representation of the Piece's block states.
@@ -1034,16 +991,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of float32 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_float32(&self, py: Python) -> Py<PyArray1<f32>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1f32 } else { 0f32 },
-            if (self.state & 0b0100000) != 0 { 1f32 } else { 0f32 },
-            if (self.state & 0b0010000) != 0 { 1f32 } else { 0f32 },
-            if (self.state & 0b0001000) != 0 { 1f32 } else { 0f32 },
-            if (self.state & 0b0000100) != 0 { 1f32 } else { 0f32 },
-            if (self.state & 0b0000010) != 0 { 1f32 } else { 0f32 },
-            if (self.state & 0b0000001) != 0 { 1f32 } else { 0f32 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<f32>(py, self)
     }
 
     /// Get the NumPy ndarray float64 representation of the Piece's block states.
@@ -1052,16 +1000,7 @@ impl Piece {
     /// - numpy.ndarray: A 1D NumPy array of float64 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_float64(&self, py: Python) -> Py<PyArray1<f64>> {
-        let arr = array![
-            if (self.state & 0b1000000) != 0 { 1f64 } else { 0f64 },
-            if (self.state & 0b0100000) != 0 { 1f64 } else { 0f64 },
-            if (self.state & 0b0010000) != 0 { 1f64 } else { 0f64 },
-            if (self.state & 0b0001000) != 0 { 1f64 } else { 0f64 },
-            if (self.state & 0b0000100) != 0 { 1f64 } else { 0f64 },
-            if (self.state & 0b0000010) != 0 { 1f64 } else { 0f64 },
-            if (self.state & 0b0000001) != 0 { 1f64 } else { 0f64 },
-        ];
-        PyArray1::from_array_bound(py, &arr).unbind()
+        to_numpy_piece_impl::<f64>(py, self)
     }
 
     /// Convert a vector of Piece instances to a flat NumPy ndarray of boolean values.
@@ -1414,19 +1353,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_bool(arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &b) in slice.iter().enumerate() {
-            if b {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<bool>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of int8 values.
@@ -1438,19 +1365,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int8(arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v > 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<i8>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of uint8 values.
@@ -1462,19 +1377,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint8(arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v != 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<u8>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of int16 values.
@@ -1486,19 +1389,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int16(arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v > 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<i16>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of uint16 values.
@@ -1510,19 +1401,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint16(arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v != 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<u16>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of int32 values.
@@ -1534,19 +1413,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int32(arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v > 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<i32>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of uint32 values.
@@ -1558,19 +1425,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint32(arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v != 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<u32>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of int64 values.
@@ -1583,19 +1438,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_int64(arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v > 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<i64>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of uint64 values.
@@ -1607,19 +1450,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_uint64(arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v != 0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<u64>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of float16 values.
@@ -1636,19 +1467,7 @@ impl Piece {
     #[cfg(all(feature = "numpy", feature = "half"))]
     #[staticmethod]
     pub fn from_numpy_float16(arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v.to_f32() > 0.0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<F16>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of float32 values.
@@ -1660,19 +1479,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_float32(arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v > 0.0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<f32>(&arr)
     }
 
     /// Create a Piece instance from a NumPy ndarray of float64 values.
@@ -1684,19 +1491,7 @@ impl Piece {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn from_numpy_float64(arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Piece>> {
-        let slice = unsafe { arr.as_slice()? };
-        if slice.len() != 7 {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "Input array must have exactly 7 elements",
-            ));
-        }
-        let mut state: u8 = 0;
-        for (i, &v) in slice.iter().enumerate() {
-            if v > 0.0 {
-                state |= 1 << (6 - i);
-            }
-        }
-        Ok(Piece::get_cached(state))
+        from_numpy_piece_impl::<f64>(&arr)
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
