@@ -831,32 +831,6 @@ where
 }
 
 #[cfg(feature = "numpy")]
-fn vec_from_numpy_flat_unboxed<T>(
-    array: PyArray1<T>,
-) -> PyResult<Vec<Piece>>
-where
-    T: BitScalar + Copy + numpy::Element,
-{
-    let slice = unsafe { array.as_slice()? };
-    if slice.len() % 7 != 0 {
-        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            "Input array length must be a multiple of 7",
-        ));
-    }
-    let mut pieces = Vec::with_capacity(slice.len() / 7);
-    for chunk in slice.chunks(7) {
-        let mut state: u8 = 0;
-        for (i, &value) in chunk.iter().enumerate() {
-            if T::predicate(value) {
-                state |= 1 << (6 - i);
-            }
-        }
-        pieces.push(Piece { state } );
-    }
-    Ok(pieces)
-}
-
-#[cfg(feature = "numpy")]
 fn vec_from_numpy_stacked_impl<T>(
     array: &Bound<'_, PyArray2<T>>,
 ) -> PyResult<Vec<Py<Piece>>>
@@ -886,40 +860,6 @@ where
             }
         }
         pieces.push(Piece::get_cached(state));
-    }
-    Ok(pieces)
-}
-
-#[cfg(feature = "numpy")]
-fn vec_from_numpy_stacked_unboxed<T>(
-    array: PyArray2<T>,
-) -> PyResult<Vec<Piece>>
-where
-    T: BitScalar + Copy + numpy::Element,
-{
-    use numpy::PyUntypedArrayMethods;
-    let shape = array.shape();
-    if shape.len() != 2 || shape[1] != 7 {
-        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            "Input array must have shape (n, 7)",
-        ));
-    }
-    let n = shape[0];
-    let c = array.strides()[0] as usize;
-    let mut pieces = Vec::with_capacity(n);
-    for i in 0..n {
-        let row = unsafe { array.as_slice()?.get(
-            i * c..(i * c + 7)
-        ).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>("Failed to access row in input array")
-        })? };
-        let mut state: u8 = 0;
-        for (j, &value) in row.iter().enumerate() {
-            if T::predicate(value) {
-                state |= 1 << (6 - j);
-            }
-        }
-        pieces.push(Piece { state } );
     }
     Ok(pieces)
 }
