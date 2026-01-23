@@ -825,7 +825,7 @@ arr_f32 = arr.astype(np.float32)
 engine = HexEngine.from_numpy_float32(arr_f32)
 ```
 
-### Supported Data Types
+#### Supported Data Types
 
 The following table summarizes all supported NumPy dtypes for HexEngine serialization:
 
@@ -852,3 +852,180 @@ The following table summarizes all supported NumPy dtypes for HexEngine serializ
 **Special note on `from_numpy_raw_view` and `to_numpy_raw_view`:**
 Only `from_numpy_raw_view()` is available for zero-copy views, and it only works with `bool_` dtype arrays. This is the only method converting from NumPy that doesn't copy data, but it comes with significant safety requirements as documented above. Similarly, `to_numpy_raw_view()` only produces `bool_` dtype arrays, and requires careful management to avoid double-free errors.
 
+
+### Serialization for Game
+
+The `Game` class provides comprehensive NumPy integration for converting game states, including both the engine and piece queue, to and from array representations. This enables efficient serialization for machine learning applications, game state analysis, and reinforcement learning.
+
+#### Converting to NumPy
+
+The `to_numpy()` method returns a 1D boolean array representing the entire game state (engine followed by queue):
+```python
+from hpyhex import Game
+
+game = Game(radius=3, queue=3)
+# Add some pieces...
+arr = game.to_numpy()
+# arr.dtype == np.bool_
+# arr.shape == (37 + 3*7,)  # engine cells + queue pieces * 7 blocks
+# arr[:37] represents the engine state
+# arr[37:] represents the flattened queue
+```
+
+For specific numeric types, use the typed conversion methods:
+```python
+# Integer types
+arr_i8 = game.to_numpy_int8()      # dtype: int8
+arr_u8 = game.to_numpy_uint8()     # dtype: uint8
+arr_i16 = game.to_numpy_int16()    # dtype: int16
+arr_u16 = game.to_numpy_uint16()   # dtype: int16
+arr_i32 = game.to_numpy_int32()    # dtype: int32
+arr_u32 = game.to_numpy_uint32()   # dtype: uint32
+arr_i64 = game.to_numpy_int64()    # dtype: int64
+arr_u64 = game.to_numpy_uint64()   # dtype: uint64
+
+# Floating point types
+arr_f32 = game.to_numpy_float32()  # dtype: float32
+arr_f64 = game.to_numpy_float64()  # dtype: float64
+
+# Half precision (requires "half" feature, experimental)
+arr_f16 = game.to_numpy_float16()  # dtype: float16
+```
+
+#### Converting from NumPy
+
+Use the `from_numpy_with_*` methods to construct a `Game` instance from a NumPy array. You must specify either the radius or queue length to properly interpret the array structure.
+
+For radius-based construction:
+```python
+import numpy as np
+from hpyhex import Game
+
+# Array with engine (37 cells) + queue (3 pieces * 7 = 21 blocks) = 58 elements
+arr = np.zeros(58, dtype=bool)
+# Set some engine cells and queue pieces...
+game = Game.from_numpy_with_radius_bool(radius=3, arr=arr)
+print(game.engine.radius)  # 3
+print(len(game.queue))     # Inferred from array length
+```
+
+For queue length-based construction:
+```python
+# Same array, but specify queue length instead
+game = Game.from_numpy_with_queue_length_bool(length=3, arr=arr)
+print(game.engine.radius)  # Inferred from array length
+print(len(game.queue))     # 3
+```
+
+For specific numeric types:
+```python
+# Radius-based
+game_u8 = Game.from_numpy_with_radius_uint8(radius=3, arr_u8)
+game_f32 = Game.from_numpy_with_radius_float32(radius=3, arr_f32)
+
+# Queue length-based
+game_u8 = Game.from_numpy_with_queue_length_uint8(length=3, arr_u8)
+game_f32 = Game.from_numpy_with_queue_length_float32(length=3, arr_f32)
+```
+
+#### Queue-Only Conversion
+
+For converting just the piece queue, use the `queue_to_numpy_*` methods:
+```python
+# Flat representation (1D array concatenating all pieces)
+queue_flat = game.queue_to_numpy_flat()
+# queue_flat.shape == (3*7,)  # 21 elements
+
+# Stacked representation (2D array, one row per piece)
+queue_stacked = game.queue_to_numpy_stacked()
+# queue_stacked.shape == (3, 7)  # 3 pieces, 7 blocks each
+
+# Typed versions
+queue_u8_flat = game.queue_to_numpy_uint8_flat()
+queue_u8_stacked = game.queue_to_numpy_uint8_stacked()
+```
+
+#### Engine-Only Conversion
+
+To convert just the engine, access it directly through the game instance:
+```python
+engine_arr = game.engine.to_numpy()
+# This uses HexEngine's to_numpy method
+# See HexEngine serialization documentation for details
+```
+
+Since the `engine` is stored as a Python reference within the `Game` instance, no additional copying or Python object creation is needed, making this operation as efficient as if separate methods were provided.
+
+#### Validation and Error Handling
+
+All `from_numpy_with_*` methods validate the input array:
+
+- **Length validation**: Array length must correspond to a valid game state (engine + queue)
+- **Type validation**: Array dtype must match the method's expected type
+- **Parameter validation**: Specified radius/queue length must be consistent with array structure
+
+If validation fails, a `ValueError` is raised:
+```python
+# Wrong length
+arr = np.zeros(50, dtype=bool)  # Not a valid game state length
+try:
+    game = Game.from_numpy_with_radius_bool(radius=3, arr=arr)
+except ValueError as e:
+    print(f"Error: {e}")  # Invalid array length for game state
+
+# Inconsistent parameters
+arr = np.zeros(58, dtype=bool)
+try:
+    game = Game.from_numpy_with_queue_length_bool(length=5, arr=arr)  # Wrong queue length
+except ValueError as e:
+    print(f"Error: {e}")  # Queue length doesn't match array structure
+```
+
+#### Type Casting Considerations
+
+NumPy arrays cannot be easily cast between types at the Rust/Python boundary. Therefore, **there is no universal `from_numpy()` method**. You must use the specific typed method that matches your array's dtype:
+```python
+# No automatic type detection
+arr = np.ones(58, dtype=np.int32)
+# game = Game.from_numpy_with_radius(arr, radius=3)  # This method doesn't exist!
+
+# Use the typed method matching your dtype
+game = Game.from_numpy_with_radius_int32(radius=3, arr=arr)
+
+# If you need to convert between types, do it in NumPy first:
+arr_f32 = arr.astype(np.float32)
+game = Game.from_numpy_with_radius_float32(radius=3, arr_f32)
+```
+
+#### Zero Copy
+
+Game serialization always involves copying data between NumPy arrays and Game instances, as the internal representations are optimized for different access patterns.
+
+#### Supported Data Types
+
+The following table summarizes all supported NumPy dtypes for Game serialization:
+
+| NumPy dtype | `to_numpy_*`           | `from_numpy_with_radius_*`         | `from_numpy_with_queue_length_*`         | `queue_to_numpy_*_flat`         | `queue_to_numpy_*_stacked`         |
+|-------------|------------------------|------------------------------------|------------------------------------------|---------------------------------|------------------------------------|
+| `bool_`     | `to_numpy()` (default) | `from_numpy_with_radius_bool()`    | `from_numpy_with_queue_length_bool()`    | `queue_to_numpy_flat()`         | `queue_to_numpy_stacked()`         |
+| `int8`      | `to_numpy_int8()`      | `from_numpy_with_radius_int8()`    | `from_numpy_with_queue_length_int8()`    | `queue_to_numpy_int8_flat()`    | `queue_to_numpy_int8_stacked()`    |
+| `uint8`     | `to_numpy_uint8()`     | `from_numpy_with_radius_uint8()`   | `from_numpy_with_queue_length_uint8()`   | `queue_to_numpy_uint8_flat()`   | `queue_to_numpy_uint8_stacked()`   |
+| `int16`     | `to_numpy_int16()`     | `from_numpy_with_radius_int16()`   | `from_numpy_with_queue_length_int16()`   | `queue_to_numpy_int16_flat()`   | `queue_to_numpy_int16_stacked()`   |
+| `uint16`    | `to_numpy_uint16()`    | `from_numpy_with_radius_uint16()`  | `from_numpy_with_queue_length_uint16()`  | `queue_to_numpy_uint16_flat()`  | `queue_to_numpy_uint16_stacked()`  |
+| `int32`     | `to_numpy_int32()`     | `from_numpy_with_radius_int32()`   | `from_numpy_with_queue_length_int32()`   | `queue_to_numpy_int32_flat()`   | `queue_to_numpy_int32_stacked()`   |
+| `uint32`    | `to_numpy_uint32()`    | `from_numpy_with_radius_uint32()`  | `from_numpy_with_queue_length_uint32()`  | `queue_to_numpy_uint32_flat()`  | `queue_to_numpy_uint32_stacked()`  |
+| `int64`     | `to_numpy_int64()`     | `from_numpy_with_radius_int64()`   | `from_numpy_with_queue_length_int64()`   | `queue_to_numpy_int64_flat()`   | `queue_to_numpy_int64_stacked()`   |
+| `uint64`    | `to_numpy_uint64()`    | `from_numpy_with_radius_uint64()`  | `from_numpy_with_queue_length_uint64()`  | `queue_to_numpy_uint64_flat()`  | `queue_to_numpy_uint64_stacked()`  |
+| `float16`   | `to_numpy_float16()`   | `from_numpy_with_radius_float16()` | `from_numpy_with_queue_length_float16()` | `queue_to_numpy_float16_flat()` | `queue_to_numpy_float16_stacked()` |
+| `float32`   | `to_numpy_float32()`   | `from_numpy_with_radius_float32()` | `from_numpy_with_queue_length_float32()` | `queue_to_numpy_float32_flat()` | `queue_to_numpy_float32_stacked()` |
+| `float64`   | `to_numpy_float64()`   | `from_numpy_with_radius_float64()` | `from_numpy_with_queue_length_float64()` | `queue_to_numpy_float64_flat()` | `queue_to_numpy_float64_stacked()` |
+
+Call `.engine.to_numpy_*()` on the `engine` attribute of the `Game` instance to convert the engine portion separately.
+
+See [HexEngine serialization documentation](#serialization-for-hexengine) for details on engine array representations.
+See [Queue serialization documentation](#serialization-for-vector-of-piece-piece-queues) for details on queue array representations.
+
+**Recommended types:**
+- Use `bool_` for minimal memory footprint
+- Use `uint8` for compact integer formats
+- Use `float32` for machine learning applications
