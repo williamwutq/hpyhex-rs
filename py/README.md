@@ -532,9 +532,36 @@ The array must be a 1 dimension boolean NumPy array of valid hexagonal grid leng
 6. **Engine lifetime must not exceed array lifetime** - The lifetime of the HexEngine must not exceed that of the original NumPy array in both Python and NumPy memory management. If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing the HexEngine's states.
 7. **Array must be mutable and not shared** across threads - If the NumPy array is shared across multiple references or threads, modifying it in Rust could lead to data corruption or race conditions.
 
-**Double-Free Memory Management Issue**: Under normal conditions, even if all the above conditions are met, this method will eventually lead to a double-free error when both Rust and Python attempt to free the same memory during their respective deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is responsible for freeing the memory. If this is undesirable, consider holding references to both objects until the end of the program execution so that all double-free errors occur only at program termination.
+Similarly, `to_numpy_raw_view` creates a NumPy array that directly references the HexEngine's memory without copying:
+```python
+from hpyhex import HexEngine
 
-Violating these requirements leads to undefined behavior including segmentation faults, data corruption, or mysterious crashes. **Use `from_numpy_bool()` instead unless performance is absolutely critical and you understand the risks.**
+engine = HexEngine(radius=3)
+arr = engine.to_numpy_raw_view()  # Zero-copy, extremely fast
+
+# Modifying arr also modifies engine (they share memory!)
+arr[10] = True
+# engine's state at index 10 is now also True
+```
+
+**Critical Safety Requirements** for `to_numpy_raw_view`:
+
+The following conditions must be met for safe usage:
+
+It is assumed that the HexEngine contains a valid hexagonal grid state and does not perform any checks.
+
+The method also assumes that the memory of the HexEngine's states:
+
+- Is allocated on the host (CPU) memory. If the data is allocated on a different device (e.g., GPU), accessing its memory directly from NumPy will lead to undefined behavior or mysterious crashes.
+- Is allocated in a way that is compatible with NumPy's memory layout. This means that it is not padded or aligned in a way that would be incompatible with NumPy's expectations.
+- Is contiguous. If it is not contiguous, the function will panic.
+- Is not used elsewhere after this function is called. Since the function takes a view of the data, any further use of the original HexEngine will lead to undefined behavior, including potential crashes or data corruption.
+- Is mutable and not shared. If the HexEngine's states are shared across multiple references or threads, modifying it in NumPy could lead to data corruption or race conditions.
+- Has a lifetime that does not exceed that of the HexEngine in both Python and Rust memory management. If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing the NumPy array's data.
+
+**Double-Free Memory Management Issue**: Under normal conditions, even if all the above conditions are met, these methods will eventually lead to a double-free error when both Rust and Python attempt to free the same memory during their respective deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is responsible for freeing the memory. If this is undesirable, consider holding references to both objects until the end of the program execution so that all double-free errors occur only at program termination.
+
+Violating these requirements leads to undefined behavior including segmentation faults, data corruption, or mysterious crashes. **Use `from_numpy_bool()` and `to_numpy_bool()` instead unless performance is absolutely critical and you understand the risks.**
 
 #### Type Casting Considerations
 
@@ -576,6 +603,6 @@ The following table summarizes all supported NumPy dtypes for HexEngine serializ
 - Use `uint8` for serialization to compact integer formats
 - Use `float32` for general machine learning (PyTorch, TensorFlow default)
 
-**Special note on `from_numpy_raw_view`:**
-Only `from_numpy_raw_view()` is available for zero-copy views, and it only works with `bool_` dtype arrays. This is the only method that doesn't copy data, but it comes with significant safety requirements as documented above.
+**Special note on `from_numpy_raw_view` and `to_numpy_raw_view`:**
+Only `from_numpy_raw_view()` is available for zero-copy views, and it only works with `bool_` dtype arrays. This is the only method converting from NumPy that doesn't copy data, but it comes with significant safety requirements as documented above. Similarly, `to_numpy_raw_view()` only produces `bool_` dtype arrays, and requires careful management to avoid double-free errors.
 

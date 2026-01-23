@@ -2143,6 +2143,54 @@ impl HexEngine {
         PyArray1::from_vec_bound(py, float_states).into()
     }
 
+    /// Create a NumPy ndarray boolean representation of the HexEngine's block states
+    /// without copying the underlying data. The method is extremely unsafe
+    /// and should be used with caution.
+    /// 
+    /// The following conditions must be met for safe usage:
+    /// 
+    /// It is assumed that the HexEngine contains a valid hexagonal grid state and does not perform any checks.
+    /// 
+    /// The method also assumes that the memory of the HexEngine's states:
+    /// - Is allocated on the host (CPU) memory. If the data is allocated on a different device (e.g., GPU),
+    ///   accessing its memory directly from NumPy will lead to undefined behavior or mysterious crashes.
+    /// - Is allocated in a way that is compatible with NumPy's memory layout. This means that it 
+    ///   is not padded or aligned in a way that would be incompatible with NumPy's expectations.
+    /// - Is contiguous. If it is not contiguous, the function will panic.
+    /// - Is not used elsewhere after this function is called. Since the function takes a view of the data,
+    ///   any further use of the original HexEngine will lead to undefined behavior, including potential crashes
+    ///   or data corruption.
+    /// - Is mutable and not shared. If the HexEngine's states are shared across multiple references or threads,
+    ///   modifying it in NumPy could lead to data corruption or race conditions.
+    /// 
+    /// After conversion, the data is technically still held by Rust. So it is necessary to ensure that
+    /// the lifetime of the NumPy array does not exceed that of the HexEngine in both Python and Rust memory management.
+    /// If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing
+    /// the NumPy array's data.
+    /// 
+    /// IMPORTANT: Under normal conditions, even if all the above conditions are met, this method will eventually
+    /// lead to a double-free error when both Rust and Python attempt to free the same memory during their respective
+    /// deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the
+    /// HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is
+    /// responsible for freeing the memory. If this is undesirable, consider holding references to both objects until the end
+    /// of the program execution so that all double free errors occur only at program termination.
+    /// 
+    /// For these reasons, unless performance is absolutely critical and you are certain that all the above
+    /// conditions are met, it is strongly recommended to use the safe alternative `to_numpy_bool` method instead,
+    /// which copies the data and performs necessary operations safely.
+    ///
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
+    /// Warning:
+    /// - This function is highly unsafe and can lead to undefined behavior if the above conditions are not met.
+    pub unsafe fn to_numpy_raw_view<'t>(&self, py: Python<'t>) -> Bound<'t, PyArray1<bool>> {
+        // First, we violate safety by create two Vec<bool> pointers to the same data
+        let ptr = self.states.as_ptr();
+        let len = self.states.len();
+        let vec = unsafe { Vec::from_raw_parts(ptr as *mut bool, len, len) };
+        PyArray1::from_vec_bound(py, vec).into()
+    }
+
     /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states
     /// without validation and taking a view of the underlying data. The method is extremely unsafe
     /// and should be used with caution.
