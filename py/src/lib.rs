@@ -1,9 +1,11 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 #[cfg(feature = "numpy")]
-use numpy::{PyArray1, PyArray, PyArrayMethods, PyArrayDescr, dtype_bound};
+use numpy::{PyArray1, PyArray2, PyArray, PyArrayMethods, PyArrayDescr, dtype_bound};
 #[cfg(feature = "numpy")]
 use numpy::ndarray::array;
+#[cfg(feature = "numpy")]
+use numpy::ndarray;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyAny, PyType};
@@ -61,6 +63,41 @@ impl std::ops::Deref for F16 {
     }
 }
 
+pub trait BitScalar: Copy {
+    fn zero() -> Self;
+    fn one() -> Self;
+}
+
+macro_rules! int_bitscalar {
+    ($($t:ty),*) => {
+        $(impl BitScalar for $t {
+            #[inline] fn zero() -> Self { 0 }
+            #[inline] fn one() -> Self { 1 }
+        })*
+    };
+}
+
+macro_rules! float_bitscalar {
+    ($($t:ty),*) => {
+        $(impl BitScalar for $t {
+            #[inline] fn zero() -> Self { 0.0 }
+            #[inline] fn one() -> Self { 1.0 }
+        })*
+    };
+}
+
+int_bitscalar!(i8, u8, i16, u16, i32, u32, i64, u64);
+float_bitscalar!(f32, f64);
+
+impl BitScalar for bool {
+    #[inline] fn zero() -> Self { false }
+    #[inline] fn one() -> Self { true }
+}
+
+impl BitScalar for F16 {
+    #[inline] fn zero() -> Self { F16(half::f16::from_f32(0.0)) }
+    #[inline] fn one() -> Self { F16(half::f16::from_f32(1.0)) }
+}
 
 use std::sync::OnceLock;
 use std::hash::{Hash, Hasher};
@@ -694,6 +731,61 @@ impl Piece {
     }
 }
 
+fn vec_to_numpy_flat_impl<'py, T>(
+    py: Python<'py>,
+    pieces: Vec<Py<Piece>>,
+) -> Py<PyArray1<T>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    let mut arr = Vec::with_capacity(pieces.len() * 7);
+    for piece in pieces.iter() {
+        let piece_ref = piece.bind(py).extract::<PyRef<Piece>>().unwrap();
+        for i in 0..7 {
+            let b = if (piece_ref.state & (1 << (6 - i))) != 0 { T::one() } else { T::zero() };
+            arr.push(b);
+        }
+    }
+    PyArray1::from_vec_bound(py, arr).unbind()
+}
+
+#[cfg(feature = "numpy")]
+fn vec_to_numpy_stacked_impl<'py, T>(
+    py: Python<'py>,
+    pieces: Vec<Py<Piece>>,
+) -> Py<PyArray2<T>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    use ndarray::{Array2, ShapeBuilder};
+
+    let n = pieces.len();
+    let shape = (n, 7).strides((8, 1));
+
+    let mut vec = Vec::with_capacity(n * 8);
+
+    for piece in &pieces {
+        let piece_ref = piece.bind(py).extract::<PyRef<Piece>>().unwrap();
+        let s = piece_ref.state;
+
+        let v = [
+            if s & 0b1000000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0100000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0010000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0001000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0000100 != 0 { T::one() } else { T::zero() },
+            if s & 0b0000010 != 0 { T::one() } else { T::zero() },
+            if s & 0b0000001 != 0 { T::one() } else { T::zero() },
+        ];
+
+        vec.extend_from_slice(&v);
+        vec.push(T::zero()); // padding for stride
+    }
+
+    let array = Array2::from_shape_vec(shape, vec).unwrap();
+    PyArray2::from_owned_array_bound(py, array).unbind()
+}
+
 #[pymethods]
 impl Piece {
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
@@ -970,6 +1062,347 @@ impl Piece {
             if (self.state & 0b0000001) != 0 { 1f64 } else { 0f64 },
         ];
         PyArray1::from_array_bound(py, &arr).unbind()
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<bool>> {
+        Self::vec_to_numpy_bool_flat(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of boolean values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<bool>> {
+        Self::vec_to_numpy_bool_stacked(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_bool_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<bool>> {
+        vec_to_numpy_flat_impl::<bool>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of boolean values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of boolean values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_bool_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<bool>> {
+        vec_to_numpy_stacked_impl::<bool>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of int8 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int8 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int8_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i8>> {
+        vec_to_numpy_flat_impl::<i8>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of int8 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of int8 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int8_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i8>> {
+        vec_to_numpy_stacked_impl::<i8>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of uint8 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint8 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint8_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u8>> {
+        vec_to_numpy_flat_impl::<u8>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of uint8 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of uint8 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint8_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u8>> {
+        vec_to_numpy_stacked_impl::<u8>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of int16 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int16 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int16_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i16>> {
+        vec_to_numpy_flat_impl::<i16>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of int16 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of int16 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i16>> {
+        vec_to_numpy_stacked_impl::<i16>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of uint16 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint16 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint16_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u16>> {
+        vec_to_numpy_flat_impl::<u16>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of uint16 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of uint16 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u16>> {
+        vec_to_numpy_stacked_impl::<u16>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of int32 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int32 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int32_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i32>> {
+        vec_to_numpy_flat_impl::<i32>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of int32 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of int32 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int32_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i32>> {
+        vec_to_numpy_stacked_impl::<i32>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a flat NumPy ndarray of uint32 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint32 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint32_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u32>> {
+        vec_to_numpy_flat_impl::<u32>(py, pieces)
+    }
+
+    /// Convert a vector of Piece instances to a stacked NumPy ndarray of uint32 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of uint32 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint32_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u32>> {
+        vec_to_numpy_stacked_impl::<u32>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a flat NumPy ndarray of int64 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int64 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int64_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i64>> {
+        vec_to_numpy_flat_impl::<i64>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a stacked NumPy ndarray of int64 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of int64 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_int64_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i64>> {
+        vec_to_numpy_stacked_impl::<i64>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a flat NumPy ndarray of uint64 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint64 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint64_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u64>> {
+        vec_to_numpy_flat_impl::<u64>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a stacked NumPy ndarray of uint64 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of uint64 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_uint64_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u64>> {
+        vec_to_numpy_stacked_impl::<u64>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a flat NumPy ndarray of float32 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float32 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_float32_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<f32>> {
+        vec_to_numpy_flat_impl::<f32>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a stacked NumPy ndarray of float32 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of float32 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_float32_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<f32>> {
+        vec_to_numpy_stacked_impl::<f32>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a flat NumPy ndarray of float64 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float64 values representing the block states of all pieces.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_float64_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<f64>> {
+        vec_to_numpy_flat_impl::<f64>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a stacked NumPy ndarray of float64 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of float64 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn vec_to_numpy_float64_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<f64>> {
+        vec_to_numpy_stacked_impl::<f64>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a flat NumPy ndarray of float16 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float16 values representing the block states of all pieces.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn vec_to_numpy_float16_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<F16>> {
+        vec_to_numpy_flat_impl::<F16>(py, pieces)
+    }
+
+    /// Create a vector of Piece instances to a stacked NumPy ndarray of float16 values.
+    /// 
+    /// Arguments:
+    /// - pieces (list[Piece]): A list of Piece instances to convert.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of float16 values with shape (num_pieces, 7)
+    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn vec_to_numpy_float16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<F16>> {
+        vec_to_numpy_stacked_impl::<F16>(py, pieces)
     }
 
     /// Create a Piece instance from a NumPy ndarray of boolean values.
