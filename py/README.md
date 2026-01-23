@@ -394,11 +394,11 @@ arr_f32 = arr.astype(np.float32) # Note that Numpy does a copy here
 piece = Piece.from_numpy_float32(arr_f32)
 ```
 
-### Zero Copy
+#### Zero Copy
 
 There is no need for zero-copy conversion between NumPy arrays and `Piece` objects, as the data size is only 7 bytes. In addition, since Pieces are optimized with a fixed cache of pre-defined objects, they are already "zero-copy" in a sense that no new memory allocation is needed when creating a Piece from its byte representation. Therefore, all conversions involve "copying" data between the NumPy array and the Piece object.
 
-### Supported Data Types
+#### Supported Data Types
 
 The following table summarizes all supported NumPy dtypes for Piece serialization:
 
