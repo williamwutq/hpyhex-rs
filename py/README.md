@@ -552,9 +552,7 @@ It is assumed that the HexEngine contains a valid hexagonal grid state and does 
 
 The method also assumes that the memory of the HexEngine's states:
 
-- Is allocated on the host (CPU) memory. If the data is allocated on a different device (e.g., GPU), accessing its memory directly from NumPy will lead to undefined behavior or mysterious crashes.
-- Is allocated in a way that is compatible with NumPy's memory layout. This means that it is not padded or aligned in a way that would be incompatible with NumPy's expectations.
-- Is contiguous. If it is not contiguous, the function will panic.
+- Is compatible with NumPy's memory layout. This means that NumPy must be able to interpret the HexEngine's internal memory representation correctly as a NumPy array of the expected dtype and shape, and must not expect special padding or alignment that is not present.
 - Is not used elsewhere after this function is called. Since the function takes a view of the data, any further use of the original HexEngine will lead to undefined behavior, including potential crashes or data corruption.
 - Is mutable and not shared. If the HexEngine's states are shared across multiple references or threads, modifying it in NumPy could lead to data corruption or race conditions.
 - Has a lifetime that does not exceed that of the HexEngine in both Python and Rust memory management. If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing the NumPy array's data.
