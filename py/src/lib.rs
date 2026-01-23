@@ -1558,6 +1558,26 @@ impl TryFrom<usize> for HexEngine {
 
 // This is the backend scope, nothing is exposed to Python here
 impl HexEngine {
+    /// Create a HexEngine instance from a raw state vector without validation.
+    /// 
+    /// This unsafe method assumes that the provided state vector length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the state vector.
+    /// 
+    /// If the length of the state vector does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - value: A vector of booleans representing the occupancy state of each block in the hexagonal grid.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    pub unsafe fn from_raw_state(value: Vec<bool>) -> Self {
+        let t = (value.len() - 1) / 3;
+        let radius = (((t * 4 + 1) as f64).sqrt() as usize + 1) >> 1;
+        HexEngine {
+            radius,
+            states: value
+        }
+    }
     /// Calculate the radius of the hexagonal grid from the length of the state vector.
     /// 
     /// This method derives the radius based on the formula for the total number of blocks
@@ -2121,6 +2141,475 @@ impl HexEngine {
     pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
         let float_states: Vec<F16> = self.states.iter().map(|&b| if b { F16::from_f32(1.0) } else { F16::from_f32(0.0) }).collect();
         PyArray1::from_vec_bound(py, float_states).into()
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states
+    /// without validation and taking a view of the underlying data. The method is extremely unsafe
+    /// and should be used with caution.
+    /// 
+    /// The following conditions must be met for safe usage:
+    /// 
+    /// It is assumed that when this method is used, the provided NumPy array length corresponds to a
+    /// valid hexagonal grid size and does not perform any checks. It calculates the radius based on the
+    /// length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// The method also assumes that the memory of the NumPy array:
+    /// - Is allocated on the host (CPU) memory. If the array is allocated on a different device (e.g., GPU),
+    ///   accessing its memory directly from Rust will lead to undefined behavior or mysterious crashes.
+    /// - Is allocated in a way that is compatible with Rust's Vec<bool> memory layout. This means that it 
+    ///   it not padded or aligned in a way that would be incompatible with Rust's expectations for Vec<bool>.
+    /// - Is contiguous. If it is not contiguous, the function will panic.
+    /// - Is not used elsewhere after this function is called. Since the function takes a view of the data,
+    ///   any further use of the original NumPy array will lead to undefined behavior, including potential crashes
+    ///   or data corruption.
+    /// - Is mutable and not shared. If the NumPy array is shared across multiple references or threads,
+    ///   modifying it in Rust could lead to data corruption or race conditions.
+    /// 
+    /// After conversion, the data is technically still held by NumPy. So it is necessary to ensure that
+    /// the lifetime of the HexEngine does not exceed that of the original NumPy array in both Python and NumPy memory management.
+    /// If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing
+    /// the HexEngine's states.
+    /// 
+    /// For these reasons, unless performance is absolutely critical and you are certain that all the above
+    /// conditions are met, it is strongly recommended to use the safe alternative `from_numpy_bool` method instead,
+    /// which copies the data and performs necessary validations. Or if you are sure about the data validity,
+    /// the no validation (but still copying) version `from_numpy_bool_unchecked`.
+    ///
+    /// Arguments:
+    /// - array: A 1D NumPy array of boolean values representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_raw_view<'t>(array: Bound<'t, PyArray1<bool>>) -> Self {
+        let slice = unsafe { array.as_slice_mut().unwrap() };
+        let ptr = slice.as_mut_ptr();
+        let len = slice.len();
+        let vec = unsafe { Vec::from_raw_parts(ptr, len, len) };
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of boolean values representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_bool(array: Bound<'_, PyArray1<bool>>) -> PyResult<Self> {
+        let vec = array.to_vec()?;
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of boolean values representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_bool_unchecked(array: Bound<'_, PyArray1<bool>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.to_vec();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int8 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int8 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int8(array: Bound<'_, PyArray1<u8>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int8 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int8 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_int8_unchecked(array: Bound<'_, PyArray1<u8>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint8 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint8(array: Bound<'_, PyArray1<u8>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint8 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_uint8_unchecked(array: Bound<'_, PyArray1<u8>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int16 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int16 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int16(array: Bound<'_, PyArray1<i16>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int16 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int16 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_int16_unchecked(array: Bound<'_, PyArray1<i16>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint16 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint16(array: Bound<'_, PyArray1<u16>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint16 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_uint16_unchecked(array: Bound<'_, PyArray1<u16>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int32 representation of the block states.
+    ///
+    /// Arguments:
+    /// - array: A 1D NumPy array of int32 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int32(array: Bound<'_, PyArray1<i32>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int32 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int32 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_int32_unchecked(array: Bound<'_, PyArray1<i32>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint32 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint32(array: Bound<'_, PyArray1<u32>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint32 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_uint32_unchecked(array: Bound<'_, PyArray1<u32>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int64 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int64 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_int64(array: Bound<'_, PyArray1<i64>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray int64 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of int64 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_int64_unchecked(array: Bound<'_, PyArray1<i64>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint64 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_uint64(array: Bound<'_, PyArray1<u64>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray uint64 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_uint64_unchecked(array: Bound<'_, PyArray1<u64>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b != 0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray float32 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0.0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_float32(array: Bound<'_, PyArray1<f32>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray float32 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_float32_unchecked(array: Bound<'_, PyArray1<f32>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray float64 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0.0 are true, else false).
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_float64(array: Bound<'_, PyArray1<f64>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray float64 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub unsafe fn from_numpy_float64_unchecked(array: Bound<'_, PyArray1<f64>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b > 0.0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray float16 representation of the block states.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of float16 values (0.0 or 1.0) representing the block states.
+    /// Returns:
+    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0.0 are true, else false).
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it may cause a segmentation fault.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn from_numpy_float16(array: Bound<'_, PyArray1<F16>>) -> PyResult<Self> {
+        let slice = unsafe { array.as_slice()? };
+        let vec: Vec<bool> = slice.iter().map(|&b| b.to_f32() > 0.0).collect::<Vec<bool>>();
+        HexEngine::try_from(vec)
+    }
+
+    /// Construct a HexEngine from a NumPy ndarray float16 representation of the block states without validation.
+    /// 
+    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+    /// size and does not perform any checks. It calculates the radius based on the length of the array.
+    /// 
+    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+    /// the behavior is undefined and may cause runtime errors or panics down the line.
+    /// 
+    /// Arguments:
+    /// - array: A 1D NumPy array of float16 values (0.0 or 1.0) representing the block states.
+    /// Returns:
+    /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it may cause a segmentation fault. Those unintended behaviors
+    /// may still occur even when the arguments to the function are valid.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub unsafe fn from_numpy_float16_unchecked(array: Bound<'_, PyArray1<F16>>) -> Self {
+        let slice = unsafe { array.as_slice().unwrap() };
+        let vec: Vec<bool> = slice.iter().map(|&b| b.to_f32() > 0.0).collect::<Vec<bool>>();
+        unsafe { HexEngine::from_raw_state(vec) }
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
