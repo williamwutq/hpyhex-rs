@@ -2894,6 +2894,44 @@ impl HexEngine {
         let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
         PyArray1::from_vec_bound(py, int_states).into()
     }
+
+    #[allow(deprecated)]
+    #[cfg(feature = "numpy")]
+    fn to_numpy_engine_unboxed_impl<'py, T>(&self, py: Python<'py>) -> &'py PyArray1<T>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
+        &PyArray1::from_vec(py, int_states)
+    }
+
+    #[cfg(feature = "numpy")]
+    fn from_numpy_engine_unboxed_explicit_radius_impl<T>(
+        slice: &[T],
+        radius: usize,
+    ) -> PyResult<HexEngine>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        let vec: Vec<bool> = slice.iter().map(|&b| T::predicate(b)).collect::<Vec<bool>>();
+        let expected_len = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
+        if vec.len() != expected_len {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Input array length {} does not match expected length {} for radius {}",
+                vec.len(),
+                expected_len,
+                radius
+            )));
+        }
+        Ok(HexEngine {
+            radius,
+            states: vec,
+        })
+    }
 }
 
 #[pymethods]
@@ -4759,7 +4797,16 @@ impl PieceFactory {
 /// 
 /// See the "NumPy Integration" of HexEngine for more details on engine conversion methods.
 /// 
+/// Game Conversion Methods:
+/// - game_to_numpy: Converts the entire game state (engine and queue) into a NumPy ndarray.
+/// - game_from_numpy_with_radius: Creates a Game instance from a NumPy ndarray representation with explicit radius.
+/// - game_from_numpy_with_queue_length: Creates a Game instance from a NumPy ndarray representation with explicit queue length.
 /// 
+/// There is no generic game_from_numpy method because the radius or queue length must be specified to
+/// correctly interpret the ndarray representation.
+/// 
+/// For specific dtype, the methods are named game_to_numpy_{dtype}, game_from_numpy_with_radius_{dtype},
+/// and game_from_numpy_with_queue_length_{dtype}, where {dtype} can be 'bool', 'int8', etc.
 #[pyclass]
 pub struct Game {
     #[pyo3(get, set)]
@@ -4830,6 +4877,137 @@ where
 
 #[allow(non_snake_case)]
 impl Game {
+    /* ---------------------------------------- NUMPY ---------------------------------------- */
+    /// Get the NumPy ndarray boolean representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    #[allow(deprecated)]
+    fn game_to_numpy_impl<'py, T>(
+        &self,
+        py: Python<'py>,
+    ) -> Py<PyArray1<T>>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        let engine = self._Game__engine.borrow(py);
+        let engine_array: &PyArray1<T> = engine.to_numpy_engine_unboxed_impl::<T>(py);
+        let engine_slice = unsafe { engine_array.as_slice().unwrap() };
+
+        let mut arr = Vec::with_capacity(engine_slice.len() + self._Game__queue.len() * 7);
+        arr.extend_from_slice(engine_slice);
+        for piece in self._Game__queue.iter() {
+            for i in 0..7 {
+                let b = if (piece.state & (1 << (6 - i))) != 0 { T::one() } else { T::zero() };
+                arr.push(b);
+            }
+        }
+        PyArray1::from_vec_bound(py, arr).unbind()
+    }
+
+    /// Create a Game instance from a NumPy ndarray representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    fn game_from_numpy_with_radius_impl<'py, T>(
+        py: Python<'py>,
+        radius: usize,
+        arr: Bound<'_, PyArray1<T>>,
+    ) -> PyResult<Py<Game>>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        // Gather slice of length
+        let slice = unsafe { arr.as_slice().unwrap() };
+        // Check length
+        let engine_length = 1 + 3 * radius * (radius - 1);
+        let expected_length = engine_length + (slice.len() - engine_length) / 7 * 7;
+        if slice.len() != expected_length {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array length {} does not match expected length {} for radius {}", slice.len(), expected_length, radius)));
+        }
+        let engine_slice = &slice[0..engine_length];
+        let queue_length = (slice.len() - engine_length) / 7;
+        let mut queue = Vec::with_capacity(queue_length);
+        for i in 0..queue_length {
+            let mut state: u8 = 0;
+            for j in 0..7 {
+                let val = slice[engine_length + i * 7 + j];
+                if T::predicate(val) {
+                    state |= 1 << (6 - j);
+                }
+            }
+            queue.push(Piece { state });
+        }
+        let engine = HexEngine::from_numpy_engine_unboxed_explicit_radius_impl::<T>(engine_slice, radius)?;
+        let game = Game {
+            _Game__engine: Py::new(py, engine)?,
+            _Game__queue: queue,
+            _Game__score: 0,
+            _Game__turn: 0,
+            _Game__end: false,
+        };
+        Ok(Py::new(py, game)?.to_owned())
+    }
+
+    /// Create a Game instance from a NumPy ndarray representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    fn game_from_numpy_with_queue_length_impl<'py, T>(
+        py: Python<'py>,
+        length: usize,
+        arr: Bound<'_, PyArray1<T>>,
+    ) -> PyResult<Py<Game>>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        // Gather slice of length
+        let slice = unsafe { arr.as_slice().unwrap() };
+        // Check length
+        let total_queue_length = length * 7;
+        let engine_length = slice.len() - total_queue_length;
+        let radius = match HexEngine::calc_radius(engine_length) {
+            Some(r) => r,
+            None => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array length {} does not correspond to a valid engine length for any radius", slice.len())));
+            }
+        };
+        let engine_slice = &slice[0..engine_length];
+        let mut queue = Vec::with_capacity(length);
+        for i in 0..length {
+            let mut state: u8 = 0;
+            for j in 0..7 {
+                let val = slice[engine_length + i * 7 + j];
+                if T::predicate(val) {
+                    state |= 1 << (6 - j);
+                }
+            }
+            queue.push(Piece { state });
+        }
+        let engine = HexEngine::from_numpy_engine_unboxed_explicit_radius_impl::<T>(engine_slice, radius)?;
+        let game = Game {
+            _Game__engine: Py::new(py, engine)?,
+            _Game__queue: queue,
+            _Game__score: 0,
+            _Game__turn: 0,
+            _Game__end: false,
+        };
+        Ok(Py::new(py, game)?.to_owned())
+    }
+
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
 
     /// Add a piece from the queue to the game engine at the specified coordinates.
@@ -4890,6 +5068,504 @@ impl Game {
 #[pymethods]
 impl Game {
     /* ---------------------------------------- NUMPY ---------------------------------------- */
+    /// Get the NumPy ndarray boolean representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy<'py>(&self, py: Python<'py>) -> Py<PyArray1<bool>> {
+        self.game_to_numpy_impl::<bool>(py)
+    }
+
+    /// Get the NumPy ndarray boolean representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_bool<'py>(&self, py: Python<'py>) -> Py<PyArray1<bool>> {
+        self.game_to_numpy_impl::<bool>(py)
+    }
+
+    /// Get the NumPy ndarray int8 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int8<'py>(&self, py: Python<'py>) -> Py<PyArray1<i8>> {
+        self.game_to_numpy_impl::<i8>(py)
+    }
+
+    /// Get the NumPy ndarray uint8 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint8<'py>(&self, py: Python<'py>) -> Py<PyArray1<u8>> {
+        self.game_to_numpy_impl::<u8>(py)
+    }
+
+    /// Get the NumPy ndarray int16 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int16<'py>(&self, py: Python<'py>) -> Py<PyArray1<i16>> {
+        self.game_to_numpy_impl::<i16>(py)
+    }
+
+    /// Get the NumPy ndarray uint16 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint16<'py>(&self, py: Python<'py>) -> Py<PyArray1<u16>> {
+        self.game_to_numpy_impl::<u16>(py)
+    }
+
+    /// Get the NumPy ndarray int32 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int32<'py>(&self, py: Python<'py>) -> Py<PyArray1<i32>> {
+        self.game_to_numpy_impl::<i32>(py)
+    }
+
+    /// Get the NumPy ndarray uint32 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint32<'py>(&self, py: Python<'py>) -> Py<PyArray1<u32>> {
+        self.game_to_numpy_impl::<u32>(py)
+    }
+
+    /// Get the NumPy ndarray int64 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_int64<'py>(&self, py: Python<'py>) -> Py<PyArray1<i64>> {
+        self.game_to_numpy_impl::<i64>(py)
+    }
+
+    /// Get the NumPy ndarray uint64 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_uint64<'py>(&self, py: Python<'py>) -> Py<PyArray1<u64>> {
+        self.game_to_numpy_impl::<u64>(py)
+    }
+
+    /// Get the NumPy ndarray float32 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_float32<'py>(&self, py: Python<'py>) -> Py<PyArray1<f32>> {
+        self.game_to_numpy_impl::<f32>(py)
+    }
+
+    /// Get the NumPy ndarray float64 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D array representing the engine followed by the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_float64<'py>(&self, py: Python<'py>) -> Py<PyArray1<f64>> {
+        self.game_to_numpy_impl::<f64>(py)
+    }
+
+    /// Get the NumPy ndarray float16 representation of the entire Game state.
+    /// Because there is no way for engine and queue to have the same shape,
+    /// the returned array is a 1D NumPy array representing the game engine followed by
+    /// the queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn to_numpy_float16<'py>(&self, py: Python<'py>) -> Py<PyArray1<F16>> {
+        self.game_to_numpy_impl::<F16>(py)
+    }
+
+    /// Create a Game instance from a NumPy ndarray bool representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_bool<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<bool>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray bool representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_bool<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<bool>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int8 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_int8<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<i8>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int8 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_int8<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<i8>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint8 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_uint8<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<u8>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint8 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_uint8<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<u8>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int16 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_int16<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<i16>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int16 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_int16<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<i16>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint16 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_uint16<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<u16>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint16 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_uint16<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<u16>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int32 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_int32<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<i32>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int32 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_int32<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<i32>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint32 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_uint32<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<u32>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint32 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_uint32<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<u32>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int64 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_int64<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<i64>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray int64 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_int64<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<i64>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint64 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_uint64<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<u64>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray uint64 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_uint64<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<u64>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray float32 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_float32<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<f32>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray float32 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_float32<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<f32>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray float64 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_float64<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<f64>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray float64 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_float64<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<f64>(py, radius, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray float16 representation with explicit queue length.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - length (usize): The length of the piece queue.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn from_numpy_with_queue_length_float16<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_queue_length_impl::<F16>(py, length, arr)
+    }
+
+    /// Create a Game instance from a NumPy ndarray float16 representation with explicit radius.
+    /// The input array should represent the engine followed by the queue.
+    /// 
+    /// Arguments:
+    /// - radius (usize): The radius of the hexagonal grid.
+    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+    /// Returns:
+    /// - Game: A new Game instance initialized from the provided NumPy array.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn from_numpy_with_radius_float16<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Game>>{
+        Self::game_from_numpy_with_radius_impl::<F16>(py, radius, arr)
+    }
+
     /// Get the flat NumPy ndarray boolean representation of the Game queue.
     /// 
     /// Returns:
