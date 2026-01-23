@@ -368,3 +368,210 @@ The following table summarizes all supported NumPy dtypes for Piece serializatio
 - Use `bool_` for minimal memory footprint or in machine learning
 - Use `uint8` for serialization to compact integer formats
 - Use `float32` for general machine learning (PyTorch, TensorFlow default)
+
+### Serialization for HexEngine
+
+The `HexEngine` class provides comprehensive NumPy integration for converting hexagonal game boards to and from array representations. All conversions produce or consume 1-dimensional arrays where the length corresponds to the total number of cells in the hexagonal grid (for a radius `r`, this is `3r² + 3r + 1` cells). See original `hpyhex` documentation for details on hexagonal grid sizing.
+
+#### Array Shape and Grid Mapping
+
+Unlike rectangular grids, hexagonal grids don't map naturally to 2D arrays. The `HexEngine` uses a **flattened 1D representation** where each index corresponds to a specific hexagonal cell:
+```python
+from hpyhex import HexEngine
+
+engine = HexEngine(radius=3)
+# Array shape will be (37,)
+
+arr = engine.to_numpy()
+print(arr.shape)  # (37,)
+```
+
+The mapping from array index to hexagonal coordinate is determined by the `index_block()` and `coordinate_block()` methods:
+```python
+# Get the hex coordinate for array index 10
+hex_coord = engine.coordinate_block(10)
+
+# Get the array index for a hex coordinate
+index = engine.index_block(hex_coord)
+```
+
+#### Converting to NumPy
+
+The `to_numpy()` method returns a boolean array by default:
+```python
+from hpyhex import HexEngine, Hex, PieceFactory
+
+engine = HexEngine(radius=3)
+piece = PieceFactory.get_piece("triangle_3_a")
+engine.add_piece(piece, Hex(0, 0))
+
+# Default: boolean array representing occupied/empty cells
+arr = engine.to_numpy()
+# arr.dtype == np.bool_
+# arr.shape == (37,)
+# arr[i] = True if cell i is occupied, False otherwise
+```
+
+For specific numeric types, use the typed conversion methods:
+```python
+# Integer types
+arr_i8 = engine.to_numpy_int8()      # dtype: int8, values 0 or 1
+arr_u8 = engine.to_numpy_uint8()     # dtype: uint8, values 0 or 1
+arr_i16 = engine.to_numpy_int16()    # dtype: int16, values 0 or 1
+arr_u16 = engine.to_numpy_uint16()   # dtype: uint16, values 0 or 1
+arr_i32 = engine.to_numpy_int32()    # dtype: int32, values 0 or 1
+arr_u32 = engine.to_numpy_uint32()   # dtype: uint32, values 0 or 1
+arr_i64 = engine.to_numpy_int64()    # dtype: int64, values 0 or 1
+arr_u64 = engine.to_numpy_uint64()   # dtype: uint64, values 0 or 1
+
+# Floating point types
+arr_f32 = engine.to_numpy_float32()  # dtype: float32, values 0.0 or 1.0
+arr_f64 = engine.to_numpy_float64()  # dtype: float64, values 0.0 or 1.0
+
+# Half precision (requires "half" feature, experimental)
+arr_f16 = engine.to_numpy_float16()  # dtype: float16, values 0.0 or 1.0
+```
+
+#### Converting from NumPy
+
+Use the corresponding `from_numpy_*` methods to construct a `HexEngine` from a NumPy array. The array length must correspond to a valid hexagonal grid size, and the dtype must match the method. Internally, non-zero values are treated as occupied cells for integer types, and positive values are treated as occupied cells for floating point types. Values are copied into a new HexEngine instance, which is managed independently of the NumPy array.
+```python
+import numpy as np
+from hpyhex import HexEngine
+
+# From boolean array (radius automatically inferred from length)
+arr = np.zeros(37, dtype=bool)  # 37 cells = radius 3
+arr[0] = True
+arr[5] = True
+engine = HexEngine.from_numpy_bool(arr)
+print(engine.radius)  # 3
+
+# From integer arrays (non-zero values treated as occupied)
+arr_u8 = np.array([1, 0, 1, 0, 1] + [0]*32, dtype=np.uint8)
+engine = HexEngine.from_numpy_uint8(arr_u8)
+
+arr_i32 = np.ones(37, dtype=np.int32)
+engine = HexEngine.from_numpy_int32(arr_i32)  # Fully occupied board
+
+# From floating point arrays (values > 0.0 treated as occupied)
+arr_f64 = np.random.rand(37)  # Random values [0, 1)
+engine = HexEngine.from_numpy_float64(arr_f64)
+# Cells with values > 0.0 will be occupied
+```
+
+#### Validation and Error Handling
+
+All `from_numpy_*` methods perform validation on the input array:
+
+- **Length validation**: Array length must correspond to a valid hexagonal grid (i.e., `length = 3r² + 3r + 1` for some non-negative integer `r`)
+- **Type validation**: Array dtype must match the method's expected type
+
+If validation fails, a `ValueError` is raised:
+```python
+# Wrong length (not a valid hexagonal grid size)
+arr = np.zeros(40, dtype=bool)  # 40 is not a valid hex grid size
+try:
+    engine = HexEngine.from_numpy_bool(arr)
+except ValueError as e:
+    print(f"Error: {e}")  # Invalid array length for hexagonal grid
+
+# Wrong dtype
+arr = np.zeros(37, dtype=np.float32)
+try:
+    engine = HexEngine.from_numpy_uint8(arr)  # Expects uint8, got float32
+except ValueError as e:
+    print(f"Error: {e}")  # Type mismatch
+```
+
+Valid hexagonal grid sizes for common radii:
+- Radius 1: 7 cells
+- Radius 2: 19 cells
+- Radius 3: 37 cells
+- Radius 4: 61 cells
+- Radius 5: 91 cells
+- Radius 10: 331 cells
+
+#### Unchecked Conversions for Performance
+
+For performance-critical code where you're certain the input is valid, use the `*_unchecked` variants. These skip validation but require the array length to be a valid hexagonal grid size. Note that copying still occurs and these methods are memory safe as long as the input array is valid.
+```python
+# Unchecked conversion (faster, but unsafe if array is invalid)
+arr = np.zeros(37, dtype=bool)
+engine = HexEngine.from_numpy_bool_unchecked(arr)  # No validation
+
+# Available for all types:
+engine = HexEngine.from_numpy_uint8_unchecked(arr_u8)
+engine = HexEngine.from_numpy_int32_unchecked(arr_i32)
+engine = HexEngine.from_numpy_float64_unchecked(arr_f64)
+# ... and so on
+```
+
+**Warning**: Using `*_unchecked` methods with invalid array lengths will cause undefined behavior, potentially leading to runtime errors or panics later in your program.
+
+#### Zero-Copy View (Advanced)
+
+For maximum performance in specialized scenarios, `from_numpy_raw_view` creates a HexEngine that directly references the NumPy array's memory without copying:
+```python
+arr = np.zeros(37, dtype=bool)
+engine = HexEngine.from_numpy_raw_view(arr)  # Zero-copy, extremely fast
+
+# Modifying arr also modifies engine (they share memory!)
+arr[10] = True
+# engine's state at index 10 is now also True
+```
+
+The array must be a 1 dimension boolean NumPy array of valid hexagonal grid length.
+
+**Critical Safety Requirements** for `from_numpy_raw_view`:
+
+1. **Array must be contiguous** in memory
+2. **Array must not be used elsewhere** after calling this method
+3. **Engine lifetime must not exceed array lifetime** as the engine holds a view into NumPy's memory
+4. **Array must be host (CPU) memory**, not GPU or other device memory
+5. **Array must be mutable and not shared** across threads
+
+Violating these requirements leads to undefined behavior including segmentation faults, data corruption, or mysterious crashes. **Use `from_numpy_bool()` instead unless performance is absolutely critical and you understand the risks.**
+
+#### Type Casting Considerations
+
+NumPy arrays cannot be easily cast between types at the Rust/Python boundary. Therefore, **there is no universal `from_numpy()` method**. You must use the specific typed method matching your array's dtype:
+```python
+# No automatic type detection
+arr = np.ones(37, dtype=np.int32)
+# engine = HexEngine.from_numpy(arr)  # This method doesn't exist!
+
+# Use the typed method matching your dtype
+engine = HexEngine.from_numpy_int32(arr)
+
+# If you need to convert between types, do it in NumPy first:
+arr_f32 = arr.astype(np.float32)
+engine = HexEngine.from_numpy_float32(arr_f32)
+```
+
+### Supported Data Types
+
+The following table summarizes all supported NumPy dtypes for HexEngine serialization:
+
+| NumPy dtype | `to_numpy_*` method     | `from_numpy_*` method  | `from_numpy_*_unchecked`         | Notes                                  |
+|-------------|-------------------------|------------------------|----------------------------------|----------------------------------------|
+| `bool_`     | `to_numpy()` (default)  | `from_numpy_bool()`    | `from_numpy_bool_unchecked()`    | Boolean representation                 |
+| `int8`      | `to_numpy_int8()`       | `from_numpy_int8()`    | `from_numpy_int8_unchecked()`    | Signed 8-bit integer                   |
+| `uint8`     | `to_numpy_uint8()`      | `from_numpy_uint8()`   | `from_numpy_uint8_unchecked()`   | Unsigned 8-bit integer                 |
+| `int16`     | `to_numpy_int16()`      | `from_numpy_int16()`   | `from_numpy_int16_unchecked()`   | Signed 16-bit integer                  |
+| `uint16`    | `to_numpy_uint16()`     | `from_numpy_uint16()`  | `from_numpy_uint16_unchecked()`  | Unsigned 16-bit integer                |
+| `int32`     | `to_numpy_int32()`      | `from_numpy_int32()`   | `from_numpy_int32_unchecked()`   | Signed 32-bit integer                  |
+| `uint32`    | `to_numpy_uint32()`     | `from_numpy_uint32()`  | `from_numpy_uint32_unchecked()`  | Unsigned 32-bit integer                |
+| `int64`     | `to_numpy_int64()`      | `from_numpy_int64()`   | `from_numpy_int64_unchecked()`   | Signed 64-bit integer                  |
+| `uint64`    | `to_numpy_uint64()`     | `from_numpy_uint64()`  | `from_numpy_uint64_unchecked()`  | Unsigned 64-bit integer                |
+| `float16`   | `to_numpy_float16()`    | `from_numpy_float16()` | `from_numpy_float16_unchecked()` | Requires "half" feature (experimental) |
+| `float32`   | `to_numpy_float32()`    | `from_numpy_float32()` | `from_numpy_float32_unchecked()` | Common for ML applications             |
+| `float64`   | `to_numpy_float64()`    | `from_numpy_float64()` | `from_numpy_float64_unchecked()` | Double precision                       |
+
+**Recommended types:**
+- Use `bool_` for minimal memory footprint or in machine learning
+- Use `uint8` for serialization to compact integer formats
+- Use `float32` for general machine learning (PyTorch, TensorFlow default)
+
+**Special note on `from_numpy_raw_view`:**
+Only `from_numpy_raw_view()` is available for zero-copy views, and it only works with `bool_` dtype arrays. This is the only method that doesn't copy data, but it comes with significant safety requirements as documented above.
+
