@@ -524,11 +524,15 @@ The array must be a 1 dimension boolean NumPy array of valid hexagonal grid leng
 
 **Critical Safety Requirements** for `from_numpy_raw_view`:
 
-1. **Array must be contiguous** in memory
-2. **Array must not be used elsewhere** after calling this method
-3. **Engine lifetime must not exceed array lifetime** as the engine holds a view into NumPy's memory
-4. **Array must be host (CPU) memory**, not GPU or other device memory
-5. **Array must be mutable and not shared** across threads
+1. **Array length must correspond to a valid hexagonal grid size** - The method assumes the provided NumPy array length corresponds to a valid hexagonal grid size and does not perform any checks. If the length is invalid or zero, the behavior is undefined and may cause runtime errors or panics later in your program.
+2. **Array must be contiguous** in memory - If the array is not contiguous, the function will panic.
+3. **Array must be host (CPU) memory** - The array must be allocated on host (CPU) memory. If allocated on a different device (e.g., GPU), accessing its memory directly from Rust will lead to undefined behavior or mysterious crashes.
+4. **Memory layout compatibility** - The array's memory must be allocated in a way that is compatible with Rust's `Vec<bool>` memory layout. This means it must not be padded or aligned in a way that would be incompatible with Rust's expectations.
+5. **Array must not be used elsewhere** after calling this method - Since the function takes a view of the data, any further use of the original NumPy array will lead to undefined behavior, including potential crashes or data corruption.
+6. **Engine lifetime must not exceed array lifetime** - The lifetime of the HexEngine must not exceed that of the original NumPy array in both Python and NumPy memory management. If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing the HexEngine's states.
+7. **Array must be mutable and not shared** across threads - If the NumPy array is shared across multiple references or threads, modifying it in Rust could lead to data corruption or race conditions.
+
+**Double-Free Memory Management Issue**: Under normal conditions, even if all the above conditions are met, this method will eventually lead to a double-free error when both Rust and Python attempt to free the same memory during their respective deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is responsible for freeing the memory. If this is undesirable, consider holding references to both objects until the end of the program execution so that all double-free errors occur only at program termination.
 
 Violating these requirements leads to undefined behavior including segmentation faults, data corruption, or mysterious crashes. **Use `from_numpy_bool()` instead unless performance is absolutely critical and you understand the risks.**
 

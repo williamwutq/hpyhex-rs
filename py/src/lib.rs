@@ -2173,6 +2173,13 @@ impl HexEngine {
     /// If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing
     /// the HexEngine's states.
     /// 
+    /// IMPORTANT: Under normaly conditions, even if all the above conditions are met, this method will eventually
+    /// lead to a double-free error when both Rust and Python attempt to free the same memory during their respective
+    /// deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the
+    /// HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is
+    /// responsible for freeing the memory. If this is undesireable, consider hold reference to both objects until the end
+    /// of the program execution so that all double free errors occur only at program termination.
+    /// 
     /// For these reasons, unless performance is absolutely critical and you are certain that all the above
     /// conditions are met, it is strongly recommended to use the safe alternative `from_numpy_bool` method instead,
     /// which copies the data and performs necessary validations. Or if you are sure about the data validity,
@@ -2182,6 +2189,8 @@ impl HexEngine {
     /// - array: A 1D NumPy array of boolean values representing the block states.
     /// Returns:
     /// - HexEngine: A HexEngine instance initialized with the given state vector.
+    /// Warning:
+    /// - This function is highly unsafe and can lead to undefined behavior if the above conditions are not met.
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub unsafe fn from_numpy_raw_view<'t>(array: Bound<'t, PyArray1<bool>>) -> Self {
