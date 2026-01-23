@@ -422,6 +422,201 @@ The following table summarizes all supported NumPy dtypes for Piece serializatio
 - Use `uint8` for serialization to compact integer formats
 - Use `float32` for general machine learning (PyTorch, TensorFlow default)
 
+### Serialization for Vector of Piece (Piece Queues)
+
+The `Piece` class provides efficient conversion to and from NumPy arrays for collections of pieces, commonly used for piece queues in game states. All conversions work with lists of `Piece` objects.
+
+#### Converting to NumPy
+
+The `vec_to_numpy_flat()` method returns a flattened 1D boolean array by default, concatenating all pieces' block states:
+```python
+from hpyhex import PieceFactory
+import numpy as np
+
+pieces = [
+   PieceFactory.get_piece("triangle_3_a"),
+   PieceFactory.get_piece("triangle_3_b"),
+   PieceFactory.get_piece("corner_3_a")
+]
+
+# Default: flattened boolean array
+arr = Piece.vec_to_numpy_flat(pieces)
+# arr.dtype == np.bool_
+# arr.shape == (21,)  # 3 pieces * 7 blocks each
+```
+
+For stacked representation, use `vec_to_numpy_stacked()` which returns a 2D array:
+```python
+# Stacked: 2D boolean array
+arr_2d = Piece.vec_to_numpy_stacked(pieces)
+# arr_2d.dtype == np.bool_
+# arr_2d.shape == (3, 7)  # (num_pieces, 7)
+# arr_3d.stride == (8, 1)  # row-major order, padded for alignment
+```
+
+For specific numeric types, use the typed conversion methods:
+```python
+# Integer types (flat)
+arr_i8_flat = Piece.vec_to_numpy_int8_flat(pieces)      # dtype: int8
+arr_u8_flat = Piece.vec_to_numpy_uint8_flat(pieces)     # dtype: uint8
+arr_i16_flat = Piece.vec_to_numpy_int16_flat(pieces)    # dtype: int16
+arr_u16_flat = Piece.vec_to_numpy_uint16_flat(pieces)   # dtype: int16
+arr_i32_flat = Piece.vec_to_numpy_int32_flat(pieces)    # dtype: int32
+arr_u32_flat = Piece.vec_to_numpy_uint32_flat(pieces)   # dtype: uint32
+arr_i64_flat = Piece.vec_to_numpy_int64_flat(pieces)    # dtype: int64
+arr_u64_flat = Piece.vec_to_numpy_uint64_flat(pieces)   # dtype: uint64
+
+# Integer types (stacked)
+arr_i8_stacked = Piece.vec_to_numpy_int8_stacked(pieces)  # shape: (3, 7)
+arr_u8_stacked = Piece.vec_to_numpy_uint8_stacked(pieces) # shape: (3, 7)
+arr_i16_stacked = Piece.vec_to_numpy_int16_stacked(pieces) # shape: (3, 7)
+arr_u16_stacked = Piece.vec_to_numpy_uint16_stacked(pieces) # shape: (3, 7)
+arr_i32_stacked = Piece.vec_to_numpy_int32_stacked(pieces) # shape: (3, 7)
+arr_u32_stacked = Piece.vec_to_numpy_uint32_stacked(pieces) # shape: (3, 7)
+arr_i64_stacked = Piece.vec_to_numpy_int64_stacked(pieces) # shape: (3, 7)
+arr_u64_stacked = Piece.vec_to_numpy_uint64_stacked(pieces) # shape: (3, 7)
+
+# Floating point types (flat)
+arr_f32_flat = Piece.vec_to_numpy_float32_flat(pieces)  # dtype: float32
+arr_f64_flat = Piece.vec_to_numpy_float64_flat(pieces)  # dtype: float64
+
+# Floating point types (stacked)
+arr_f32_stacked = Piece.vec_to_numpy_float32_stacked(pieces)  # shape: (3, 7)
+arr_f64_stacked = Piece.vec_to_numpy_float64_stacked(pieces)  # shape: (3, 7)
+
+# Half precision (requires "half" feature, experimental)
+arr_f16_flat = Piece.vec_to_numpy_float16_flat(pieces)      # dtype: float16
+arr_f16_stacked = Piece.vec_to_numpy_float16_stacked(pieces)  # shape: (3, 7)
+```
+
+#### Converting from NumPy
+
+Use the corresponding `vec_from_numpy_*` methods to construct a list of `Piece` objects from NumPy arrays.
+
+For flat arrays (1D), the array length must be a multiple of 7:
+```python
+# From flat boolean array
+arr_flat = np.array([True, True, False, True, False, False, False,  # piece 1
+                     True, True, False, False, False, False, False,  # piece 2
+                     True, True, True, False, False, False, False])  # piece 3
+pieces = Piece.vec_from_numpy_bool_flat(arr_flat)
+print(len(pieces))  # 3
+
+# From flat integer arrays
+arr_u8_flat = np.array([1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0], dtype=np.uint8)
+pieces = Piece.vec_from_numpy_uint8_flat(arr_u8_flat)
+
+# From flat floating point arrays
+arr_f32_flat = np.array([1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+pieces = Piece.vec_from_numpy_float32_flat(arr_f32_flat)
+```
+
+For stacked arrays (2D), the shape must be `(num_pieces, 7)`:
+```python
+# From stacked boolean array
+arr_stacked = np.array([[True, True, False, True, False, False, False],
+                        [True, True, False, False, False, False, False],
+                        [True, True, True, False, False, False, False]], dtype=bool)
+pieces = Piece.vec_from_numpy_bool_stacked(arr_stacked)
+
+# From stacked integer arrays
+arr_i32_stacked = np.array([[1, 1, 0, 1, 0, 0, 0],
+                            [1, 1, 0, 0, 0, 0, 0],
+                            [1, 1, 1, 0, 0, 0, 0]], dtype=np.int32)
+pieces = Piece.vec_from_numpy_int32_stacked(arr_i32_stacked)
+
+# From stacked floating point arrays
+arr_f64_stacked = np.array([[1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+                            [1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                            [1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float64)
+pieces = Piece.vec_from_numpy_float64_stacked(arr_f64_stacked)
+```
+
+#### Validation and Error Handling
+
+All `vec_from_numpy_*` methods validate the input array:
+
+- **Shape validation**: For flat arrays, length must be a multiple of 7. For stacked arrays, shape must be `(n, 7)` where `n >= 1`
+- **Type validation**: Array dtype must match the method's expected type
+
+If validation fails, a `ValueError` is raised:
+```python
+# Wrong length for flat array
+arr = np.array([1, 1, 1, 0, 0])  # 5 elements, not multiple of 7
+try:
+    pieces = Piece.vec_from_numpy_uint8_flat(arr)
+except ValueError as e:
+    print(f"Error: {e}")  # Invalid array length
+
+# Wrong shape for stacked array
+arr = np.array([[1, 1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0]])  # Second row has only 6 elements
+try:
+    pieces = Piece.vec_from_numpy_uint8_stacked(arr)
+except ValueError as e:
+    print(f"Error: {e}")  # Shape mismatch
+```
+
+#### Type Casting Considerations
+
+NumPy arrays cannot be easily cast between types at the Rust/Python boundary. Therefore, **there is no universal `vec_from_numpy()` method**. You must use the specific typed method that matches your array's dtype:
+```python
+# No automatic type detection
+arr = np.array([1, 1, 1, 0, 0, 0, 0,
+                1, 1, 0, 0, 0, 0, 0], dtype=np.int32)
+# pieces = Piece.vec_from_numpy(arr)  # This method doesn't exist!
+
+# Use the typed method matching your dtype
+pieces = Piece.vec_from_numpy_int32_flat(arr)
+
+# If you need to convert between types, do it in NumPy first:
+arr_f32 = arr.astype(np.float32) # Note that Numpy does a copy here
+pieces = Piece.vec_from_numpy_float32_flat(arr_f32)
+```
+
+1D (flat) and 2D (stacked) representations are not interchangeable. You must use the appropriate method for the array shape you have. Casting between these two will copy data and may impact performance.
+This is because the internal memory layout differs: flat arrays are contiguous 1D arrays, while stacked arrays have row-major order with potential padding for alignment. To convert between flat and stacked representations, do so in NumPy before passing to the Rust methods:
+```python
+# Convert flat to stacked in NumPy
+arr_flat = np.array([...], dtype=np.bool_)  # shape: (n*7,)
+num_pieces = arr_flat.shape[0] // 7
+arr_stacked = arr_flat.reshape((num_pieces, 7))  # shape: (n, 7)
+pieces = Piece.vec_from_numpy_bool_stacked(arr_stacked)
+
+# Convert stacked to flat in NumPy
+arr_stacked = np.array([...], dtype=np.bool_)  # shape: (n, 7)
+arr_flat = arr_stacked.reshape((-1,))  # shape: (n*7,)
+pieces = Piece.vec_from_numpy_bool_flat(arr_flat)
+```
+
+#### Zero Copy
+
+For the same reason as single Piece serialization, there is no need for zero-copy conversion between NumPy arrays and lists of `Piece` objects.
+
+#### Supported Data Types
+
+The following table summarizes all supported NumPy dtypes for vector of pieces serialization:
+
+| NumPy dtype | `vec_to_numpy_*_flat`           | `vec_to_numpy_*_stacked`           | `vec_from_numpy_*_flat`         | `vec_from_numpy_*_stacked`         | Notes                                   |
+|-------------|---------------------------------|------------------------------------|---------------------------------|------------------------------------|-----------------------------------------|
+| `bool_`     | `vec_to_numpy_flat()` (default) | `vec_to_numpy_stacked()` (default) | `vec_from_numpy_bool_flat()`    | `vec_from_numpy_bool_stacked()`    | Most memory efficient                   |
+| `int8`      | `vec_to_numpy_int8_flat()`      | `vec_to_numpy_int8_stacked()`      | `vec_from_numpy_int8_flat()`    | `vec_from_numpy_int8_stacked()`    | Signed 8-bit integer                    |
+| `uint8`     | `vec_to_numpy_uint8_flat()`     | `vec_to_numpy_uint8_stacked()`     | `vec_from_numpy_uint8_flat()`   | `vec_from_numpy_uint8_stacked()`   | Unsigned 8-bit integer                  |
+| `int16`     | `vec_to_numpy_int16_flat()`     | `vec_to_numpy_int16_stacked()`     | `vec_from_numpy_int16_flat()`   | `vec_from_numpy_int16_stacked()`   | Signed 16-bit integer                   |
+| `uint16`    | `vec_to_numpy_uint16_flat()`    | `vec_to_numpy_uint16_stacked()`    | `vec_from_numpy_uint16_flat()`  | `vec_from_numpy_uint16_stacked()`  | Unsigned 16-bit integer                 |
+| `int32`     | `vec_to_numpy_int32_flat()`     | `vec_to_numpy_int32_stacked()`     | `vec_from_numpy_int32_flat()`   | `vec_from_numpy_int32_stacked()`   | Signed 32-bit integer                   |
+| `uint32`    | `vec_to_numpy_uint32_flat()`    | `vec_to_numpy_uint32_stacked()`    | `vec_from_numpy_uint32_flat()`  | `vec_from_numpy_uint32_stacked()`  | Unsigned 32-bit integer                 |
+| `int64`     | `vec_to_numpy_int64_flat()`     | `vec_to_numpy_int64_stacked()`     | `vec_from_numpy_int64_flat()`   | `vec_from_numpy_int64_stacked()`   | Signed 64-bit integer                   |
+| `uint64`    | `vec_to_numpy_uint64_flat()`    | `vec_to_numpy_uint64_stacked()`    | `vec_from_numpy_uint64_flat()`  | `vec_from_numpy_uint64_stacked()`  | Unsigned 64-bit integer                 |
+| `float16`   | `vec_to_numpy_float16_flat()`   | `vec_to_numpy_float16_stacked()`   | `vec_from_numpy_float16_flat()` | `vec_from_numpy_float16_stacked()` | Requires "half" feature (experimental)  |
+| `float32`   | `vec_to_numpy_float32_flat()`   | `vec_to_numpy_float32_stacked()`   | `vec_from_numpy_float32_flat()` | `vec_from_numpy_float32_stacked()` | Common for ML applications              |
+| `float64`   | `vec_to_numpy_float64_flat()`   | `vec_to_numpy_float64_stacked()`   | `vec_from_numpy_float64_flat()` | `vec_from_numpy_float64_stacked()` | Double precision                        |
+
+**Recommended types:**
+- Use `bool_` for minimal memory footprint
+- Use `uint8` for compact integer formats
+- Use `float32` for machine learning applications
+
 ### Serialization for HexEngine
 
 The `HexEngine` class provides comprehensive NumPy integration for converting hexagonal game boards to and from array representations. All conversions produce or consume 1-dimensional arrays where the length corresponds to the total number of cells in the hexagonal grid (for a radius `r`, this is `3r² + 3r + 1` cells). See original `hpyhex` documentation for details on hexagonal grid sizing.

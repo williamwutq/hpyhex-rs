@@ -637,6 +637,10 @@ impl Hex {
 /// Offer methods to convert the Piece's block states to NumPy ndarray representations and vice versa.
 /// The conversion will always be to an ndarray of shape (7,).
 /// 
+/// In addition, provide methods to convert a list of Piece instances to stacked or flat NumPy ndarray representations,
+/// and vice versa. The stacked representation will have shape (N, 7) with stride (8, 1), while the flat
+/// representation will have shape (N*7,).
+/// 
 /// Support the following NumPy array types:
 /// - bool
 /// - int8
@@ -656,6 +660,11 @@ impl Hex {
 /// 
 /// to_numpy() defaults to bool representation, but there are no from_numpy that can take in different types,
 /// because numpy ndarrays cannot be easily casted into each other.
+/// 
+/// For a list of Piece instances, the vec_from_numpy_*_stacked and vec_from_numpy_*_flat functions
+/// can be used to convert from NumPy ndarray representations to a list of Piece instances, and they will
+/// raise a ValueError if the input is invalid. For converting a list of Piece instances to NumPy ndarray,
+/// the vec_to_numpy_*_stacked and vec_to_numpy_*_flat functions can be used.
 pub struct Piece {
     state: u8, // Only 7 bits used
 }
