@@ -833,7 +833,7 @@ where
 #[cfg(feature = "numpy")]
 fn vec_from_numpy_flat_unboxed<T>(
     array: PyArray1<T>,
-) -> PyResult<Vec<Py<Piece>>>
+) -> PyResult<Vec<Piece>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -851,7 +851,7 @@ where
                 state |= 1 << (6 - i);
             }
         }
-        pieces.push(Piece::get_cached(state));
+        pieces.push(Piece { state } );
     }
     Ok(pieces)
 }
@@ -893,7 +893,7 @@ where
 #[cfg(feature = "numpy")]
 fn vec_from_numpy_stacked_unboxed<T>(
     array: PyArray2<T>,
-) -> PyResult<Vec<Py<Piece>>>
+) -> PyResult<Vec<Piece>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -919,7 +919,7 @@ where
                 state |= 1 << (6 - j);
             }
         }
-        pieces.push(Piece::get_cached(state));
+        pieces.push(Piece { state } );
     }
     Ok(pieces)
 }
@@ -4736,6 +4736,30 @@ impl PieceFactory {
 /// - score (int): The current score of the game.
 /// - turn (int): The current turn number in the game.
 /// - end (bool): Whether the game has ended.
+/// 
+/// NumPy Integration:
+/// If the 'numpy' feature is enabled, Game provides methods to convert the piece queue, the engine,
+/// and the whole game state into NumPy ndarray representations for efficient numerical processing.
+/// 
+/// Queue Conversion Methods:
+/// - queue_to_numpy_flat: Converts the piece queue into a flat NumPy ndarray.
+/// - queue_to_numpy_stacked: Converts the piece queue into a stacked NumPy ndarray.
+/// 
+/// For specific dtype, the methods are named queue_to_numpy_{dtype}_flat and queue_to_numpy_{dtype}_stacked,
+/// where {dtype} can be 'bool', 'int8', etc.
+/// 
+/// Engine Conversion Methods:
+/// 
+/// There are no special engine conversion methods in Game, but the engine attribute can be accessed
+/// directly to perform conversions using HexEngine's methods via game.engine.to_numpy. The converted
+/// ndarray will be an one-dimensional array representing the engine's state with the order of blocks according
+/// to the linear indexing of HexEngine, which can be found in HexEngine documentation.
+/// 
+/// For specific dtype, the methods are named engine_to_numpy_{dtype}, where {dtype} can be 'bool', 'int8', etc.
+/// 
+/// See the "NumPy Integration" of HexEngine for more details on engine conversion methods.
+/// 
+/// 
 #[pyclass]
 pub struct Game {
     #[pyo3(get, set)]
@@ -4750,8 +4774,311 @@ pub struct Game {
     _Game__end: bool,
 }
 
+#[cfg(feature = "numpy")]
+fn queue_to_numpy_flat_impl<'py, T>(
+    py: Python<'py>,
+    pieces: &Vec<Piece>,
+) -> Py<PyArray1<T>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    let mut arr = Vec::with_capacity(pieces.len() * 7);
+    for piece in pieces.iter() {
+        for i in 0..7 {
+            let b = if (piece.state & (1 << (6 - i))) != 0 { T::one() } else { T::zero() };
+            arr.push(b);
+        }
+    }
+    PyArray1::from_vec_bound(py, arr).unbind()
+}
+
+#[cfg(feature = "numpy")]
+fn queue_to_numpy_stacked_impl<'py, T>(
+    py: Python<'py>,
+    pieces: &Vec<Piece>,
+) -> Py<PyArray2<T>>
+where
+    T: BitScalar + Copy + numpy::Element,
+{
+    use ndarray::{Array2, ShapeBuilder};
+
+    let n = pieces.len();
+    let shape = (n, 7).strides((8, 1));
+
+    let mut vec = Vec::with_capacity(n * 8);
+
+    for piece in pieces {
+        let s = piece.state;
+
+        let v = [
+            if s & 0b1000000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0100000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0010000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0001000 != 0 { T::one() } else { T::zero() },
+            if s & 0b0000100 != 0 { T::one() } else { T::zero() },
+            if s & 0b0000010 != 0 { T::one() } else { T::zero() },
+            if s & 0b0000001 != 0 { T::one() } else { T::zero() },
+        ];
+
+        vec.extend_from_slice(&v);
+        vec.push(T::zero()); // padding for stride
+    }
+
+    let array = Array2::from_shape_vec(shape, vec).unwrap();
+    PyArray2::from_owned_array_bound(py, array).unbind()
+}
+
 #[allow(non_snake_case)]
 impl Game {
+    /* ---------------------------------------- NUMPY ---------------------------------------- */
+    /// Get the flat NumPy ndarray boolean representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_flat(&self, py: Python) -> Py<PyArray1<bool>> {
+        queue_to_numpy_flat_impl::<bool>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray boolean representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_stacked(&self, py: Python) -> Py<PyArray2<bool>> {
+        queue_to_numpy_stacked_impl::<bool>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray boolean representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_bool_flat(&self, py: Python) -> Py<PyArray1<bool>> {
+        queue_to_numpy_flat_impl::<bool>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray boolean representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_bool_stacked(&self, py: Python) -> Py<PyArray2<bool>> {
+        queue_to_numpy_stacked_impl::<bool>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray int8 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int8_flat(&self, py: Python) -> Py<PyArray1<i8>> {
+        queue_to_numpy_flat_impl::<i8>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray int8 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int8_stacked(&self, py: Python) -> Py<PyArray2<i8>> {
+        queue_to_numpy_stacked_impl::<i8>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray uint8 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint8_flat(&self, py: Python) -> Py<PyArray1<u8>> {
+        queue_to_numpy_flat_impl::<u8>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray uint8 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint8_stacked(&self, py: Python) -> Py<PyArray2<u8>> {
+        queue_to_numpy_stacked_impl::<u8>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray int16 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int16_flat(&self, py: Python) -> Py<PyArray1<i16>> {
+        queue_to_numpy_flat_impl::<i16>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray int16 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int16_stacked(&self, py: Python) -> Py<PyArray2<i16>> {
+        queue_to_numpy_stacked_impl::<i16>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray uint16 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint16_flat(&self, py: Python) -> Py<PyArray1<u16>> {
+        queue_to_numpy_flat_impl::<u16>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray uint16 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint16_stacked(&self, py: Python) -> Py<PyArray2<u16>> {
+        queue_to_numpy_stacked_impl::<u16>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray int32 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int32_flat(&self, py: Python) -> Py<PyArray1<i32>> {
+        queue_to_numpy_flat_impl::<i32>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray int32 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int32_stacked(&self, py: Python) -> Py<PyArray2<i32>> {
+        queue_to_numpy_stacked_impl::<i32>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray uint32 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint32_flat(&self, py: Python) -> Py<PyArray1<u32>> {
+        queue_to_numpy_flat_impl::<u32>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray uint32 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint32_stacked(&self, py: Python) -> Py<PyArray2<u32>> {
+        queue_to_numpy_stacked_impl::<u32>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray int64 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int64_flat(&self, py: Python) -> Py<PyArray1<i64>> {
+        queue_to_numpy_flat_impl::<i64>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray int64 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_int64_stacked(&self, py: Python) -> Py<PyArray2<i64>> {
+        queue_to_numpy_stacked_impl::<i64>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray uint64 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint64_flat(&self, py: Python) -> Py<PyArray1<u64>> {
+        queue_to_numpy_flat_impl::<u64>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray uint64 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_uint64_stacked(&self, py: Python) -> Py<PyArray2<u64>> {
+        queue_to_numpy_stacked_impl::<u64>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray float32 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_float32_flat(&self, py: Python) -> Py<PyArray1<f32>> {
+        queue_to_numpy_flat_impl::<f32>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray float32 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_float32_stacked(&self, py: Python) -> Py<PyArray2<f32>> {
+        queue_to_numpy_stacked_impl::<f32>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray float64 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_float64_flat(&self, py: Python) -> Py<PyArray1<f64>> {
+        queue_to_numpy_flat_impl::<f64>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray float64 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    #[cfg(feature = "numpy")]
+    pub fn queue_to_numpy_float64_stacked(&self, py: Python) -> Py<PyArray2<f64>> {
+        queue_to_numpy_stacked_impl::<f64>(py, &self._Game__queue)
+    }
+
+    /// Get the flat NumPy ndarray float16 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn queue_to_numpy_float16_flat(&self, py: Python) -> Py<PyArray1<F16>> {
+        queue_to_numpy_flat_impl::<F16>(py, &self._Game__queue)
+    }
+
+    /// Get the stacked NumPy ndarray float16 representation of the Game queue.
+    /// 
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn queue_to_numpy_float16_stacked(&self, py: Python) -> Py<PyArray2<F16>> {
+        queue_to_numpy_stacked_impl::<F16>(py, &self._Game__queue)
+    }
+
+    /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
+
     /// Add a piece from the queue to the game engine at the specified coordinates.
     /// 
     /// This method updates the game state, including the score and turn number,
