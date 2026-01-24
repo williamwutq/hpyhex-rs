@@ -30,10 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved build script for better automation and efficiency.
 - Slightly improved performance for HexEngine by removing the need to call python functions during piece placement.
 
-## [Unreleased]
+## [0.2.1] - 2026-01-25
 ### Fixed
+- Fix missing feature flag of `HexEngine.to_numpy_raw_view` causing compilation errors when compiled without `numpy` feature.
 - Fix `Hex`, `Piece`, and `HexEngine` class `__iter__` method returning tuples instead of iterators.
+- Fix incorrect indentation in Makefile causing build issues on some systems.
 
 ### Added
 - Add NumPy ndarray conversion methods for valid piece positions in HexEngine class.
 - Add comprehensive examples demonstrating usage of this library in /examples directory.
+- Add build option to Makefile for building Rust extension module without NumPy support.

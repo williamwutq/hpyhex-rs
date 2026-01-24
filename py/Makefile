@@ -12,6 +12,7 @@ help:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  build      Build the Rust extension module using maturin"
+	@echo "  build-nonp Build the Rust extension module without NumPy support"
 	@echo "  build-half Build the Rust extension module with half-precision support"
 	@echo "  build-all  Build the Rust extension module for all supported Python versions"
 	@echo "  html       Build HTML documentation"
@@ -25,6 +26,10 @@ help:
 # Build the Rust extension module
 build:
 	maturin build --release --interpreter "$(PYVERSION)" --out dist/ --features numpy
+
+# Build the Rust extension module without NumPy support
+build-nonp:
+	maturin build --release --interpreter "$(PYVERSION)" --out dist/ --features default
 
 # Build the Rust extension module with half-precision support
 build-half:
