@@ -30,3 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved build script for better automation and efficiency.
 - Slightly improved performance for HexEngine by removing the need to call python functions during piece placement.
 
+## [Unreleased]
+### Fixed
+- Fix `Hex`, `Piece`, and `HexEngine` class `__iter__` method returning tuples instead of iterators.

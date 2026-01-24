@@ -393,10 +393,11 @@ impl Hex {
     /// Yields:
     /// - int: The I-line coordinate of the hex.
     /// - int: The K-line coordinate of the hex.
-    pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<PyAny>> {
-        Python::with_gil(|py| {
-            let tuple = pyo3::types::PyTuple::new_bound(py, &[slf.i.into_py(py), slf.k.into_py(py)]);
-            Ok(tuple.into_py(py))
+    pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<HexIterator> {
+        Ok(HexIterator {
+            i: slf.i,
+            k: slf.k,
+            index: 0,
         })
     }
 
@@ -618,6 +619,33 @@ impl Hex {
     #[inline]
     pub fn shift_k(&self, units: i32) -> Py<Hex> {
         get_hex(self.i, self.k + units)
+    }
+}
+
+#[pyclass]
+/// An iterator over Hex
+pub struct HexIterator {
+    i: i32,
+    k: i32,
+    index: usize,
+}
+
+#[pymethods]
+impl HexIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<i32> {
+        if slf.index == 0 {
+            slf.index += 1;
+            Some(slf.i)
+        } else if slf.index == 1 {
+            slf.index += 1;
+            Some(slf.k)
+        } else {
+            None
+        }
     }
 }
 
@@ -2025,10 +2053,10 @@ impl Piece {
     /// 
     /// Yields:
     /// - bool: The occupancy state of each block in the Piece.
-    pub fn __iter__(&self) -> PyResult<Py<PyAny>> {
-        Python::with_gil(|py| {
-            let tuple = pyo3::types::PyTuple::new_bound(py, &self.states());
-            Ok(tuple.into_py(py))
+    pub fn __iter__(&self) -> PyResult<PieceIterator> {
+        Ok(PieceIterator {
+            states: self.states(),
+            index: 0,
         })
     }
 
@@ -2226,6 +2254,30 @@ fn piece_neighbors_of(p: Piece, target_i: i32, target_k: i32) -> usize {
         }
     }
     count
+}
+
+#[pyclass]
+/// An iterator over Piece, returning states as booleans.
+pub struct PieceIterator {
+    states: [bool; 7],
+    index: usize,
+}
+
+#[pymethods]
+impl PieceIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<bool> {
+        if slf.index < 7 {
+            let result = slf.states[slf.index];
+            slf.index += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
 }
 
 #[pyclass]
@@ -3766,10 +3818,10 @@ impl HexEngine {
     /// 
     /// Yields:
     /// - bool: The occupancy state of each block in the grid.
-    pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<Py<PyAny>> {
-        Python::with_gil(|py| {
-            let tuple = pyo3::types::PyTuple::new_bound(py, &slf.states);
-            Ok(tuple.into_py(py))
+    pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<HexEngineIterator> {
+        Ok(HexEngineIterator {
+            states: slf.states.clone(),
+            index: 0,
         })
     }
 
@@ -4428,6 +4480,30 @@ impl HexEngine {
             result.push(engine);
         }
         Ok(result)
+    }
+}
+
+#[pyclass]
+/// An iterator over HexEngine, returning states as booleans.
+pub struct HexEngineIterator {
+    states: Vec<bool>,
+    index: usize,
+}
+
+#[pymethods]
+impl HexEngineIterator {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<bool> {
+        if slf.index < slf.states.len() {
+            let result = slf.states[slf.index];
+            slf.index += 1;
+            Some(result)
+        } else {
+            None
+        }
     }
 }
 
