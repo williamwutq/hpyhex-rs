@@ -80,6 +80,12 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 2. Import and use the main classes as shown above.
 3. Create custom algorithms to interact with the game environment.
 
+## Examples
+
+See the [examples directory](./examples/) for complete example scripts demonstrating various functionalities of the library, including basic usage, game simulations, serialization, and NumPy integration.
+
+Also see the [benchmark directory](./bench/) for performance benchmarking code, which are excellent examples of the hpyhex API usage, supplemental to the simple [hpyhex](https://pypi.org/project/hpyhex/) documentation.
+
 ## Main Classes
 
 - **Hex**: Represents a hexagonal grid coordinate using a custom line-based system. Supports arithmetic, hashing, and tuple compatibility.
@@ -152,6 +158,8 @@ new_engine = HexEngine.from_numpy_uint32(arr_engine, radius=6)
 `hpyhex-rs` provides native serialization and deserialization methods for `HexEngine` and `Piece` classes, compatible with the Rust `hpyhex-rs` crate's `TryFrom<Vec<u8>>` and `Into<Vec<u8>>` implementations.
 
 The serialization methods are named `hpyhex_rs_serialize()` and `hpyhex_rs_deserialize(data: bytes)`, and are available as instance methods for serialization and class methods for deserialization. The naming are prefixed with `hpyhex_rs_` to be future-proof against potential naming conflicts with other serialization methods that might be provided by the target package, `hpyhex`, in the future.
+
+For examples, see [examples 1](./examples/01_binary_serialization.py) for serializing and deserializing `HexEngine`, `Piece`, and entire `Game` states using these methods. For more complex integration with other workflows, see other examples in the [examples directory](./examples/).
 
 ### Hex Serialization
 - `hpyhex_rs_serialize() -> bytes`: Serializes the `Hex` coordinate into a byte vector.
@@ -294,6 +302,10 @@ features = ["numpy", "half"]
 ```
 
 Note that the feature is experimental and not officially supported nor tested extensively. On machines that does not support float16 or installed with a version of numpy that does not support float16, this function may lead to undefined behavior or crashes. Those unintended behaviors could be subtle and hard to debug, so even if code with this feature seems to work, make sure to check the output as it has known to misintepret memory or lead to silent data corruption in some cases.
+
+### Examples
+
+See the [examples directory](./examples/) for complete example scripts demonstrating NumPy integration. These examples cover converting `HexEngine` and `Piece` objects to and from NumPy arrays, serializing game states, and integrating with machine learning workflows. The demonstrations include both basic usage and advanced scenarios. The example framework is PyTorch for machine learning, but the NumPy integration is framework-agnostic and can be used with any library that supports NumPy arrays (which are most of them).
 
 ### No Serialization for Hex
 

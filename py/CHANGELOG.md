@@ -40,3 +40,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add NumPy ndarray conversion methods for valid piece positions in HexEngine class.
 - Add comprehensive examples demonstrating usage of this library in /examples directory.
 - Add build option to Makefile for building Rust extension module without NumPy support.
+- Add examples section to README.md.
