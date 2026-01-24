@@ -1,0 +1,233 @@
+# HpyHex-RS Python Examples
+
+This directory contains comprehensive examples demonstrating the capabilities of the hpyhex-rs Python library. These examples showcase real-world applications and integration patterns for building game AI, performing data analysis, and training machine learning models.
+
+## Prerequisites
+
+Before running these examples, make sure you have hpyhex-rs installed:
+
+```bash
+# Build from source in the py/ directory
+cd py/
+make build
+
+# Or install the built wheel
+pip install dist/hpyhex_rs-*.whl
+```
+
+For the machine learning examples, you'll also need:
+
+```bash
+pip install numpy torch
+```
+
+## Examples Overview
+
+### 1. Binary Serialization (`01_binary_serialization.py`)
+
+Demonstrates efficient binary serialization for saving and loading game states using `hpyhex_rs_serialize` and `hpyhex_rs_deserialize` methods.
+
+**Key Features:**
+- Serialize/deserialize Hex coordinates, Pieces, and HexEngine states
+- Save complete game states for persistence
+- File-based storage for game replay systems
+- Minimal memory footprint with binary format
+
+**Use Cases:**
+- Save game progress
+- Network transmission of game states
+- Implementing undo/redo functionality
+- Creating game replay systems
+
+**Run:**
+```bash
+python examples/01_binary_serialization.py
+```
+
+### 2. NumPy Piece Conversion (`02_numpy_piece_conversion.py`)
+
+Shows how to convert Piece objects to and from NumPy arrays for efficient numerical computation and machine learning data preparation.
+
+**Key Features:**
+- Convert pieces to various NumPy dtypes (bool, int8, float32, etc.)
+- Batch conversion of multiple pieces (flat and stacked arrays)
+- Round-trip conversion validation
+- ML pipeline integration example
+- Memory efficiency comparison
+
+**Use Cases:**
+- Preparing training data for neural networks
+- Batch processing for performance
+- Statistical analysis of piece configurations
+- Efficient data storage
+
+**Run:**
+```bash
+python examples/02_numpy_piece_conversion.py
+```
+
+### 3. NumPy Board State Analysis (`03_numpy_board_analysis.py`)
+
+Demonstrates advanced board analysis using NumPy for strategic decision-making and game AI development.
+
+**Key Features:**
+- Board state visualization and statistics
+- Density and clustering analysis
+- Valid position evaluation
+- Pattern recognition
+- Game progression tracking
+- Statistical strategy comparison
+
+**Use Cases:**
+- Game AI development
+- Strategic analysis and optimization
+- Performance profiling
+- Pattern recognition for ML training
+
+**Run:**
+```bash
+python examples/03_numpy_board_analysis.py
+```
+
+### 4. PyTorch MLP for Move Prediction (`04_pytorch_mlp.py`)
+
+Showcases deep learning integration with a Multi-Layer Perceptron (MLP) that learns to predict move quality.
+
+**Key Features:**
+- Custom PyTorch Dataset for game states
+- MLP architecture for move prediction
+- Training loop with validation
+- Model evaluation and comparison with heuristics
+- Seamless NumPy-to-PyTorch tensor conversion
+
+**Use Cases:**
+- Building game AI with deep learning
+- Training move evaluation models
+- Benchmarking learned vs. hand-crafted strategies
+- Generating training data from gameplay
+
+**Run:**
+```bash
+python examples/04_pytorch_mlp.py
+```
+
+**Note:** This example uses a small dataset for demonstration. For production use, increase the dataset size and training epochs.
+
+### 5. Automated Game Simulation (`05_game_simulation.py`)
+
+Demonstrates various automated game-playing strategies and their comparative analysis.
+
+**Key Features:**
+- Multiple strategy implementations (Random, Greedy, Density-based, etc.)
+- Strategy comparison with statistical analysis
+- Game replay and move history
+- Score progression analysis
+- Adaptive strategies based on game state
+
+**Strategies Included:**
+- **Random**: Randomly select valid moves
+- **Greedy**: First valid position
+- **Density-Maximizing**: Highest density score
+- **Center-Biased**: Prefer positions near center
+- **Adaptive**: Switch strategy based on board state
+
+**Use Cases:**
+- Testing game AI algorithms
+- Benchmarking different strategies
+- Generating training data for machine learning
+- Game balancing and analysis
+
+**Run:**
+```bash
+python examples/05_game_simulation.py
+```
+
+## Example Usage Patterns
+
+### Quick Start
+
+```python
+from hpyhex import Hex, Piece, HexEngine, Game, PieceFactory
+import numpy as np
+
+# Create a game
+game = Game(radius=5, queue_size=5)
+
+# Play a move
+positions = game.engine.check_positions(game.queue[0])
+if positions:
+    game.add_piece(0, positions[0])
+
+# Convert piece to NumPy
+piece = game.queue[0]
+array = piece.to_numpy_float32()
+
+# Serialize engine state
+serialized = game.engine.hpyhex_rs_serialize()
+restored = HexEngine.hpyhex_rs_deserialize(serialized)
+```
+
+### NumPy Integration
+
+```python
+import numpy as np
+from hpyhex import Piece
+
+# Convert multiple pieces to stacked NumPy array
+pieces = [PieceFactory.generate_piece() for _ in range(100)]
+array = Piece.vec_to_numpy_float32_stacked(pieces)
+# Shape: (100, 7) - 100 pieces, 7 blocks each
+
+# Convert back from NumPy
+restored_pieces = Piece.vec_from_numpy_float32_stacked(array)
+```
+
+### PyTorch Integration
+
+```python
+import torch
+from hpyhex import HexEngine, Piece
+
+# Get game state as features
+engine = HexEngine(5)
+board = np.array(list(engine.states), dtype=np.float32)
+piece = Piece.generate_piece().to_numpy_float32()
+
+# Create tensor for neural network
+features = torch.FloatTensor(np.concatenate([board, piece]))
+```
+
+## Performance Notes
+
+- **Binary serialization** is extremely efficient for storage and transmission
+- **NumPy conversion** enables vectorized operations (100-1000x speedup)
+- **Boolean dtype** uses 87.5% less memory than float64 for binary data
+- **Batch operations** are significantly faster than individual conversions
+
+## Best Practices
+
+1. **Use appropriate dtypes**: 
+   - `bool` for minimal memory usage
+   - `float32` for neural network inputs
+   - `int8`/`uint8` for compact integer storage
+
+2. **Batch conversions**: Always use `vec_to_numpy_*` methods for multiple pieces
+
+3. **Avoid raw views**: Do not use `to_numpy_raw_view` and `from_numpy_raw_view` - they are unsafe
+
+4. **Cache computations**: Store density scores rather than recomputing
+
+5. **Vectorize**: Use NumPy operations instead of Python loops when possible
+
+## Contributing
+
+Feel free to add more examples! Good examples:
+- Are focused on real applications, not just API demonstrations
+- Include detailed comments explaining the concepts
+- Show practical use cases
+- Run without errors
+- Follow the existing code style
+
+## License
+
+Same as the hpyhex-rs project (MIT License).
