@@ -142,6 +142,57 @@ Demonstrates various automated game-playing strategies and their comparative ana
 python examples/05_game_simulation.py
 ```
 
+### 6. Advanced ML Pipeline (`06_advanced_ml_pipeline.py`)
+
+Comprehensive example combining multiple features for a complete machine learning pipeline.
+
+**Key Features:**
+- Automated training data collection from game simulations
+- Binary serialization for efficient dataset storage
+- NumPy-based feature extraction and engineering
+- Performance benchmarking comparisons
+- Dataset analysis and statistics
+
+**Use Cases:**
+- Building production ML systems
+- Large-scale data collection
+- Feature engineering for game AI
+- Performance profiling
+
+**Run:**
+```bash
+python examples/06_advanced_ml_pipeline.py
+```
+
+### 7. NRSearch Algorithm (`07_nrsearch_algorithm.py`)
+
+Demonstrates the nrsearch algorithm, the best heuristic from the nrminimax package. This advanced strategy combines multiple scoring factors for optimal move selection.
+
+**Key Features:**
+- Implementation of nrsearch algorithm
+- Combines dense index, piece length, and elimination scoring
+- Comparison with simpler strategies
+- Decision analysis showing why moves are chosen
+- Performance benchmarking across board sizes
+
+**Score Components:**
+1. **Dense Index**: Local density around placement position
+2. **Piece Length**: Number of blocks in the piece (rewards larger pieces)
+3. **Elimination Score**: Points from clearing lines (normalized by board radius)
+
+**Use Cases:**
+- Best-in-class game AI for competitive play
+- Generating high-quality training data
+- Benchmarking baseline for ML models
+- Understanding multi-factor decision making
+
+**Run:**
+```bash
+python examples/07_nrsearch_algorithm.py
+```
+
+**Note:** NRSearch is computationally more expensive than simpler strategies but produces significantly better results (often 100x+ higher scores).
+
 ## Example Usage Patterns
 
 ### Quick Start
