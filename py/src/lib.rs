@@ -3153,6 +3153,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
     /// Warning:
     /// - This function is highly unsafe and can lead to undefined behavior if the above conditions are not met.
+    #[cfg(feature = "numpy")]
     pub unsafe fn to_numpy_raw_view<'t>(&self, py: Python<'t>) -> Bound<'t, PyArray1<bool>> {
         // First, we violate safety by create two Vec<bool> pointers to the same data
         let ptr = self.states.as_ptr();
