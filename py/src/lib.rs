@@ -14,7 +14,7 @@ use pyo3::types::{PyList, PyAny, PyType};
 
 #[pymodule]
 fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
-    m.add("version", "hpyhex-rs-0.2.0")?;
+    m.add("version", "hpyhex-rs-0.2.1")?;
     m.add_class::<Hex>()?;
     m.add_class::<Piece>()?;
     m.add_class::<HexEngine>()?;
