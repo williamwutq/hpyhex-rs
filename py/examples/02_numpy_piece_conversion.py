@@ -128,56 +128,6 @@ def batch_numpy_to_pieces():
     print()
 
 
-def practical_ml_pipeline():
-    """Practical example: Preparing piece data for machine learning."""
-    print("=" * 60)
-    print("ML Pipeline Example: Feature Extraction")
-    print("=" * 60)
-    
-    # Generate a dataset of pieces
-    n_samples = 100
-    pieces = [PieceFactory.generate_piece() for _ in range(n_samples)]
-    print(f"Generated {n_samples} random pieces for training")
-    
-    # Convert to float32 for neural network input
-    # Shape: (n_samples, 7) - 7 blocks per piece
-    features = Piece.vec_to_numpy_float32_stacked(pieces)
-    print(f"\nFeature matrix shape: {features.shape}")
-    print(f"  dtype: {features.dtype}")
-    
-    # Compute some statistics
-    mean_occupation = features.mean(axis=1)  # Mean per piece
-    print(f"\nPiece occupation statistics:")
-    print(f"  Mean blocks occupied: {mean_occupation.mean():.2f}")
-    print(f"  Std dev: {mean_occupation.std():.2f}")
-    print(f"  Min: {mean_occupation.min():.2f}, Max: {mean_occupation.max():.2f}")
-    
-    # Compute per-block statistics (which positions are most commonly occupied)
-    block_occupation_rate = features.mean(axis=0)
-    print(f"\nPer-block occupation rates:")
-    for i, rate in enumerate(block_occupation_rate):
-        print(f"  Block {i}: {rate:.2%}")
-    
-    # Simulate creating labels (e.g., piece "goodness" score)
-    # In a real scenario, this might be based on game outcomes
-    labels = mean_occupation * 10 + np.random.randn(n_samples) * 0.5
-    print(f"\nGenerated labels shape: {labels.shape}")
-    print(f"  Label range: [{labels.min():.2f}, {labels.max():.2f}]")
-    
-    # Split into training and validation sets
-    split = int(0.8 * n_samples)
-    X_train, X_val = features[:split], features[split:]
-    y_train, y_val = labels[:split], labels[split:]
-    
-    print(f"\nDataset split:")
-    print(f"  Training: {X_train.shape[0]} samples")
-    print(f"  Validation: {X_val.shape[0]} samples")
-    
-    # Data is now ready for training a neural network!
-    print(f"\nData ready for ML model training!")
-    print()
-
-
 def efficient_storage_example():
     """Demonstrate efficient storage using different dtypes."""
     print("=" * 60)
@@ -225,7 +175,6 @@ def main():
     batch_piece_conversion()
     numpy_to_piece_conversion()
     batch_numpy_to_pieces()
-    practical_ml_pipeline()
     efficient_storage_example()
     
     print("=" * 60)

@@ -77,64 +77,55 @@ def nrsearch(engine: HexEngine, queue: List[Piece]) -> Tuple[int, Hex]:
 
 
 def demonstrate_nrsearch():
-    """Demonstrate the nrsearch algorithm on a sample game."""
+    """Demonstrate the nrsearch algorithm by playing a complete game."""
     print("=" * 60)
-    print("NRSearch Algorithm Demonstration")
+    print("NRSearch Algorithm - Complete Game Simulation")
     print("=" * 60)
     
-    # Create a game
-    game = Game(5, 5)
+    # Create a game with radius 5 and queue length 3
+    game = Game(5, 3)
     
     print(f"\nInitial game state:")
-    print(f"  Queue: {len(game.queue)} pieces")
-    print(f"  Board occupation: 0/{len(game.engine.states)} blocks")
+    print(f"  Board radius: {game.engine.radius}")
+    print(f"  Queue length: {len(game.queue)}")
+    print(f"  Total board blocks: {len(game.engine.states)}")
     
-    # Make a few moves using nrsearch
-    for move_num in range(5):
+    move_count = 0
+    max_moves = 100  # Limit moves for demonstration purposes
+    
+    # Play the game until completion or max moves reached
+    while not game.end and move_count < max_moves:
         try:
             piece_idx, position = nrsearch(game.engine, game.queue)
             piece = game.queue[piece_idx]
-            
-            print(f"\nMove {move_num + 1}:")
-            print(f"  Selected piece: index {piece_idx}, "
-                  f"name: {PieceFactory.get_piece_name(piece)}")
-            print(f"  Position: {position}")
-            
-            # Compute score components for analysis
-            dense_idx = game.engine.compute_dense_index(position, piece)
-            piece_len = len(piece)
-            
-            # Simulate to get elimination score
-            test_engine = game.engine.__copy__()
-            test_engine.add_piece(position, piece)
-            elim_blocks = len(test_engine.eliminate())
-            elim_score = elim_blocks / game.engine.radius
-            
-            total_score = dense_idx + piece_len + elim_score
-            
-            print(f"  Score components:")
-            print(f"    Dense index: {dense_idx:.4f}")
-            print(f"    Piece length: {piece_len}")
-            print(f"    Elimination: {elim_score:.4f} ({elim_blocks} blocks cleared)")
-            print(f"    Total score: {total_score:.4f}")
             
             # Make the move
             old_score = game.score
             game.add_piece(piece_idx, position)
             score_gained = game.score - old_score
             
-            print(f"  Game score: {old_score} → {game.score} (+{score_gained})")
+            move_count += 1
             
-        except ValueError as e:
-            print(f"\nMove {move_num + 1}: {e}")
+            # Print every 10th move for brevity
+            if move_count % 10 == 0:
+                print(f"  Move {move_count}: "
+                      f"Piece={PieceFactory.get_piece_name(piece)}, "
+                      f"Score={game.score} (+{score_gained})")
+            
+        except ValueError:
+            # No valid moves available
             break
     
-    print(f"\nFinal game state:")
-    print(f"  Total score: {game.score}")
+    print(f"\nGame completed!")
+    print(f"  Total moves: {move_count}")
+    print(f"  Final score: {game.score}")
     print(f"  Turns played: {game.turn}")
     board_occupation = sum(game.engine.states)
     print(f"  Board occupation: {board_occupation}/{len(game.engine.states)} "
           f"({board_occupation / len(game.engine.states) * 100:.1f}%)")
+    print(f"  Game ended naturally: {game.end}")
+    if move_count >= max_moves:
+        print(f"  (Stopped after {max_moves} moves for demonstration)")
     print()
 
 

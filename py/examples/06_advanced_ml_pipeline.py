@@ -22,6 +22,64 @@ from typing import List, Dict, Tuple
 from hpyhex import Hex, Piece, HexEngine, Game, PieceFactory
 
 
+def nrsearch(engine: HexEngine, queue: List[Piece]) -> Tuple[int, Hex]:
+    """
+    A heuristic algorithm that selects the best piece and position based on 
+    the dense index, piece length, and score gain from elimination.
+    
+    This algorithm computes a comprehensive score for each piece and position by:
+    1. Computing the dense index (local density around placement)
+    2. Adding the piece length (reward for placing larger pieces)
+    3. Simulating the move and adding elimination score (reward for clearing lines)
+    
+    This is considered the best algorithm in the nrminimax package.
+    
+    Parameters:
+        engine (HexEngine): The game engine.
+        queue (list[Piece]): The queue of pieces available for placement.
+        
+    Returns:
+        placement (tuple[int, Hex]): A tuple containing the index of the best 
+                                     piece and the best position to place it.
+                                     
+    Raises:
+        ValueError: If the queue is empty or no valid positions are found.
+    """
+    options = []
+    seen_pieces = {}
+    
+    # Iterate through all pieces in the queue
+    for piece_index, piece in enumerate(queue):
+        key = int(piece)
+        
+        # Skip duplicate pieces (same state value)
+        if key in seen_pieces:
+            continue
+        seen_pieces[key] = piece_index
+        
+        # Check all valid positions for this piece
+        for coord in engine.check_positions(piece):
+            # Compute base score: dense index + piece length
+            score = engine.compute_dense_index(coord, piece) + len(piece)
+            
+            # Simulate the move to compute elimination benefit
+            copy_engine = engine.__copy__()
+            copy_engine.add_piece(coord, piece)
+            elimination_score = len(copy_engine.eliminate()) / engine.radius
+            score += elimination_score
+            
+            options.append((piece_index, coord, score))
+    
+    if not options:
+        raise ValueError("No valid options found")
+    
+    # Return the piece and position with the highest score
+    best_placement = max(options, key=lambda item: item[2])
+    best_piece_option, best_position_option, best_score_result = best_placement
+    
+    return (best_piece_option, best_position_option)
+
+
 class DataCollector:
     """Collects training data from game simulations."""
     
@@ -134,30 +192,16 @@ def collect_training_data(n_games: int = 50, radius: int = 4) -> DataCollector:
     
     collector = DataCollector()
     
-    # Simple density-based strategy for data collection
-    def density_strategy(game):
-        best_score = -1
-        best_move = (None, None)
-        
-        for piece_idx in range(len(game.queue)):
-            piece = game.queue[piece_idx]
-            positions = game.engine.check_positions(piece)
-            
-            if positions:
-                for pos in positions:
-                    score = game.engine.compute_dense_index(pos, piece)
-                    if score > best_score:
-                        best_score = score
-                        best_move = (piece_idx, pos)
-        
-        return best_move
+    # Wrapper for nrsearch to match the expected strategy signature
+    def nrsearch_strategy(game):
+        return nrsearch(game.engine, game.queue)
     
     start_time = time.time()
     total_samples = 0
     
     for game_num in range(n_games):
         game = Game(radius, 5)
-        samples = collector.collect_from_game(game, density_strategy)
+        samples = collector.collect_from_game(game, nrsearch_strategy)
         total_samples += samples
         
         if (game_num + 1) % 10 == 0:
@@ -353,8 +397,8 @@ def main():
     print("=" * 60)
     print("Complete ML Pipeline with Data Collection\n")
     
-    # Collect training data
-    collector = collect_training_data(n_games=30, radius=4)
+    # Collect training data (reduced from 30 to 10 for demonstration with nrsearch)
+    collector = collect_training_data(n_games=10, radius=4)
     
     # Analyze the dataset
     analyze_dataset(collector)

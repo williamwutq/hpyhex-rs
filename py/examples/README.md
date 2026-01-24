@@ -113,7 +113,7 @@ python examples/04_pytorch_mlp.py
 
 **Note:** This example uses a small dataset for demonstration. For production use, increase the dataset size and training epochs.
 
-### 5. Automated Game Simulation (`05_game_simulation.py`)
+### 5. Basic Game Simulation (`basic_game_simulation.py`)
 
 Demonstrates various automated game-playing strategies and their comparative analysis.
 
@@ -139,7 +139,7 @@ Demonstrates various automated game-playing strategies and their comparative ana
 
 **Run:**
 ```bash
-python examples/05_game_simulation.py
+python examples/basic_game_simulation.py
 ```
 
 ### 6. Advanced ML Pipeline (`06_advanced_ml_pipeline.py`)
