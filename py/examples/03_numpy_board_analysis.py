@@ -38,8 +38,7 @@ def board_state_visualization():
     print(f"Occupied blocks: {sum(engine.states)}")
     
     # Get board state as a list
-    state_list = list(engine.states)
-    state_array = np.array(state_list, dtype=bool)
+    state_array = engine.to_numpy_bool()
     
     print(f"\nBoard state array:")
     print(f"  Shape: {state_array.shape}")
@@ -71,7 +70,7 @@ def board_density_analysis():
             idx = np.random.randint(0, n_blocks)
             engine.set_state(idx, True)
         
-        state_array = np.array(list(engine.states), dtype=bool)
+        state_array = engine.to_numpy_bool()
         occupation_rate = state_array.sum() / len(state_array)
         
         print(f"\nRadius {radius}:")
@@ -187,7 +186,7 @@ def game_progression_analysis():
             break
         
         # Collect statistics before move
-        state_array = np.array(list(game.engine.states), dtype=bool)
+        state_array = game.engine.to_numpy_bool()
         occupation_rate = state_array.sum() / len(state_array)
         entropy = game.engine.compute_entropy()
         

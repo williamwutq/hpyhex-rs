@@ -286,7 +286,7 @@ from hpyhex import HexEngine, Piece
 
 # Get game state as features
 engine = HexEngine(5)
-board = np.array(list(engine.states), dtype=np.float32)
+board = engine.to_numpy_float32()
 piece = Piece.generate_piece().to_numpy_float32()
 
 # Create tensor for neural network

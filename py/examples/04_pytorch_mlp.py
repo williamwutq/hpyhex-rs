@@ -54,7 +54,7 @@ class GameStateDataset(Dataset):
                     game.add_piece(0, pos)
             
             # Get current state and next piece
-            board_state = np.array(list(game.engine.states), dtype=np.float32)
+            board_state = game.engine.to_numpy_float32()
             if game.queue:
                 piece_state = game.queue[0].to_numpy_float32()
                 
@@ -190,7 +190,7 @@ def use_model_for_prediction(model, radius=5):
             break
         
         # Get current board state and next piece
-        board_state = np.array(list(game.engine.states), dtype=np.float32)
+        board_state = game.engine.to_numpy_float32()
         piece_state = game.queue[0].to_numpy_float32()
         
         # Get all valid positions

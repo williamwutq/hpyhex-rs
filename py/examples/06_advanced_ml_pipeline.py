@@ -101,7 +101,7 @@ class DataCollector:
         
         while not game.end:
             # Get current state
-            board_state = np.array(list(game.engine.states), dtype=np.float32)
+            board_state = game.engine.to_numpy_float32()
             
             # Get all pieces in queue
             for piece_idx, piece in enumerate(game.queue):
@@ -316,7 +316,7 @@ def demonstrate_feature_engineering() -> None:
     piece = PieceFactory.get_piece("full")
     
     print(f"\nBasic features:")
-    board = np.array(list(engine.states), dtype=np.float32)
+    board = engine.to_numpy_float32()
     piece_arr = piece.to_numpy_float32()
     
     print(f"  Board shape: {board.shape}, occupied: {board.sum():.0f}")

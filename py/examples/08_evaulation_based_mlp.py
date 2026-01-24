@@ -183,7 +183,7 @@ class NRSearchDataset(Dataset):
         piece = Piece.hpyhex_rs_deserialize(piece_bytes)
 
         # Convert to numpy arrays
-        board_np = np.array(list(board.states), dtype=np.float32)
+        board_np = board.to_numpy_float32()
         piece_np = piece.to_numpy_float32()
         pos_np = np.array([i, j, k], dtype=np.float32)
 
@@ -338,7 +338,7 @@ def benchmark_mlp_vs_nrsearch(model, n_games=8, radius=5, queue_length=3, device
             # Evaluate each position
             for pos in positions:
                 # Create features for this placement
-                board_np = np.array(list(game.engine.states), dtype=np.float32)
+                board_np = game.engine.to_numpy_float32()
                 piece_np = game.queue[0].to_numpy_float32()
                 pos_np = np.array([pos.i, pos.j, pos.k], dtype=np.float32)
                 features = np.concatenate([board_np, piece_np, pos_np])

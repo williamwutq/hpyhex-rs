@@ -125,7 +125,7 @@ class AdaptiveStrategy(GameStrategy):
     
     def select_move(self, game: Game) -> Tuple[int, Hex]:
         # Get board occupation rate
-        state_array = np.array(list(game.engine.states), dtype=bool)
+        state_array = game.engine.to_numpy_bool()
         occupation_rate = state_array.sum() / len(state_array)
         
         # Early game (< 30% full): maximize density
@@ -208,7 +208,7 @@ def simulate_single_game(strategy: GameStrategy, radius: int = 5,
     elapsed_time = time.time() - start_time
     
     # Get final board state
-    final_occupation = np.array(list(game.engine.states), dtype=bool).sum()
+    final_occupation = game.engine.to_numpy_bool().sum()
     occupation_rate = final_occupation / len(game.engine.states)
     
     stats = {
