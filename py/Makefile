@@ -13,10 +13,12 @@ help:
 	@echo "Available targets:"
 	@echo "  build      Build the Rust extension module using maturin"
 	@echo "  build-half Build the Rust extension module with half-precision support"
+	@echo "  build-all  Build the Rust extension module for all supported Python versions"
 	@echo "  html       Build HTML documentation"
 	@echo "  latex      Build LaTeX documentation"
 	@echo "  man		Build man page documentation"
 	@echo "  clean      Clean up build files"
+	@echo "  release    Release the package to PyPI using twine"
 
 .PHONY: help Makefile
 
@@ -27,6 +29,14 @@ build:
 # Build the Rust extension module with half-precision support
 build-half:
 	maturin build --release --interpreter "$(PYVERSION)" --out dist/ --features full
+
+# Build for all supported python versions
+build-all:
+	@maturin build --release --interpreter python3.8 --out dist/ --features numpy
+	@maturin build --release --interpreter python3.9 --out dist/ --features numpy
+	@maturin build --release --interpreter python3.10 --out dist/ --features numpy
+	@maturin build --release --interpreter python3.11 --out dist/ --features numpy
+	@maturin build --release --interpreter python3.12 --out dist/ --features numpy
 
 # Compile docs for HTML
 html:
@@ -44,3 +54,7 @@ man:
 clean:
 	@$(SPHINXBUILD) -M clean "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 	rm -rf dist/
+
+# Release the package
+release:
+    python -m twine upload dist/*
