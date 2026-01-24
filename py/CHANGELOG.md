@@ -33,3 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - Fix `Hex`, `Piece`, and `HexEngine` class `__iter__` method returning tuples instead of iterators.
+
+### Added
+- Add NumPy ndarray conversion methods for valid piece positions in HexEngine class.
+- Add comprehensive examples demonstrating usage of this library in /examples directory.

@@ -2347,6 +2347,11 @@ impl PieceIterator {
 /// while the view is still in use, or if the type does not match the expected representation. They may not work
 /// correctly on all platforms due to differences in memory alignment and representation, but should work correctly
 /// on most common platforms with correct installation of Python and NumPy and carefully managed memory usage.
+/// 
+/// In addition to states, placement positions can also be converted to NumPy ndarrays
+/// using the to_numpy_positions_mask methods, which support all the same types as the state conversions.
+/// These methods return a NumPy ndarray where each element corresponds to a block in the hexagonal grid,
+/// with True (or one) indicating an occupied block and False (or zero) indicating an empty block.
 pub struct HexEngine {
     radius: usize,
     states: Vec<bool>,
@@ -2952,6 +2957,25 @@ impl HexEngine {
             states: vec,
         })
     }
+
+    #[cfg(feature = "numpy")]
+    fn to_numpy_positions_mask_impl<T>(&self, py: Python, piece: Piece) -> Py<PyArray1<T>>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        // run check_add_of(hex_coordinate_of(i)) for all i in self.states
+        let mut mask: Vec<T> = Vec::with_capacity(self.states.len());
+        for i in 0..self.states.len() {
+            let hex = self.hex_coordinate_of(i).unwrap(); // safe because i is in range
+            let can_add = self.check_add_of(&hex, &piece).unwrap_or(false);
+            if can_add {
+                mask.push(T::one());
+            } else {
+                mask.push(T::zero());
+            }
+        }
+        PyArray1::from_vec_bound(py, mask).into()
+    }
 }
 
 #[pymethods]
@@ -3043,6 +3067,144 @@ impl HexEngine {
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
+
+    /// Get a NumPy bool ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of boolean values where True indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask(&self, py: Python, piece: Piece) -> Py<PyArray1<bool>> {
+        self.to_numpy_positions_mask_impl::<bool>(py, piece)
+    }
+
+    /// Get a NumPy int8 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int8 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_int8(&self, py: Python, piece: Piece) -> Py<PyArray1<i8>> {
+        self.to_numpy_positions_mask_impl::<i8>(py, piece)
+    }
+
+    /// Get a NumPy uint8 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint8 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_uint8(&self, py: Python, piece: Piece) -> Py<PyArray1<u8>> {
+        self.to_numpy_positions_mask_impl::<u8>(py, piece)
+    }
+
+    /// Get a NumPy int16 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int16 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_int16(&self, py: Python, piece: Piece) -> Py<PyArray1<i16>> {
+        self.to_numpy_positions_mask_impl::<i16>(py, piece)
+    }
+
+    /// Get a NumPy uint16 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint16 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_uint16(&self, py: Python, piece: Piece) -> Py<PyArray1<u16>> {
+        self.to_numpy_positions_mask_impl::<u16>(py, piece)
+    }
+
+    /// Get a NumPy int32 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int32 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_int32(&self, py: Python, piece: Piece) -> Py<PyArray1<i32>> {
+        self.to_numpy_positions_mask_impl::<i32>(py, piece)
+    }
+
+    /// Get a NumPy uint32 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint32 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_uint32(&self, py: Python, piece: Piece) -> Py<PyArray1<u32>> {
+        self.to_numpy_positions_mask_impl::<u32>(py, piece)
+    }
+
+    /// Get a NumPy int64 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of int64 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_int64(&self, py: Python, piece: Piece) -> Py<PyArray1<i64>> {
+        self.to_numpy_positions_mask_impl::<i64>(py, piece)
+    }
+
+    /// Get a NumPy uint64 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of uint64 values (0 or 1) where 1 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_uint64(&self, py: Python, piece: Piece) -> Py<PyArray1<u64>> {
+        self.to_numpy_positions_mask_impl::<u64>(py, piece)
+    }
+
+    /// Get a NumPy float32 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float32 values (0.0 or 1.0) where 1.0 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_float32(&self, py: Python, piece: Piece) -> Py<PyArray1<f32>> {
+        self.to_numpy_positions_mask_impl::<f32>(py, piece)
+    }
+
+    /// Get a NumPy float64 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float64 values (0.0 or 1.0) where 1.0 indicates a valid position for adding the Piece.
+    #[cfg(feature = "numpy")]
+    pub fn to_numpy_positions_mask_float64(&self, py: Python, piece: Piece) -> Py<PyArray1<f64>> {
+        self.to_numpy_positions_mask_impl::<f64>(py, piece)
+    }
+
+    /// Get a NumPy float16 ndarray mask indicating valid positions for adding the given Piece.
+    /// 
+    /// Arguments:
+    /// - piece: The Piece to check for valid positions.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array of float16 values (0.0 or 1.0) where 1.0 indicates a valid position for adding the Piece.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    pub fn to_numpy_positions_mask_float16(&self, py: Python, piece: Piece) -> Py<PyArray1<F16>> {
+        self.to_numpy_positions_mask_impl::<F16>(py, piece)
+    }
 
     /// Get the default NumPy ndarray representation of the HexEngine's block states.
     /// 
