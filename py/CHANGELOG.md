@@ -23,3 +23,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added NumPy integration for seamless conversion between Game instances and NumPy arrays.
 - Added NumPy integration for seamless conversion between Game queues and stacked or flat NumPy arrays.
 - Added special `hpyhex_rs_add_piece_with_index` method to Game class for adding pieces using indices directly.
+- Add NumPy integration for game moves using various ndarray masks and maximum value selection
