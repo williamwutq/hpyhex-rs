@@ -297,11 +297,10 @@ def benchmark_selection_mlp(model, n_games=8, radius=5, queue_length=3, device='
             # Create mask for valid moves
             mask = np.zeros_like(logits, dtype=bool)
             for piece_idx in range(len(game.queue)):
-                valid_positions = game.engine.check_positions(game.queue[piece_idx])
-                for pos in valid_positions:
-                    flat_idx = flatten_move_to_index(piece_idx, pos, queue_length, game.engine)
-                    if flat_idx < len(mask):
-                        mask[flat_idx] = True
+                mask_piece = game.engine.to_numpy_positions_mask(game.queue[piece_idx])
+                start = piece_idx * len(mask_piece)
+                end = start + len(mask_piece)
+                mask[start:end] = mask_piece
 
             # Apply mask to logits (set invalid moves to -inf)
             logits[~mask] = -np.inf
@@ -396,11 +395,10 @@ def benchmark_mlp_vs_nrsearch(model, n_games=8, radius=5, queue_length=3, device
             # Create mask for valid moves
             mask = np.zeros_like(logits, dtype=bool)
             for piece_idx in range(len(game.queue)):
-                valid_positions = game.engine.check_positions(game.queue[piece_idx])
-                for pos in valid_positions:
-                    flat_idx = flatten_move_to_index(piece_idx, pos, queue_length, game.engine)
-                    if flat_idx < len(mask):
-                        mask[flat_idx] = True
+                mask_piece = game.engine.to_numpy_positions_mask(game.queue[piece_idx])
+                start = piece_idx * len(mask_piece)
+                end = start + len(mask_piece)
+                mask[start:end] = mask_piece
 
             # Apply mask to logits (set invalid moves to -inf)
             logits[~mask] = -np.inf
