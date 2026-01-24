@@ -414,12 +414,12 @@ def main():
     # Configuration
     RADIUS = 5
     QUEUE_LENGTH = 3
-    N_SAMPLES = 50000  # Generate 50k samples
+    N_SAMPLES = 1000000
     TRAIN_SPLIT = 0.8
     BATCH_SIZE = 64
     EPOCHS = 15
     LEARNING_RATE = 0.001
-    SAMPLE_FILE = 'nrsearch_samples.pkl'
+    SAMPLE_FILE = 'evaluation_samples.pkl'
 
     # Check if samples already exist
     if os.path.exists(SAMPLE_FILE):

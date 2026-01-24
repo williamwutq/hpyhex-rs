@@ -34,7 +34,7 @@ def board_state_visualization():
         engine.add_piece(pos2[0], piece2)
     
     print(f"Board radius: {engine.radius}")
-    print(f"Total blocks: {len(engine.states)}")
+    print(f"Total blocks: {len(engine)}")
     print(f"Occupied blocks: {sum(engine.states)}")
     
     # Get board state as a list
@@ -62,7 +62,7 @@ def board_density_analysis():
     
     for radius in radii:
         engine = HexEngine(radius)
-        n_blocks = len(engine.states)
+        n_blocks = len(engine)
         
         # Fill random blocks
         n_fill = n_blocks // 3
@@ -97,7 +97,7 @@ def analyze_valid_positions():
     # Get a test piece
     piece = PieceFactory.get_piece("rhombus_4_i")
     print(f"Test piece: {PieceFactory.get_piece_name(piece)}")
-    print(f"Board occupation: {sum(engine.states)} / {len(engine.states)}")
+    print(f"Board occupation: {sum(engine.states)} / {len(engine)}")
     
     # Find all valid positions
     valid_positions = engine.check_positions(piece)
@@ -148,7 +148,7 @@ def pattern_analysis():
     
     # Analyze neighbor counts for all positions
     neighbor_counts = []
-    for i in range(len(engine.states)):
+    for i in range(len(engine)):
         hex_pos = engine.coordinate_block(i)
         count = engine.count_neighbors(hex_pos)
         neighbor_counts.append(count)

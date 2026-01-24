@@ -88,7 +88,7 @@ def demonstrate_nrsearch():
     print(f"\nInitial game state:")
     print(f"  Board radius: {game.engine.radius}")
     print(f"  Queue length: {len(game.queue)}")
-    print(f"  Total board blocks: {len(game.engine.states)}")
+    print(f"  Total board blocks: {len(game.engine)}")
     
     move_count = 0
     max_moves = 100  # Limit moves for demonstration purposes
@@ -121,8 +121,8 @@ def demonstrate_nrsearch():
     print(f"  Final score: {game.score}")
     print(f"  Turns played: {game.turn}")
     board_occupation = sum(game.engine.states)
-    print(f"  Board occupation: {board_occupation}/{len(game.engine.states)} "
-          f"({board_occupation / len(game.engine.states) * 100:.1f}%)")
+    print(f"  Board occupation: {board_occupation}/{len(game.engine)} "
+          f"({board_occupation / len(game.engine) * 100:.1f}%)")
     print(f"  Game ended naturally: {game.end}")
     if move_count >= max_moves:
         print(f"  (Stopped after {max_moves} moves for demonstration)")

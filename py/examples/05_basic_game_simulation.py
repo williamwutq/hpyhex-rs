@@ -209,7 +209,7 @@ def simulate_single_game(strategy: GameStrategy, radius: int = 5,
     
     # Get final board state
     final_occupation = game.engine.to_numpy_bool().sum()
-    occupation_rate = final_occupation / len(game.engine.states)
+    occupation_rate = final_occupation / len(game.engine)
     
     stats = {
         'strategy': strategy.name,
@@ -318,7 +318,6 @@ def demonstrate_game_replay(strategy: GameStrategy = None, radius: int = 4) -> N
             break
         
         # Record state before move
-        board_before = list(game.engine.states)
         piece = game.queue[piece_idx]
         
         # Make move

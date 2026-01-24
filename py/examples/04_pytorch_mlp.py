@@ -302,7 +302,7 @@ def main():
     
     # Calculate input size (board blocks + piece blocks)
     # For radius 4: 37 blocks, plus 7 piece blocks = 44 total
-    n_board_blocks = len(HexEngine(RADIUS).states)
+    n_board_blocks = HexEngine.solve_length(RADIUS)
     n_piece_blocks = 7  # Standard piece size
     input_size = n_board_blocks + n_piece_blocks
     

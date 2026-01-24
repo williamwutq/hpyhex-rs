@@ -19,7 +19,7 @@ import tempfile
 import numpy as np
 from typing import List, Dict, Tuple
 
-from hpyhex import Hex, Piece, HexEngine, Game, PieceFactory
+from hpyhex import Hex, Piece, HexEngine, Game, PieceFactory, random_engine
 
 
 def nrsearch(engine: HexEngine, queue: List[Piece]) -> Tuple[int, Hex]:
@@ -268,12 +268,7 @@ def demonstrate_batch_serialization(collector: DataCollector) -> None:
     
     engines = []
     for _ in range(n_states):
-        engine = HexEngine(5)
-        # Add some random pieces
-        for _ in range(5):
-            if np.random.random() > 0.5:
-                idx = np.random.randint(0, len(engine.states))
-                engine.set_state(idx, True)
+        engine = random_engine(radius=5)
         engines.append(engine)
     
     # Benchmark serialization
@@ -372,13 +367,13 @@ def benchmark_numpy_operations() -> None:
     
     # Method 1: Pure Python
     start_time = time.time()
-    py_sum = sum(int(piece) for piece in pieces)
+    py_sum = sum(len(piece.coordinates) for piece in pieces)
     py_time = time.time() - start_time
     print(f"  Pure Python: {py_time:.4f}s")
     
     # Method 2: NumPy conversion + operations
     start_time = time.time()
-    np_array = Piece.vec_to_numpy_uint8_stacked(pieces)
+    np_array = Piece.vec_to_numpy_uint32_flat(pieces)
     np_sum = np_array.sum()
     np_time = time.time() - start_time
     print(f"  NumPy: {np_time:.4f}s")
@@ -387,7 +382,7 @@ def benchmark_numpy_operations() -> None:
     print(f"  Speedup: {speedup:.1f}x")
     
     # Verify correctness
-    print(f"  Results match: {abs(py_sum - np_sum * 7) < 1}")  # *7 because we sum all 7 blocks
+    print(f"  Results match: {'✓' if py_sum == np_sum else '✗'}")
 
 
 def main():

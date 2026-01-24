@@ -77,14 +77,14 @@ def flatten_move_to_index(piece_index: int, pos: Hex, queue_length: int, engine:
     Convert (piece_index, position) to a flat index for the MLP output.
     """
     pos_index = engine.index_block(pos)
-    return piece_index * len(engine.states) + pos_index
+    return piece_index * len(engine) + pos_index
 
 
 def index_to_move(flat_index: int, queue_length: int, engine: HexEngine) -> Tuple[int, Hex]:
     """
     Convert flat index back to (piece_index, position).
     """
-    n_blocks = len(engine.states)
+    n_blocks = len(engine)
     piece_index = flat_index // n_blocks
     pos_index = flat_index % n_blocks
 
@@ -131,7 +131,7 @@ def generate_selection_samples(n_samples=10000, radius=5, queue_length=3, save_p
             queue_np = np.concatenate([p.to_numpy_uint8() for p in game.queue])
 
             # Create flat target array
-            n_moves = queue_length * len(game.engine.states)
+            n_moves = queue_length * len(game.engine)
             target = np.zeros(n_moves, dtype=np.float32)
 
             for (piece_idx, pos, _), prob in zip(ranked_moves, probabilities):
@@ -526,8 +526,8 @@ def main():
     if os.path.exists('selection_mlp.pth'):
         print("Trained model 'selection_mlp.pth' already exists. Skipping training.")
         # Load model
-        sample_state = np.zeros((7 * QUEUE_LENGTH + len(HexEngine(RADIUS).states),), dtype=np.float32)
-        sample_target = np.zeros((QUEUE_LENGTH * len(HexEngine(RADIUS).states),), dtype=np.float32)
+        sample_state = np.zeros((7 * QUEUE_LENGTH + HexEngine.solve_length(RADIUS),), dtype=np.float32)
+        sample_target = np.zeros((QUEUE_LENGTH * HexEngine.solve_length(RADIUS),), dtype=np.float32)
         input_size = sample_state.shape[0]
         output_size = sample_target.shape[0]
         model = SelectionMLP(input_size=input_size, output_size=output_size)
