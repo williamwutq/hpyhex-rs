@@ -1,3 +1,5 @@
+For the Rust crate of the same name, see [hpyhex-rs on crates.io](https://crates.io/crates/hpyhex-rs) or [hpyhex-rs Rust Source](../README.md).
+
 # hpyhex-rs
 Simplified implementations of the HappyHex game components and hexagonal system in Rust.
 This is a drop-in replacement for the original `hpyhex` package, optimized for performance and memory usage. Offers up to 200x speed improvements in critical operations and around 60x speed improvements in essential gameplay workflows.

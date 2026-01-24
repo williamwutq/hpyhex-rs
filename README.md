@@ -1,3 +1,5 @@
+For a Python backend of the same name using similar Rust code via PyO3, see [hpyhex-rs on PyPI](https://pypi.org/project/hpyhex-rs/) or [hpyhex-rs Python Implementation](./py/README.md).
+
 # hpyhex-rs
 Simplified implementations of the HappyHex game components and hexagonal system in Rust.
 
