@@ -218,6 +218,8 @@ python examples/08_nrsearch_based_mlp.py
 
 Showcases training a selection-based MLP that directly outputs move probabilities from game states. Unlike evaluation approaches, this model learns end-to-end move selection.
 
+This is a serious example demonstrating advanced machine learning techniques for game AI. It generates a large dataset, trains a neural network, and produces a functional model that can play the game autonomously. The example is computationally intensive and may take significant time to run, but it illustrates practical applications of ML in game AI.
+
 **Key Features:**
 - Modified NRSearch providing ranked move lists
 - MLP trained on state-to-action probability distributions
@@ -236,7 +238,7 @@ Showcases training a selection-based MLP that directly outputs move probabilitie
 python examples/09_selection_based_mlp.py
 ```
 
-**Note:** This selection-based approach enables efficient RL training with policy gradients.
+**Note:** This selection-based approach enables efficient RL training with policy gradients. The example can take significant time to run due to dataset generation and model training, but produces a useful, trained neural network model that demonstrates practical ML applications in game AI.
 
 ### Quick Start
 

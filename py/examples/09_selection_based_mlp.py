@@ -286,21 +286,33 @@ def benchmark_selection_mlp(model, n_games=8, radius=5, queue_length=3, device='
             nrsearch_positions = {(piece_idx, pos) for piece_idx, pos, _ in top_k_nrsearch}
 
             # Get MLP predictions
-            board_np = game.engine.to_numpy_uint32()
-            queue_np = np.concatenate([p.to_numpy_uint8() for p in game.queue])
-            state = np.concatenate([board_np.astype(np.float32), queue_np.astype(np.float32)])
+            board_np = game.engine.to_numpy_float32()
+            queue_np = np.concatenate([p.to_numpy_float32() for p in game.queue])
+            state = np.concatenate([board_np, queue_np])
             state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
 
             with torch.no_grad():
                 logits = model(state_tensor).squeeze(0).cpu().numpy()
+
+            # Create mask for valid moves
+            mask = np.zeros_like(logits, dtype=bool)
+            for piece_idx in range(len(game.queue)):
+                valid_positions = game.engine.check_positions(game.queue[piece_idx])
+                for pos in valid_positions:
+                    flat_idx = flatten_move_to_index(piece_idx, pos, queue_length, game.engine)
+                    if flat_idx < len(mask):
+                        mask[flat_idx] = True
+
+            # Apply mask to logits (set invalid moves to -inf)
+            logits[~mask] = -np.inf
 
             # Get top-k MLP moves
             top_k_indices = np.argsort(logits)[-k:][::-1]  # descending
             mlp_positions = set()
 
             for idx in top_k_indices:
-                piece_idx, pos = index_to_move(idx, queue_length, game.engine)
-                if piece_idx < len(game.queue):
+                if logits[idx] > -np.inf:  # valid move
+                    piece_idx, pos = index_to_move(idx, queue_length, game.engine)
                     mlp_positions.add((piece_idx, pos))
 
             # Calculate overlap
@@ -348,46 +360,6 @@ def benchmark_mlp_vs_nrsearch(model, n_games=8, radius=5, queue_length=3, device
     for game_num in range(n_games):
         print(f"\nGame {game_num + 1}/{n_games}")
 
-        # Play with MLP
-        print("  Playing with MLP...")
-        start_time = time.time()
-        game = Game(radius, queue_length)
-        moves = 0
-        while not game.end:
-            positions = game.engine.check_positions(game.queue[0])
-            if not positions:
-                break
-
-            best_score = -float('inf')
-            best_pos = None
-
-            # Evaluate each position
-            for pos in positions:
-                # Create features for this placement
-                board_np = np.array(list(game.engine.states), dtype=np.float32)
-                piece_np = game.queue[0].to_numpy_float32()
-                pos_np = np.array([pos.i, pos.j, pos.k], dtype=np.float32)
-                features = np.concatenate([board_np, piece_np, pos_np])
-                features_tensor = torch.FloatTensor(features).unsqueeze(0).to(device)
-
-                with torch.no_grad():
-                    predicted_score = model(features_tensor).item()
-
-                if predicted_score > best_score:
-                    best_score = predicted_score
-                    best_pos = pos
-
-            if best_pos is None:
-                break
-
-            game.add_piece(0, best_pos)
-            moves += 1
-
-        mlp_time = time.time() - start_time
-        mlp_scores.append(game.score)
-        mlp_times.append(mlp_time)
-        print(f"    MLP: Score {game.score}, Moves {moves}, Time {mlp_time:.2f}s")
-
         # Play with NRSearch
         print("  Playing with NRSearch...")
         start_time = time.time()
@@ -405,6 +377,46 @@ def benchmark_mlp_vs_nrsearch(model, n_games=8, radius=5, queue_length=3, device
         nrsearch_scores.append(game.score)
         nrsearch_times.append(nrsearch_time)
         print(f"    NRSearch: Score {game.score}, Moves {moves}, Time {nrsearch_time:.2f}s")
+
+        # Play with MLP
+        print("  Playing with MLP...")
+        start_time = time.time()
+        game = Game(radius, queue_length)
+        moves = 0
+        while not game.end:
+            # Get MLP predictions
+            board_np = game.engine.to_numpy_float32()
+            queue_np = np.concatenate([p.to_numpy_float32() for p in game.queue])
+            state = np.concatenate([board_np, queue_np])
+            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                logits = model(state_tensor).squeeze(0).cpu().numpy()
+
+            # Create mask for valid moves
+            mask = np.zeros_like(logits, dtype=bool)
+            for piece_idx in range(len(game.queue)):
+                valid_positions = game.engine.check_positions(game.queue[piece_idx])
+                for pos in valid_positions:
+                    flat_idx = flatten_move_to_index(piece_idx, pos, queue_length, game.engine)
+                    if flat_idx < len(mask):
+                        mask[flat_idx] = True
+
+            # Apply mask to logits (set invalid moves to -inf)
+            logits[~mask] = -np.inf
+
+            # Select best move
+            best_idx = np.argmax(logits)
+            piece_idx, pos = index_to_move(best_idx, queue_length, game.engine)
+
+            # Make the move
+            game.add_piece(piece_idx, pos)
+            moves += 1
+
+        mlp_time = time.time() - start_time
+        mlp_scores.append(game.score)
+        mlp_times.append(mlp_time)
+        print(f"    MLP: Score {game.score}, Moves {moves}, Time {mlp_time:.2f}s")
 
     # Summary
     print("\n" + "=" * 60)
@@ -492,6 +504,7 @@ This approach has proven successful in games like AlphaGo and other complex doma
 
 
 def main():
+    # Note: the function may run for a long time due to training
     """Run the selection-based MLP example."""
     print("\n" + "=" * 60)
     print("HpyHex-RS Selection-Based MLP Example")
@@ -508,6 +521,26 @@ def main():
     LEARNING_RATE = 0.0004
     SAMPLE_FILE = 'selection_samples.pkl'
     TOP_K = 5
+
+    # Check if model file exists
+    if os.path.exists('selection_mlp.pth'):
+        print("Trained model 'selection_mlp.pth' already exists. Skipping training.")
+        # Load model
+        sample_state = np.zeros((7 * QUEUE_LENGTH + len(HexEngine(RADIUS).states),), dtype=np.float32)
+        sample_target = np.zeros((QUEUE_LENGTH * len(HexEngine(RADIUS).states),), dtype=np.float32)
+        input_size = sample_state.shape[0]
+        output_size = sample_target.shape[0]
+        model = SelectionMLP(input_size=input_size, output_size=output_size)
+        model.load_state_dict(torch.load('selection_mlp.pth'))
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"\nUsing device: {device}")
+        benchmark_selection_mlp(model, n_games=8, radius=RADIUS, queue_length=QUEUE_LENGTH, device=device, k=TOP_K)
+        benchmark_mlp_vs_nrsearch(model, n_games=8, radius=RADIUS, queue_length=QUEUE_LENGTH, device=device)
+
+        # Demonstrate RL potential
+        demonstrate_rl_potential()
+
+        return
 
     # Check if samples already exist
     if os.path.exists(SAMPLE_FILE):
