@@ -856,6 +856,28 @@ The following table summarizes all supported NumPy dtypes for HexEngine serializ
 **Special note on `from_numpy_raw_view` and `to_numpy_raw_view`:**
 Only `from_numpy_raw_view()` is available for zero-copy views, and it only works with `bool_` dtype arrays. This is the only method converting from NumPy that doesn't copy data, but it comes with significant safety requirements as documented above. Similarly, `to_numpy_raw_view()` only produces `bool_` dtype arrays, and requires careful management to avoid double-free errors.
 
+#### Positions Mask
+
+The `HexEngine` provides methods to get NumPy arrays indicating valid positions for adding a specific piece. These masks are 1D arrays where each index corresponds to a hexagonal cell, and the value indicates whether that position is valid for placing the given piece.
+
+```python
+from hpyhex import HexEngine, PieceFactory
+
+engine = HexEngine(radius=3)
+piece = PieceFactory.get_piece("triangle_3_a")
+
+# Get boolean mask of valid positions
+mask = engine.to_numpy_positions_mask(piece)
+# mask.shape == (37,)
+# mask[i] = True if piece can be placed at cell i
+
+# Available for all numeric types
+mask_u8 = engine.to_numpy_positions_mask_uint8(piece)   # uint8, 0 or 1
+mask_f32 = engine.to_numpy_positions_mask_float32(piece) # float32, 0.0 or 1.0
+# ... and all other types including float16 (requires "half" feature)
+```
+
+These methods are useful for game logic, AI decision making, and visualization of possible moves.
 
 ### Serialization for Game
 
