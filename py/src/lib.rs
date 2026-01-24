@@ -623,7 +623,8 @@ impl Hex {
 }
 
 #[pyclass]
-struct HexIterator {
+/// An iterator over Hex
+pub struct HexIterator {
     i: i32,
     k: i32,
     index: usize,
@@ -2256,7 +2257,8 @@ fn piece_neighbors_of(p: Piece, target_i: i32, target_k: i32) -> usize {
 }
 
 #[pyclass]
-struct PieceIterator {
+/// An iterator over Piece, returning states as booleans.
+pub struct PieceIterator {
     states: [bool; 7],
     index: usize,
 }
@@ -4482,7 +4484,8 @@ impl HexEngine {
 }
 
 #[pyclass]
-struct HexEngineIterator {
+/// An iterator over HexEngine, returning states as booleans.
+pub struct HexEngineIterator {
     states: Vec<bool>,
     index: usize,
 }
