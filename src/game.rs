@@ -887,6 +887,96 @@ impl AsRef<HexEngine> for Game {
     }
 }
 
+impl Into<Vec<u8>> for Game {
+    /// Converts the Game into a vector of bytes representing the game state
+    /// 
+    /// # Returns
+    /// A vector of bytes representing the Game's binary state
+    fn into(self) -> Vec<u8> {
+        let mut vec = Vec::<u8>::new();
+        // Add score and turn as u32
+        vec.extend_from_slice(&(self.score as u32).to_le_bytes());
+        vec.extend_from_slice(&(self.turn as u32).to_le_bytes());
+        // Add length of queue as u32
+        vec.extend_from_slice(&(self.queue.len() as u32).to_le_bytes());
+        // Add queue pieces as u8
+        for piece in &self.queue {
+            vec.push(piece.as_u8());
+        }
+        // Add engine binary representation
+        let engine_vec: Vec<u8> = self.engine.into();
+        vec.extend_from_slice(&engine_vec);
+        vec
+    }
+}
+
+impl TryFrom<&[u8]> for Game {
+    type Error = String;
+
+    /// Creates a Game from a byte slice representing the game state
+    /// 
+    /// # Arguments
+    /// * `data` - A byte slice containing the binary representation of the Game
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        use std::array::TryFromSliceError;
+        let mut offset = 0;
+
+        // Read score and turn as u32
+        let score = u32::from_le_bytes(data[offset..offset + 4].try_into().map_err(|e: TryFromSliceError| e.to_string())?) as usize;
+        offset += 4;
+        let turn = u32::from_le_bytes(data[offset..offset + 4].try_into().map_err(|e: TryFromSliceError| e.to_string())?) as usize;
+        offset += 4;
+
+        // Read length of queue as u32
+        let queue_len = u32::from_le_bytes(data[offset..offset + 4].try_into().map_err(|e: TryFromSliceError| e.to_string())?) as usize;
+        offset += 4;
+
+        if data.len() < offset + queue_len {
+            return Err("Data too short for specified queue length".to_string());
+        }
+
+        // Read queue pieces as u8
+        let mut queue = Vec::<Piece>::with_capacity(queue_len);
+        for _ in 0..queue_len {
+            let piece_value = data[offset];
+            queue.push(Piece::new(piece_value));
+            offset += 1;
+        }
+
+        // Read engine binary representation
+        let engine_data = &data[offset..];
+        let engine = engine_data.try_into()?;
+
+        let mut game = Game {
+            engine,
+            queue,
+            score,
+            turn,
+            end: false,
+        };
+        game.check_end();
+        Ok(game)
+    }
+}
+
+impl TryFrom<Vec<u8>> for Game {
+    type Error = String;
+
+    /// Creates a Game from a vector of bytes representing the game state
+    /// 
+    /// # Arguments
+    /// * `data` - A vector of bytes containing the binary representation of the Game
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
+        Game::try_from(data.as_slice())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
