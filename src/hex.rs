@@ -1751,7 +1751,7 @@ impl TryFrom<&[u8]> for HexEngine {
                 if bit_index >= expected_len {
                     break;
                 }
-                let bit = (byte >> (7 - i)) & 1;
+                let bit = (byte >> i) & 1;
                 states.push(bit == 1);
                 bit_index += 1;
             }
@@ -1897,9 +1897,8 @@ impl Into<Vec<u8>> for HexEngine {
         let mut bit_count = 0;
 
         for &state in &self.states {
-            current_byte <<= 1;
             if state {
-                current_byte |= 1;
+                current_byte |= 1 << bit_count;
             }
             bit_count += 1;
 
@@ -1911,7 +1910,6 @@ impl Into<Vec<u8>> for HexEngine {
         }
 
         if bit_count > 0 {
-            current_byte <<= 8 - bit_count;
             bytes.push(current_byte);
         }
 
