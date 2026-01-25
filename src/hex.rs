@@ -24,7 +24,7 @@
 //! - Optimized algorithms for piece placement, elimination, and density calculations.
 
 #![cfg(any(feature = "default", feature = "core"))]
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::fmt;
 use std::ops::{Add, Sub};
 
@@ -1773,6 +1773,22 @@ impl Borrow<Vec<bool>> for HexEngine {
     /// A reference to the vector of booleans representing block occupancy.
     fn borrow(&self) -> &Vec<bool> {
         &self.states
+    }
+}
+
+impl BorrowMut<Vec<bool>> for HexEngine {
+    /// Mutably borrows the internal state vector
+    /// 
+    /// The borrow can occur because HexEngine is just a wrapper around the vector,
+    /// and they have the same hash and equality semantics.
+    /// 
+    /// However, any boolean vector cannot be borrowed as a HexEngine,
+    /// since it may not satisfy the HexEngine invariants. Use `TryFrom` instead.
+    /// 
+    /// ## Returns
+    /// A mutable reference to the vector of booleans representing block occupancy.
+    fn borrow_mut(&mut self) -> &mut Vec<bool> {
+        &mut self.states
     }
 }
 
