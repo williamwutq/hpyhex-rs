@@ -24,6 +24,7 @@
 //! - Optimized algorithms for piece placement, elimination, and density calculations.
 
 #![cfg(any(feature = "default", feature = "core"))]
+use std::borrow::Borrow;
 use std::fmt;
 use std::ops::{Add, Sub};
 
@@ -877,7 +878,7 @@ impl TryFrom<Vec<Hex>> for Piece {
 /// - See [`Hex`] for more on the coordinate system.
 ///
 /// Designed by William Wu. Adapted for Rust.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq)]
 pub struct HexEngine {
     radius: usize,
     states: Vec<bool>,
@@ -1724,6 +1725,54 @@ impl TryFrom<Vec<Hex>> for HexEngine {
         }
 
         Ok(engine)
+    }
+}
+
+impl std::hash::Hash for HexEngine {
+    /// Hashes the HexEngine
+    /// 
+    /// The hash is the same as hashing the internal state vector.
+    /// 
+    /// ## Parameters
+    /// - `state`: The hasher to write to
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.states.hash(state);
+    }
+}
+
+impl AsRef<Vec<bool>> for HexEngine {
+    /// Returns a reference to the internal state vector
+    /// 
+    /// ## Returns
+    /// A reference to the vector of booleans representing block occupancy.
+    fn as_ref(&self) -> &Vec<bool> {
+        &self.states
+    }
+}
+
+impl AsMut<Vec<bool>> for HexEngine {
+    /// Returns a mutable reference to the internal state vector
+    /// 
+    /// ## Returns
+    /// A mutable reference to the vector of booleans representing block occupancy.
+    fn as_mut(&mut self) -> &mut Vec<bool> {
+        &mut self.states
+    }
+}
+
+impl Borrow<Vec<bool>> for HexEngine {
+    /// Borrows the internal state vector
+    /// 
+    /// The borrow can occur because HexEngine is just a wrapper around the vector,
+    /// and they have the same hash and equality semantics.
+    /// 
+    /// However, any boolean vector cannot be borrowed as a HexEngine,
+    /// since it may not satisfy the HexEngine invariants. Use `TryFrom` instead.
+    /// 
+    /// ## Returns
+    /// A reference to the vector of booleans representing block occupancy.
+    fn borrow(&self) -> &Vec<bool> {
+        &self.states
     }
 }
 

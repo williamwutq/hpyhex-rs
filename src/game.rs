@@ -835,6 +835,58 @@ impl From<(Vec<Piece>, HexEngine)> for Game {
     }
 }
 
+impl Into<(HexEngine, Vec<Piece>)> for Game {
+    /// Converts the Game into a tuple of HexEngine and piece queue
+    /// 
+    /// # Returns
+    /// A tuple containing the HexEngine and vector of pieces
+    fn into(self) -> (HexEngine, Vec<Piece>) {
+        (self.engine, self.queue)
+    }
+}
+
+impl Into<(Vec<Piece>, HexEngine)> for Game {
+    /// Converts the Game into a tuple of piece queue and HexEngine
+    /// 
+    /// # Returns
+    /// A tuple containing the vector of pieces and HexEngine
+    fn into(self) -> (Vec<Piece>, HexEngine) {
+        (self.queue, self.engine)
+    }
+}
+
+impl Into<(usize, usize)> for Game {
+    /// Converts the Game into a pair of turn and score
+    /// 
+    /// The order is (turn, score).
+    /// 
+    /// # Returns
+    /// A tuple containing the turn number and score
+    fn into(self) -> (usize, usize) {
+        (self.turn, self.score)
+    }
+}
+
+impl Into<HexEngine> for Game {
+    /// Converts the Game into its HexEngine while discarding all other state
+    /// 
+    /// # Returns
+    /// The HexEngine of the game
+    fn into(self) -> HexEngine {
+        self.engine
+    }
+}
+
+impl AsRef<HexEngine> for Game {
+    /// Returns a reference to the HexEngine
+    /// 
+    /// # Returns
+    /// An immutable reference to the HexEngine
+    fn as_ref(&self) -> &HexEngine {
+        &self.engine
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
