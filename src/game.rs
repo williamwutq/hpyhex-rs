@@ -749,6 +749,92 @@ impl fmt::Debug for Game {
     }
 }
 
+impl From<(HexEngine, usize)> for Game {
+    /// Creates a Game from a HexEngine and queue size
+    /// 
+    /// # Arguments
+    /// * `engine` - The HexEngine to use
+    /// * `queue_size` - The number of pieces in the queue (>= 1)
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn from((engine, queue_size): (HexEngine, usize)) -> Self {
+        Game::from_engine(engine, queue_size)
+    }
+}
+
+impl From<(usize, usize)> for Game {
+    /// Creates a Game from radius and queue size
+    /// 
+    /// # Arguments
+    /// * `radius` - The radius of the hexagonal game board (>= 2)
+    /// * `queue_size` - The number of pieces in the queue (>= 1)
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn from((radius, queue_size): (usize, usize)) -> Self {
+        Game::new(radius, queue_size)
+    }
+}
+
+impl From<(usize, HexEngine)> for Game {
+    /// Creates a Game from queue size and a HexEngine
+    /// 
+    /// # Arguments
+    /// * `queue_size` - The number of pieces in the queue (>= 1)
+    /// * `engine` - The HexEngine to use
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn from((queue_size, engine): (usize, HexEngine)) -> Self {
+        Game::from_engine(engine, queue_size)
+    }
+}
+
+impl From<(HexEngine, Vec<Piece>)> for Game {
+    /// Creates a Game from a HexEngine and a predefined piece queue
+    /// 
+    /// # Arguments
+    /// * `engine` - The HexEngine to use
+    /// * `queue` - The vector of pieces to use as the queue
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn from((engine, queue): (HexEngine, Vec<Piece>)) -> Self {
+        let mut game = Game {
+            engine,
+            queue,
+            score: 0,
+            turn: 0,
+            end: false,
+        };
+        game.check_end();
+        game
+    }
+}
+
+impl From<(Vec<Piece>, HexEngine)> for Game {
+    /// Creates a Game from a predefined piece queue and a HexEngine
+    /// 
+    /// # Arguments
+    /// * `queue` - The vector of pieces to use as the queue
+    /// * `engine` - The HexEngine to use
+    /// 
+    /// # Returns
+    /// A new Game instance
+    fn from((queue, engine): (Vec<Piece>, HexEngine)) -> Self {
+        let mut game = Game {
+            engine,
+            queue,
+            score: 0,
+            turn: 0,
+            end: false,
+        };
+        game.check_end();
+        game
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
