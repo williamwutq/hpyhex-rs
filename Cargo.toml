@@ -1,6 +1,6 @@
 [package]
 name = "hpyhex-rs"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "Simplified implementations of the HappyHex game components and hexagonal system in Rust."
 readme = "README.md"
