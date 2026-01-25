@@ -361,8 +361,27 @@ impl TryFrom<Vec<u8>> for Hex {
     /// ## Returns
     /// A new `Hex` instance or an error if the byte vector is invalid.
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        Hex::try_from(bytes.as_slice())
+    }
+}
+
+impl TryFrom<&[u8]> for Hex {
+    type Error = String;
+
+    /// Creates a Hex from a byte slice
+    /// 
+    /// The expected format is:
+    /// - First 4 bytes: little-endian representation of `i`
+    /// - Next 4 bytes: little-endian representation of `k`
+    /// 
+    /// ## Parameters
+    /// - `bytes`: Byte slice representing the (i, k) coordinates
+    /// 
+    /// ## Returns
+    /// A new `Hex` instance or an error if the byte slice is invalid.
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         if bytes.len() != 8 {
-            return Err("Byte vector must be exactly 8 bytes long".to_string());
+            return Err("Byte slice must be exactly 8 bytes long".to_string());
         }
         let i = i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         let k = i32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
@@ -786,8 +805,26 @@ impl TryFrom<Vec<u8>> for Piece {
     /// ## Returns
     /// A new `Piece` instance or an error if the byte vector is invalid.
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        Piece::try_from(bytes.as_slice())
+    }
+}
+
+impl TryFrom<&[u8]> for Piece {
+    type Error = String;
+
+    /// Creates a Piece from a byte slice
+    /// 
+    /// The expected format is:
+    /// - First byte: bitfield representing block occupancy (0-127)
+    /// 
+    /// ## Parameters
+    /// - `bytes`: Byte slice representing the piece
+    /// 
+    /// ## Returns
+    /// A new `Piece` instance or an error if the byte slice is invalid.
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         if bytes.len() != 1 {
-            return Err("Byte vector must be exactly 1 byte long".to_string());
+            return Err("Byte slice must be exactly 1 byte long".to_string());
         }
         let states = bytes[0];
         if states >= 128 {
@@ -808,9 +845,24 @@ impl TryFrom<Vec<Hex>> for Piece {
     /// ## Returns
     /// A new `Piece` instance or an error if any coordinate is invalid.
     fn try_from(coords: Vec<Hex>) -> Result<Self, Self::Error> {
+        Piece::try_from(coords.as_slice())
+    }
+}
+
+impl TryFrom<&[Hex]> for Piece {
+    type Error = String;
+
+    /// Creates a Piece from a slice of coordinates
+    /// 
+    /// ## Parameters
+    /// - `coords`: Slice of `Hex` coordinates representing occupied blocks
+    /// 
+    /// ## Returns
+    /// A new `Piece` instance or an error if any coordinate is invalid.
+    fn try_from(coords: &[Hex]) -> Result<Self, Self::Error> {
         let mut bits = 0u8;
         let mut seen = [false; 7];
-        for coo in coords {
+        for &coo in coords {
             if let Some(idx) = Piece::POSITIONS.iter().position(|&p| p == coo) {
             if seen[idx] {
                 return Err(format!("Duplicate coordinate for piece: {}", coo));
@@ -1670,6 +1722,23 @@ impl TryFrom<Vec<u8>> for HexEngine {
     /// ## Returns
     /// A `Result<HexEngine, String>` containing the new grid or an error if invalid.
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        HexEngine::try_from(bytes.as_slice())
+    }
+}
+
+impl TryFrom<&[u8]> for HexEngine {
+    type Error = String;
+
+    /// Creates a HexEngine from a byte slice
+    /// 
+    /// The format is: 4 byte for radius, followed by packed bits for block states.
+    /// 
+    /// ## Parameters
+    /// - `bytes`: Byte slice representing the grid
+    /// 
+    /// ## Returns
+    /// A `Result<HexEngine, String>` containing the new grid or an error if invalid.
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         if bytes.len() < 4 {
             return Err("Byte vector too short".to_string());
         }
