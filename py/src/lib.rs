@@ -5043,6 +5043,7 @@ impl PieceFactory {
 /// For specific dtype, the methods are named move_with_numpy_mask_{dtype} and move_with_numpy_max_{dtype},
 /// where {dtype} can be 'bool', 'int8', etc.
 #[pyclass]
+#[derive(Clone)]
 pub struct Game {
     #[pyo3(get, set)]
     _Game__engine: Py<HexEngine>,
@@ -6872,6 +6873,25 @@ impl Game {
     /// - str: A string representation of the game state.
     fn __repr__(&self, py: Python) -> String {
         format!("({}, {:?})", (&*self._Game__engine.borrow(py)).__repr__(), self._Game__queue)
+    }
+
+    /// Check equality between this game and another game.
+    /// 
+    /// Parameters:
+    /// - other (Game): The other game to compare with.
+    /// Returns:
+    /// - bool: True if the games are equal, False otherwise.
+    fn __eq__(&self, py: Python, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let other_game: Game = other.extract::<Game>()?;
+        let self_engine = &*self._Game__engine.borrow(py);
+        let other_engine = &*other_game._Game__engine.borrow(py);
+        Ok(
+            self_engine == other_engine &&
+            self._Game__queue == other_game._Game__queue &&
+            self._Game__score == other_game._Game__score &&
+            self._Game__turn == other_game._Game__turn &&
+            self._Game__end == other_game._Game__end
+        )
     }
 
     /// Returns whether this game has ended.
