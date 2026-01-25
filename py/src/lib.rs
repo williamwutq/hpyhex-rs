@@ -6850,7 +6850,7 @@ impl Game {
     /// 
     /// Returns:
     /// - str: A string representation of the game state, including engine, queue, score, turn, and whether the game has ended.
-    fn __str__(&self) -> String {
+    fn __str__(&self, py: Python) -> String {
         // Format queue with []
         let mut queue_str = String::from("[");
         for (i, piece) in self._Game__queue.iter().enumerate() {
@@ -6862,7 +6862,7 @@ impl Game {
         queue_str.push(']');
         format!(
             "Game(engine={:?}, queue={}, score={}, turn={}, end={})",
-            self._Game__engine, queue_str, self._Game__score, self._Game__turn, self._Game__end
+            (&*self._Game__engine.borrow(py)).__str__(), queue_str, self._Game__score, self._Game__turn, self._Game__end
         )
     }
 
@@ -6870,8 +6870,8 @@ impl Game {
     /// 
     /// Returns:
     /// - str: A string representation of the game state.
-    fn __repr__(&self) -> String {
-        format!("({:?}, {:?})", self._Game__engine, self._Game__queue)
+    fn __repr__(&self, py: Python) -> String {
+        format!("({}, {:?})", (&*self._Game__engine.borrow(py)).__repr__(), self._Game__queue)
     }
 
     /// Returns whether this game has ended.
