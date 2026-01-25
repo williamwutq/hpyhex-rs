@@ -2978,20 +2978,8 @@ impl HexEngine {
     }
 }
 
-#[pymethods]
-impl HexEngine {
-    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
-
-    /// Serialize the HexEngine state into a byte vector according the format used by the Rust hpyhex-rs crate.
-    /// 
-    /// The serialization format is as follows:
-    /// - The first four bytes represent the radius of the hexagonal grid as a little-endian u16.
-    /// - The subsequent bytes represent the occupancy states of the blocks in the grid, packed into bits.
-    ///   Each byte contains the states of up to 8 blocks, with the least significant bit corresponding to the first block.
-    /// 
-    /// Returns:
-    /// - bytes: A byte vector containing the serialized state of the HexEngine.
-    pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
+impl Into<Vec<u8>> for &HexEngine {
+    fn into(self) -> Vec<u8> {
         let mut bytes = Vec::new();
         let radius_u16 = self.radius as u32;
         bytes.extend_from_slice(&radius_u16.to_le_bytes());
@@ -3009,6 +2997,58 @@ impl HexEngine {
         if self.states.len() % 8 != 0 {
             bytes.push(byte);
         }
+        
+        bytes
+    }
+}
+
+impl TryFrom<&[u8]> for HexEngine {
+    type Error = PyErr;
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        if bytes.len() < 4 {
+            return Err(pyo3::exceptions::PyValueError::new_err("Byte vector too short to contain radius"));
+        }
+        let radius = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
+        let total_blocks = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
+        
+        let mut states = Vec::with_capacity(total_blocks);
+        for i in 0..total_blocks {
+            let byte_index = 4 + (i / 8);
+            let bit_index = i % 8;
+            if byte_index < bytes.len() {
+                let state = (bytes[byte_index] & (1 << bit_index)) != 0;
+                states.push(state);
+            } else {
+                states.push(false);
+            }
+        }
+        
+        Ok(HexEngine {
+            radius,
+            states,
+        })
+    }
+}
+
+#[pymethods]
+impl HexEngine {
+    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
+
+    /// Serialize the HexEngine state into a byte vector according the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The serialization format is as follows:
+    /// - The first four bytes represent the radius of the hexagonal grid as a little-endian u16.
+    /// - The subsequent bytes represent the occupancy states of the blocks in the grid, packed into bits.
+    ///   Each byte contains the states of up to 8 blocks, with the least significant bit corresponding to the first block.
+    /// 
+    /// Returns:
+    /// - bytes: A byte vector containing the serialized state of the HexEngine.
+    pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
+        let bytes: Vec<u8> = self.into();
         
         pyo3::types::PyBytes::new_bound(py, &bytes)
     }
@@ -3041,29 +3081,7 @@ impl HexEngine {
             return Err(pyo3::exceptions::PyValueError::new_err("Byte vector too short to contain radius"));
         }
         
-        let radius = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
-        let total_blocks = if radius == 0 {
-            0
-        } else {
-            1 + 3 * radius * (radius - 1)
-        };
-        
-        let mut states = Vec::with_capacity(total_blocks);
-        for i in 0..total_blocks {
-            let byte_index = 4 + (i / 8);
-            let bit_index = i % 8;
-            if byte_index < bytes.len() {
-                let state = (bytes[byte_index] & (1 << bit_index)) != 0;
-                states.push(state);
-            } else {
-                states.push(false);
-            }
-        }
-        
-        Ok(HexEngine {
-            radius,
-            states,
-        })
+        HexEngine::try_from(bytes.as_slice())
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
@@ -5402,6 +5420,77 @@ impl Game {
 #[allow(non_snake_case)]
 #[pymethods]
 impl Game {
+    /* ------------------------------------- HPYHEX-RS ------------------------------------- */
+
+    /// Serialize the Game instance into a byte vector according to the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The serialization format is as follows:
+    /// - First 4 bytes: Little-endian u32 representing the score.
+    /// - Next 4 bytes: Little-endian u32 representing the turn number.
+    /// - Next 4 bytes: Little-endian u32 representing the length of the piece queue.
+    /// - Next 'length' bytes: Each byte represents a Piece in the queue. See `hpyhex_rs_serialize` method of Piece for details.
+    /// - Remaining bytes: Binary representation of the HexEngine. See `hpyhex_rs_serialize` method of HexEngine for details.
+    /// 
+    /// Returns:
+    /// - bytes: A byte vector containing the serialized state of the Game.
+    pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
+        let mut vec = Vec::<u8>::new();
+        vec.extend_from_slice(&(self._Game__score as u32).to_le_bytes());
+        vec.extend_from_slice(&(self._Game__turn as u32).to_le_bytes());
+        vec.extend_from_slice(&(self._Game__queue.len() as u32).to_le_bytes());
+        for piece in &self._Game__queue {
+            vec.push(piece.state);
+        }
+        // Add engine binary representation
+        let engine_vec: Vec<u8> = {(&*self._Game__engine.borrow(py)).into()};
+        vec.extend_from_slice(&engine_vec);
+        pyo3::types::PyBytes::new_bound(py, &vec)
+    }
+
+    /// Deserialize a byte vector into a Game instance according to the format used by the Rust hpyhex-rs crate.
+    /// 
+    /// The deserialization format is as follows:
+    /// - First 4 bytes: Little-endian u32 representing the score.
+    /// - Next 4 bytes: Little-endian u32 representing the turn number.
+    /// - Next 4 bytes: Little-endian u32 representing the length of the piece queue.
+    /// - Next 'length' bytes: Each byte represents a Piece in the queue. See `hpyhex_rs_deserialize` method of Piece for details.
+    /// - Remaining bytes: Binary representation of the HexEngine. See `hpyhex_rs_deserialize` method of HexEngine for details.
+    /// 
+    /// Arguments:
+    /// - data: A byte vector containing the serialized state of the Game.
+    /// Returns:
+    /// - Game: A Game instance reconstructed from the byte vector.
+    #[staticmethod]
+    pub fn hpyhex_rs_deserialize<'py>(py: Python<'py>, data: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let bytes: &pyo3::types::PyBytes = data.extract()?;
+        let slice = bytes.as_bytes();
+        if slice.len() < 12 {
+            return Err(pyo3::exceptions::PyValueError::new_err("Data too short to deserialize Game"));
+        }
+        let score = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]) as u64;
+        let turn = u32::from_le_bytes([slice[4], slice[5], slice[6], slice[7]]) as u64;
+        let queue_length = u32::from_le_bytes([slice[8], slice[9], slice[10], slice[11]]) as usize;
+        let expected_length = 12 + queue_length + slice.len() - 12 - queue_length;
+        if slice.len() < expected_length {
+            return Err(pyo3::exceptions::PyValueError::new_err("Data too short to deserialize Game with given queue length"));
+        }
+        let mut queue = Vec::with_capacity(queue_length);
+        for i in 0..queue_length {
+            let state = slice[12 + i];
+            queue.push(Piece { state });
+        }
+        let engine_slice = &slice[12 + queue_length..];
+        let engine = HexEngine::try_from(engine_slice)?;
+        let game = Game {
+            _Game__engine: Py::new(py, engine)?,
+            _Game__queue: queue,
+            _Game__score: score,
+            _Game__turn: turn,
+            _Game__end: false,
+        };
+        Ok(game)
+    }
+
     /* ---------------------------------------- NUMPY ---------------------------------------- */
     /// Make a move in the game using a NumPy ndarray boolean mask.
     /// The mask should be a 2D array where the first dimension corresponds to the piece index
