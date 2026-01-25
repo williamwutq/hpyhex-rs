@@ -35,9 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix missing feature flag of `HexEngine.to_numpy_raw_view` causing compilation errors when compiled without `numpy` feature.
 - Fix `Hex`, `Piece`, and `HexEngine` class `__iter__` method returning tuples instead of iterators.
 - Fix incorrect indentation in Makefile causing build issues on some systems.
+- Fix string representation of Game instances showing reference address of Engine instead of engine instances themselves.
+- Fix equality comparison of Game instances not comparing engine instances correctly.
 
 ### Added
 - Add NumPy ndarray conversion methods for valid piece positions in HexEngine class.
 - Add comprehensive examples demonstrating usage of this library in /examples directory.
 - Add build option to Makefile for building Rust extension module without NumPy support.
 - Add examples section to README.md.
+- Implement serialization and deserialization for Game class to/from `hpyhex-rs` crate compatible binary format.
