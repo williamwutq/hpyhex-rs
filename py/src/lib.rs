@@ -3171,12 +3171,23 @@ impl HexEngine {
         } else {
             1 + 3 * radius * (radius - 1)
         };
+        let positions_exclude_self = Piece::positions
+            .iter()
+            .filter(|&pos| !(pos.i == 0 && pos.k == 0))
+            .collect::<Vec<&Hex>>();
         let shape = (n, 6);
         let mut vec: Vec<T> = vec![T::sentinel(); n * 6];
-        let adjacency_list = Self::adjacency_list_static(radius);
-        for (i, neighbors) in adjacency_list.iter().enumerate() {
-            for (j, &neighbor) in neighbors.iter().enumerate() {
-                vec[i * 6 + j] = T::from_usize(neighbor);
+        for index in 0..n {
+            if let Ok(hex) = Self::static_hex_coordinate_of(radius, index) {
+                for (i, pos) in positions_exclude_self.iter().enumerate() {
+                    let neighbor_i = hex.i + pos.i;
+                    let neighbor_k = hex.k + pos.k;
+                    if let Ok(neighbor_index) = Self::linear_index_of_static(radius, neighbor_i, neighbor_k) {
+                        if neighbor_index != -1 && neighbor_index as usize != index {
+                            vec[index * 6 + i] = T::from_usize(neighbor_index as usize);
+                        }
+                    }
+                }
             }
         }
         let array = Array2::from_shape_vec(shape, vec).unwrap();

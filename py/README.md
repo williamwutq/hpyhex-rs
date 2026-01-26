@@ -951,6 +951,31 @@ To get the maximum value for unsigned types in various languages:
 - In C++, use `std::numeric_limits<uint8_t>::max()` for unsigned types.
 - In Rust, use `u8::MAX`, `u16::MAX`, etc. for unsigned types.
 
+##### Positioning of Neighbors
+
+The adjacency list is structured such that for each cell `i`, the neighbors are ordered consistently based on hexagonal directions, following the following array of hex coordinates:
+
+```
+[
+    Hex(-1, -1),
+    Hex(-1, 0),
+    Hex(0, -1),
+    Hex(0, 1),
+    Hex(1, 0),
+    Hex(1, 1)
+]
+```
+
+If a neighbor does not exist (e.g., edge cells), the corresponding entry will contain the sentinel value. Unlike the native hpyhex-rs `hpyhex_rs_adjacency_list()` method, the adjacency list here is strictly aligned, and the positioning in the array can be trusted for the direction of each neighbor.
+
+For more convenient query of hexagonal positions, the above array can be derived from the following code snippet:
+
+```python
+from hpyhex import Piece
+
+neighbors = [p for p in Piece.positions if p != (0, 0)]
+```
+
 #### Adjacency Matrix
 
 The adjacency matrix provides a dense representation where `matrix[i,j] = True` if cells i and j are adjacent.
