@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add examples section to README.md.
 - Implement serialization and deserialization for Game class to/from `hpyhex-rs` crate compatible binary format.
 
-## [UNRELEASED]
+## [0.2.2] - 2026-01-27
 ### Fixed
 - Fixed `HexEngine.index_block` method to return `-1` directly for out-of-range coordinates instead of returning a `PyResult`, adhering to the hpyhex API.
 
