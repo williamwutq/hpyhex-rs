@@ -360,7 +360,7 @@ def generate_evaluator_samples(n_samples=5000, radius=5, queue_length=3,
         # Get all valid moves and their scores
         try:
             ranked_moves = nrsearch_ranked(game.engine, game.queue)
-        except:
+        except Exception:
             continue
         
         if not ranked_moves:
@@ -433,7 +433,7 @@ def generate_selector_samples(n_samples=5000, radius=5, queue_length=3,
         # Get best move from NRSearch
         try:
             best_piece_idx, best_pos = nrsearch(game.engine, game.queue)
-        except:
+        except Exception:
             continue
         
         # Create inputs
