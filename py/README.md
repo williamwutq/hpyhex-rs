@@ -183,6 +183,12 @@ For examples, see [examples 1](./examples/01_binary_serialization.py) for serial
 
 - `hpyhex_rs_add_piece_with_index(piece_index: int, position_index: int) -> bool`: A special method in the `Game` class that allows adding a piece using its index in the piece queue and the position index in the engine directly. This method is not part of the original `hpyhex` API but is provided for performance optimization.
 
+- `hpyhex_rs_index_block(radius: int, coo: Hex) -> int`: A static method that retrieves the index of the block at the specified Hex coordinate for a given radius without needing a HexEngine instance. Returns the index or -1 if out of range. This avoids the need to create a HexEngine just to get an index, improving performance for batch operations.
+
+- `hpyhex_rs_coordinate_block(radius: int, index: int) -> Hex`: A static method that retrieves the Hex coordinate of the block at the specified index for a given radius without needing a HexEngine instance. This simplifies coordinate calculation and may improve performance by avoiding unnecessary instance creation.
+
+- `hpyhex_rs_adjacency_list(radius: int) -> List[List[int]]`: A static method that generates the adjacency list for blocks in a hexagonal grid of the specified radius. Each inner list contains the indices of neighboring blocks for the corresponding block. This provides direct access to adjacency information, enabling efficient batch workflows and eliminating redundant calculations across multiple HexEngine instances with the same radius.
+
 ## Usage Advices
 
 ### Use Objects Provided by This Package

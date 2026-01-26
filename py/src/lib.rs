@@ -2593,6 +2593,37 @@ impl HexEngine {
             Ok(-1)
         }
     }
+    /// Generate the adjacency list for blocks in a hexagonal grid of the specified radius.
+    /// 
+    /// Each block is connected to its six neighboring blocks, if they exist within the grid.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - A vector of vectors, where each inner vector contains the indices of neighboring blocks for
+    ///   the corresponding block.
+    fn adjacency_list_static(radius: usize) -> Vec<Vec<usize>> {
+        let total_blocks = if radius == 0 {
+            return Vec::new();
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
+        let mut adjacency_list: Vec<Vec<usize>> = vec![Vec::new(); total_blocks];
+        for index in 0..total_blocks {
+            if let Ok(hex) = Self::static_hex_coordinate_of(radius, index) {
+                for pos in &Piece::positions {
+                    let neighbor_i = hex.i + pos.i;
+                    let neighbor_k = hex.k + pos.k;
+                    if let Ok(neighbor_index) = Self::linear_index_of_static(radius, neighbor_i, neighbor_k) {
+                        if neighbor_index != -1 && neighbor_index as usize != index {
+                            adjacency_list[index].push(neighbor_index as usize);
+                        }
+                    }
+                }
+            }
+        }
+        adjacency_list
+    }
     /// Check if a Hex coordinate is within the specified radius of the hexagonal grid.
     ///
     /// Arguments:
@@ -3193,6 +3224,36 @@ impl HexEngine {
     #[staticmethod]
     pub fn hpyhex_rs_coordinate_block(radius: usize, index: usize) -> PyResult<Hex> {
         HexEngine::static_hex_coordinate_of(radius, index)
+    }
+
+    /// Generate the adjacency list for blocks in a hexagonal grid of the specified radius.
+    /// 
+    /// Each block is connected to its six neighboring blocks, if they exist within the grid.
+    /// 
+    /// This static method allows for adjacency list generation without needing an instance of HexEngine.
+    /// It calculates the adjacency list based on the provided radius.
+    /// 
+    /// This method exists because the original API does not expose the adjacency list directly.
+    /// As a result, batch operations require creating a `HexEngine` instance and repeatedly
+    /// querying neighbors for each block, which is both cumbersome and inefficient.
+    ///
+    /// This static method provides direct access to the adjacency list, simplifying batch
+    /// workflows and potentially improving performance by avoiding unnecessary engine
+    /// instantiation and repeated neighbor lookups.
+    ///
+    /// Because the method is static, the resulting adjacency list can be reused across
+    /// multiple `HexEngine` instances with the same radius, eliminating redundant
+    /// calculations. In real applications, this can save thousands of hex-coordinate
+    /// computations and index lookups.
+    /// 
+    /// Arguments:
+    /// - radius (int): The radius of the hexagonal grid.
+    /// Returns:
+    /// - List[List[int]]: A list of lists, where each inner list contains the indices of neighboring blocks for
+    ///   the corresponding block.
+    #[staticmethod]
+    pub fn hpyhex_rs_adjacency_list(radius: usize) -> Vec<Vec<usize>> {
+        HexEngine::adjacency_list_static(radius)
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */

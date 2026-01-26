@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added static method `hpyhex_rs_coordinate_block` and `hpyhex_rs_index_block` to `HexEngine` class for direct coordinate/index conversions without needing an instance.
+- Added static method `hpyhex_rs_adjacency_list` to `HexEngine` class for retrieving adjacency list for batch processing.
 
 ### Changed
 - Refactor `HexEngine.index_block` for performance by avoiding creation of temporary Python references.
