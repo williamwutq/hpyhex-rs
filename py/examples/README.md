@@ -320,6 +320,44 @@ python examples/11_basic_cnn.py
 
 **Note:** CNNs typically outperform MLPs by 10-30% in grid-based games due to their ability to learn spatial patterns. This example uses a small dataset for testing; use 100k+ samples for production models. By increasing the number of inputs and training epochs, the selector model can actually surpass the selector MLP with way less parameters, but it requires much more computation time.
 
+### 12. Pattern Recognition & Edge Minimization (`12_pattern_recognition.py`)
+
+Demonstrates advanced pattern recognition using correspondence lists and implements an edge-minimization strategy that analyzes boundary complexity in three axial directions.
+
+**Key Features:**
+- Correspondence list-based pattern detection kernels
+- Edge minimization strategy that reduces boundary edges after placement
+- Directional edge analysis (I, J, K axes) with real-time move feedback
+- Pattern composition and transformation using correspondence lists
+- Strategy comparison with edge reduction metrics
+
+**Pattern Recognition:**
+- Create custom kernels for detecting specific piece patterns
+- Use correspondence lists for efficient pattern matching across shifts
+- Demonstrate composition properties of correspondence lists
+- Apply patterns for advanced board analysis
+
+**Edge Minimization Strategy:**
+- Evaluates moves by simulating placement and elimination
+- Calculates boundary edges in each of the three main directions
+- Prints directional edge counts (I, J, K) on each move
+- Optimizes for reduced board fragmentation and boundary complexity
+- Balances edge reduction with elimination scoring
+
+**Use Cases:**
+- Advanced board analysis with multi-dimensional metrics
+- Developing strategies that optimize spatial relationships
+- Pattern recognition for game AI and analysis
+- Understanding board complexity in axial directions
+- Building sophisticated evaluation functions
+
+**Run:**
+```bash
+python examples/12_pattern_recognition.py
+```
+
+**Note:** This example combines graph theory concepts with practical game strategy, showing how correspondence lists enable efficient pattern detection while edge analysis provides detailed spatial insights for decision making.
+
 ### Quick Start
 
 ```python
