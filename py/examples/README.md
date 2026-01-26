@@ -318,7 +318,7 @@ CNNs are superior to MLPs for this task because they:
 python examples/11_basic_cnn.py
 ```
 
-**Note:** CNNs typically outperform MLPs by 10-30% in grid-based games due to their ability to learn spatial patterns. This example uses a small dataset for testing; use 100k+ samples for production models.
+**Note:** CNNs typically outperform MLPs by 10-30% in grid-based games due to their ability to learn spatial patterns. This example uses a small dataset for testing; use 100k+ samples for production models. By increasing the number of inputs and training epochs, the selector model can actually surpass the selector MLP with way less parameters, but it requires much more computation time.
 
 ### Quick Start
 
