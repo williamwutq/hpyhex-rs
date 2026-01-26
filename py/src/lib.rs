@@ -3193,6 +3193,48 @@ impl HexEngine {
         let array = Array2::from_shape_vec(shape, vec).unwrap();
         PyArray2::from_owned_array_bound(py, array).unbind()
     }
+
+    /// Generate a correspondence list mapping each block index to another index shifted by a given Hex offset.
+    /// 
+    /// The indexed mapping is called a correspondence list, where each entry corresponds to a block in the hexagonal grid.
+    /// It has the following properties:
+    /// - The inverse of a correspondence list can be obtained by applying the negative of the original shift, and applying
+    ///   correspondence list T obtained from shift S with its inverse T^-1 results in the identity mapping, except those within
+    ///   S from the border of the grid.
+    /// - The correspondence lists A and B obtained from shifts S_A and S_B respectively can be composed to form a new correspondence list C
+    ///   that represents the combined shift S_C = S_A + S_B. This operation is commutative and associative.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - A NumPy array containing the shifted indices, with sentinel values for out-of-bounds shifts.
+    #[cfg(feature = "numpy")]
+    fn to_numpy_correspondence_list_impl<T>(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<T>>
+    where
+        T: SizeScalar + Copy + numpy::Element,
+    {
+        use ndarray::Array1;
+        let n = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
+        let mut vec: Vec<T> = vec![T::sentinel(); n];
+        for index in 0..n {
+            if let Ok(hex) = Self::static_hex_coordinate_of(radius, index) {
+                let shifted_i = hex.i + shift.i;
+                let shifted_k = hex.k + shift.k;
+                if let Ok(shifted_index) = Self::linear_index_of_static(radius, shifted_i, shifted_k) {
+                    if shifted_index != -1 {
+                        vec[index] = T::from_usize(shifted_index as usize);
+                    }
+                }
+            }
+        }
+        let array = Array1::from_shape_vec(n, vec).unwrap();
+        PyArray1::from_owned_array_bound(py, array).unbind()
+    }
 }
 
 impl Into<Vec<u8>> for &HexEngine {
@@ -3379,6 +3421,144 @@ impl HexEngine {
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
+
+    /// Get a NumPy correspondence list as a 1D ndarray.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is -1 for int64 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i64>> {
+        Self::to_numpy_correspondence_list_int64(py, radius, shift)
+    }
+
+    /// Get a NumPy correspondence list as a 1D ndarray of uint16.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is u16::MAX for uint16 representation.
+    /// - Python: numpy.iinfo(numpy.uint16).max.
+    /// - C: UINT16_MAX of <stdint.h>.
+    /// - C++: std::numeric_limits<uint16_t>::max().
+    /// - Rust: std::u16::MAX.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list_uint16(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<u16>> {
+        Self::to_numpy_correspondence_list_impl::<u16>(py, radius, shift)
+    }
+
+    /// Get a NumPy correspondence list as a 1D ndarray of uint32.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is u32::MAX for uint32 representation.
+    /// - Python: numpy.iinfo(numpy.uint32).max.
+    /// - C: UINT32_MAX of <stdint.h>.
+    /// - C++: std::numeric_limits<uint32_t>::max().
+    /// - Rust: std::u32::MAX.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list_uint32(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<u32>> {
+        Self::to_numpy_correspondence_list_impl::<u32>(py, radius, shift)
+    }
+
+    /// Get a NumPy correspondence list as a 1D ndarray of uint64.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is u64::MAX for uint64 representation.
+    /// - Python: numpy.iinfo(numpy.uint64).max.
+    /// - C: UINT64_MAX of <stdint.h>.
+    /// - C++: std::numeric_limits<uint64_t>::max().
+    /// - Rust: std::u64::MAX.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list_uint64(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<u64>> {
+        Self::to_numpy_correspondence_list_impl::<u64>(py, radius, shift)
+    }
+
+    /// Get a NumPy correspondence list as a 1D ndarray of int16.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is -1 for int16 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list_int16(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i16>> {
+        Self::to_numpy_correspondence_list_impl::<i16>(py, radius, shift)
+    }
+
+    /// Get a NumPy correspondence list as a 1D ndarray of int32.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is -1 for int32 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list_int32(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i32>> {
+        Self::to_numpy_correspondence_list_impl::<i32>(py, radius, shift)
+    }
+
+    /// Get a NumPy correspondence list as a 1D ndarray of int64.
+    /// 
+    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+    /// If the shifted index is out of bounds, a sentinel value is used.
+    /// 
+    /// The sentinel value used here is -1 for int64 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - shift: The Hex offset to apply to each block's coordinate.
+    /// Returns:
+    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_correspondence_list_int64(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i64>> {
+        Self::to_numpy_correspondence_list_impl::<i64>(py, radius, shift)
+    }
 
     /// Get a NumPy adjacency list as a 2D ndarray.
     /// 
