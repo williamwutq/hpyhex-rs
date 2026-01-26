@@ -73,9 +73,23 @@ impl std::ops::Deref for F16 {
 }
 
 pub trait BitScalar: Copy {
+    /// Returns the zero value for the scalar type.
     fn zero() -> Self;
+    /// Returns the one value for the scalar type.
     fn one() -> Self;
+    /// Evaluates the scalar as a boolean predicate.
+    /// 
+    /// Returns true if the scalar represents a truthy value, false if falsy.
     fn predicate(self) -> bool;
+}
+
+pub trait SizeScalar: Copy {
+    /// Converts the scalar to a usize.
+    fn to_usize(self) -> Option<usize>;
+    /// Creates the scalar from a usize.
+    fn from_usize(v: usize) -> Self;
+    /// Returns a sentinel value for the scalar type.
+    fn sentinel() -> Self;
 }
 
 macro_rules! int_bitscalar {
@@ -100,8 +114,59 @@ macro_rules! float_bitscalar {
     };
 }
 
+macro_rules! iint_sizescalar {
+    ($($t:ty),*) => {
+        $(impl SizeScalar for $t {
+            #[inline] fn to_usize(self) -> Option<usize> {
+                if self >= 0 {
+                    Some(self as usize)
+                } else {
+                    None
+                }
+            }
+            #[inline] fn from_usize(v: usize) -> Self { v as Self }
+            #[inline] fn sentinel() -> Self { -1 as Self }
+        })*
+    };
+}
+
 int_bitscalar!(i8, u8, i16, u16, i32, u32, i64, u64);
 float_bitscalar!(f32, f64);
+// u8 and i8 are not used since they are usually too small for sizes
+iint_sizescalar!(i16, i32, i64);
+impl SizeScalar for u16 {
+    #[inline] fn to_usize(self) -> Option<usize> {
+        match self {
+            u16::MAX => None,
+            v => Some(v as usize),
+        }
+    }
+    #[inline] fn from_usize(v: usize) -> Self { v as Self }
+    #[inline] fn sentinel() -> Self { u16::MAX }
+}
+
+impl SizeScalar for u32 {
+    #[inline] fn to_usize(self) -> Option<usize> {
+        match self {
+            u32::MAX => None,
+            v => Some(v as usize),
+        }
+    }
+    #[inline] fn from_usize(v: usize) -> Self { v as Self }
+    #[inline] fn sentinel() -> Self { u32::MAX }
+}
+
+impl SizeScalar for u64 {
+    #[inline] fn to_usize(self) -> Option<usize> {
+        if self == u64::MAX {
+            None
+        } else {
+            usize::try_from(self).ok()
+        }
+    }
+    #[inline] fn from_usize(v: usize) -> Self { v as Self }
+    #[inline] fn sentinel() -> Self { u64::MAX }
+}
 
 impl BitScalar for bool {
     #[inline] fn zero() -> Self { false }
@@ -3070,6 +3135,44 @@ impl HexEngine {
             }
         }
         PyArray1::from_vec_bound(py, mask).into()
+    }
+
+    #[cfg(feature = "numpy")]
+    fn to_numpy_adjacency_matrix_impl<T>(&self, py: Python) -> Py<PyArray2<T>>
+    where
+        T: BitScalar + Copy + numpy::Element,
+    {
+        use ndarray::Array2;
+        let n = self.states.len();
+        let shape = (n, n);
+        let mut vec: Vec<T> = vec![T::zero(); n * n];
+        let adjacency_list = Self::adjacency_list_static(self.radius);
+        for (i, neighbors) in adjacency_list.iter().enumerate() {
+            for &j in neighbors {
+                vec[i * n + j] = T::one();
+            }
+        }
+        let array = Array2::from_shape_vec(shape, vec).unwrap();
+        PyArray2::from_owned_array_bound(py, array).unbind()
+    }
+
+    #[cfg(feature = "numpy")]
+    fn to_numpy_adjacency_list_impl<T>(&self, py: Python) -> Py<PyArray2<T>>
+    where
+        T: SizeScalar + Copy + numpy::Element,
+    {
+        use ndarray::{Array2};
+        let n = self.states.len();
+        let shape = (n, 6);
+        let mut vec: Vec<T> = vec![T::sentinel(); n * 6];
+        let adjacency_list = Self::adjacency_list_static(self.radius);
+        for (i, neighbors) in adjacency_list.iter().enumerate() {
+            for (j, &neighbor) in neighbors.iter().enumerate() {
+                vec[i * 6 + j] = T::from_usize(neighbor);
+            }
+        }
+        let array = Array2::from_shape_vec(shape, vec).unwrap();
+        PyArray2::from_owned_array_bound(py, array).unbind()
     }
 }
 
