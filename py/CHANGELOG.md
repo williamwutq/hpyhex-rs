@@ -49,5 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Fixed `HexEngine.index_block` method to return `-1` directly for out-of-range coordinates instead of returning a `PyResult`, adhering to the hpyhex API.
 
+### Added
+- Added static method `hpyhex_rs_coordinate_block` and `hpyhex_rs_index_block` to `HexEngine` class for direct coordinate/index conversions without needing an instance.
+
 ### Changed
 - Refactor `HexEngine.index_block` for performance by avoiding creation of temporary Python references.

@@ -2508,6 +2508,47 @@ impl HexEngine {
         
         Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
     }
+    /// Converts linear index to coordinate for a static radius.
+    /// 
+    /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate,
+    /// assuming a static radius is provided.
+    /// 
+    /// Arguments:
+    /// - `radius`: The radius of the hexagonal grid.
+    /// - `index`: The linear index to convert
+    /// Returns:
+    /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
+    fn static_hex_coordinate_of(radius: usize, mut index: usize) -> PyResult<Hex> {
+        let r = radius as i32;
+        let total_blocks = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
+        if index >= total_blocks {
+            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+        }
+
+        // First half
+        for i in 0..r {
+            let len = (i + r) as usize;
+            if index < len {
+                return Ok(Hex { i, k: index as i32 });
+            }
+            index -= len;
+        }
+        
+        // Second half
+        for i in 0..(r - 1) {
+            let len = (2 * r - 2 - i) as usize;
+            if index < len {
+                return Ok(Hex { i: i + r, k: index as i32 + i + 1 });
+            }
+            index -= len;
+        }
+        
+        Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
+    }
     /// Converts coordinate to linear index
     /// 
     /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector.
@@ -2520,6 +2561,29 @@ impl HexEngine {
     fn linear_index_of(&self, i: i32, k: i32) -> PyResult<isize> {
         let r = self.radius as i32;
         if Self::check_range_coords(i, k, self.radius)? {
+            if i < r {
+                Ok((k + i * r + i * (i - 1) / 2) as isize)
+            } else {
+                Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
+            }
+        } else {
+            Ok(-1)
+        }
+    }
+    /// Converts coordinate to linear index for a static radius.
+    /// 
+    /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector,
+    /// assuming a static radius is provided.
+    /// 
+    /// Arguments:
+    /// - `radius`: The radius of the hexagonal grid.
+    /// - `i`: The I-line coordinate
+    /// - `k`: The K-line coordinate
+    /// Returns:
+    /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
+    fn linear_index_of_static(radius: usize, i: i32, k: i32) -> PyResult<isize> {
+        let r = radius as i32;
+        if Self::check_range_coords(i, k, radius)? {
             if i < r {
                 Ok((k + i * r + i * (i - 1) / 2) as isize)
             } else {
@@ -3082,6 +3146,53 @@ impl HexEngine {
         }
         
         HexEngine::try_from(bytes.as_slice())
+    }
+
+    /// Get the index of the Block at the specified Hex coordinate for a static radius.
+    /// 
+    /// This static method allows for index retrieval without needing an instance of HexEngine.
+    /// It calculates the index based on the provided radius and Hex coordinates.
+    /// 
+    /// This method exists because the original API does not expose the index calculation from radius directly,
+    /// requiring an instance of HexEngine to be created solely to retrieve it. This static method simplifies
+    /// that process and may improve performance by avoiding unnecessary instance creation.
+    /// 
+    /// Arguments:
+    /// - radius (int): The radius of the hexagonal grid.
+    /// - coo: The Hex coordinate.
+    /// Returns:
+    /// - int: The index of the Block, or -1 if out of range.
+    #[staticmethod]
+    pub fn hpyhex_rs_index_block(radius: usize, coo: &pyo3::Bound<'_, PyAny>) -> isize {
+        let (i, k) = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
+            (hex.i, hex.k)
+        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+            (tuple.0, tuple.1)
+        } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
+            (tuple3.0, tuple3.2)
+        } else {
+            return -1;
+        };
+        HexEngine::linear_index_of_static(radius, i, k).unwrap_or(-1)
+    }
+
+    /// Get the Hex coordinate of the Block at the specified index for a static radius.
+    /// 
+    /// This static method allows for coordinate retrieval without needing an instance of HexEngine.
+    /// It calculates the Hex coordinate based on the provided radius and index.
+    /// 
+    /// This method exists because the original API does not expose the coordinate calculation from radius directly,
+    /// requiring an instance of HexEngine to be created solely to retrieve it. This static method simplifies
+    /// that process and may improve performance by avoiding unnecessary instance creation.
+    /// 
+    /// Arguments:
+    /// - radius (int): The radius of the hexagonal grid.
+    /// - index (int): The linear index of the Block.
+    /// Returns:
+    /// - Hex: The Hex coordinate of the Block.
+    #[staticmethod]
+    pub fn hpyhex_rs_coordinate_block(radius: usize, index: usize) -> PyResult<Hex> {
+        HexEngine::static_hex_coordinate_of(radius, index)
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
