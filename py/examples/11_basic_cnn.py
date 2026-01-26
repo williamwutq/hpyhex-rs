@@ -98,23 +98,13 @@ def get_adjacency_matrix(engine: HexEngine) -> np.ndarray:
     """
     Get the adjacency matrix representation of the hexagonal grid.
     
+    Uses the static to_numpy_adjacency_matrix_float32 method on HexEngine.
+    
     Returns:
         np.ndarray: Adjacency matrix of shape (n_blocks, n_blocks)
-                   where [i, j] = 1 if blocks i and j are adjacent
+                   where [i, j] = 1.0 if blocks i and j are adjacent
     """
-    n_blocks = len(engine)
-    adj_list = engine.to_numpy_adjacency_list_int32(engine.radius)
-    
-    # Create adjacency matrix
-    adj_matrix = np.zeros((n_blocks, n_blocks), dtype=np.float32)
-    
-    for i in range(n_blocks):
-        for j in range(6):
-            neighbor = adj_list[i, j]
-            if neighbor != -1:
-                adj_matrix[i, neighbor] = 1.0
-    
-    return adj_matrix
+    return HexEngine.to_numpy_adjacency_matrix_float32(engine.radius)
 
 
 def create_spatial_input(engine: HexEngine, adj_matrix: np.ndarray) -> np.ndarray:
@@ -901,9 +891,6 @@ def main():
     print("   regardless of position on the board")
     print("4. Hierarchical Features: Multiple CNN layers learn increasingly")
     print("   abstract spatial patterns (edges -> clusters -> strategies)")
-    print("\nWhile we don't train an MLP for comparison here, empirical results")
-    print("in similar grid-based games show CNNs outperform MLPs by 10-30%")
-    print("in both sample efficiency and final performance.")
     
     print("\n" + "=" * 70)
     print("Example Complete!")

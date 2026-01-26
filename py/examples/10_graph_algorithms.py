@@ -30,7 +30,7 @@ def find_isolated_islands(engine: HexEngine) -> List[List[int]]:
     """
     # Get occupancy state and adjacency list
     occupied = engine.to_numpy_bool()
-    adj_list = engine.to_numpy_adjacency_list_int32(engine.radius)  # int32 uses -1 as sentinel
+    adj_list = HexEngine.to_numpy_adjacency_list_int32(engine.radius)  # int32 uses -1 as sentinel
     
     n = len(occupied)
     visited = np.zeros(n, dtype=bool)
@@ -101,11 +101,11 @@ def count_islands(engine: HexEngine) -> int:
 
 def compute_placement_density(engine: HexEngine, coord: Hex, piece: Piece) -> float:
     """
-    Compute the placement density: ratio of occupied neighbors to total possible neighbors
-    for all blocks in a piece placement.
+    Compute the placement density using the intrinsic compute_dense_index method.
     
-    Higher density means the piece fits more tightly with existing pieces,
-    which is generally better for board efficiency.
+    The dense index represents the ratio of occupied neighbors to total possible neighbors
+    for all blocks in a piece placement. Higher density means the piece fits more tightly
+    with existing pieces, which is generally better for board efficiency.
     
     Args:
         engine: The HexEngine to analyze
@@ -113,31 +113,10 @@ def compute_placement_density(engine: HexEngine, coord: Hex, piece: Piece) -> fl
         piece: The piece to place
         
     Returns:
-        Average density score (0.0 to 1.0)
+        Density score from compute_dense_index
     """
-    occupied = engine.to_numpy_bool()
-    adj_list = engine.to_numpy_adjacency_list_int32(engine.radius)
-    
-    total_neighbors = 0
-    occupied_neighbors = 0
-    
-    # Check each block in the piece
-    for offset in piece.coordinates:
-        block_coord = coord + offset
-        block_index = engine.index_block(block_coord)
-        
-        # Count occupied neighbors for this block
-        for i in range(6):
-            neighbor = adj_list[block_index, i]
-            if neighbor != -1:
-                total_neighbors += 1
-                if occupied[neighbor]:
-                    occupied_neighbors += 1
-    
-    if total_neighbors == 0:
-        return 0.0
-    
-    return occupied_neighbors / total_neighbors
+    # Use the intrinsic compute_dense_index method
+    return engine.compute_dense_index(coord, piece)
 
 
 def predict_fragmentation(engine: HexEngine, coord: Hex, piece: Piece) -> Dict[str, any]:
