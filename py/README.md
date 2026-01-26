@@ -96,6 +96,96 @@ Also see the [benchmark directory](https://github.com/williamwutq/hpyhex-rs/tree
 - **PieceFactory**: Utility for creating pieces by name, byte, or randomly. Provides access to all predefined pieces.
 - **Game**: Manages the game state, piece queue, score, and turn. Supports adding pieces and making moves with algorithms.
 
+## Hexagonal System
+
+The `Hex` class represents a 2D coordinate in a hexagonal grid system using a specialized integer coordinate model. It supports both raw coordinate access and derived line-based computations across three axes: I, J, and K.
+
+### Coordinate System
+
+This system uses three axes (I, J, K) that run diagonally through the hexagonal grid:
+
+- I+ is 60 degrees from J+, J+ is 60 degrees from K+, and K+ is 60 degrees from I-.
+- Coordinates (i, k) correspond to a basis for representing any hexagon.
+- **Raw coordinates** (or hex coordinates) refer to the distance of a point along one of the axes multiplied by 2.
+- For raw coordinates, the relationships between the axes are defined such that `i - j + k = 0`.
+- **Line coordinates** (or line-distance based coordinates) are based on the distance perpendicular to the axes.
+- For line coordinates, the relationships between the axes are defined such that `I + J - K = 0`.
+- All line coordinates correspond to some raw coordinate, but the inverse is not true. Due to the complexities with dealing with raw coordinates, it is preferable to use line coordinates. **The `hpyhex` API discourages the use of raw coordinates, and all its methods refers to line coordinates only, except those for backward compatibility.**
+
+#### Coordinate System Visualization
+
+Three example points with raw coordinates (2i, 2j, 2k):
+
+```
+   I
+  / * (5, 4, -1)
+ /     * (5, 7, 2)
+o - - J
+ \ * (0, 3, 3)
+  \
+   K
+```
+
+Three example points with line coordinates (I, J, K):
+
+```
+   I
+  / * (1, 2, 3)
+ /     * (3, 1, 4)
+o - - J
+ \ * (2, -1, 1)
+  \
+   K
+```
+
+### Grid Structure
+
+- Uses an axial coordinate system (I, K) to represent hexagonal grids, where J = K - I.
+- Three axes: I, J, K (not to be confused with 3D coordinates).
+- Line-coordinates (I, K) are perpendicular distances to axes, calculated from raw coordinates.
+
+### Grid Size
+
+The total number of blocks in a hexagonal grid of radius `r` is calculated as:
+
+```
+Aₖ = 1 + 3*r*(r - 1)
+```
+
+This is derived from the recursive pattern:
+
+```
+Aₖ = Aₖ₋₁ + 6*(k - 1); A₁ = 1
+```
+
+Valid hexagonal grid sizes for common radii:
+- Radius 1: 7 cells
+- Radius 2: 19 cells
+- Radius 3: 37 cells
+- Radius 4: 61 cells
+- Radius 5: 91 cells
+- Radius 10: 331 cells
+
+### Hex Class Details
+
+Represents a hexagonal grid coordinate using a custom line-based coordinate system.
+
+This class models hexagonal positions with two line coordinates (i, k), implicitly defining the third axis (j) as `j = k - i` to maintain hex grid constraints. It supports standard arithmetic, equality, and hashing operations, as well as compatibility with coordinate tuples.
+
+For small grids, Hex instances are cached for performance, allowing more efficient memory usage and faster access. The caching is limited to a range of -64 to 64 for both i and k coordinates.
+
+Use of Hex over tuples is recommended for clarity and to leverage the singleton feature of small Hexes.
+
+#### Attributes
+- `i` (int): The line i coordinate.
+- `j` (int): The computed line j coordinate (k - i).
+- `k` (int): The line k coordinate.
+
+#### Notes
+- This class is immutable and optimized with `__slots__`.
+- Raw coordinate methods (`__i__`, `__j__`, `__k__`) are retained for backward compatibility.
+- Only basic functionality is implemented; complex adjacency, iteration, and mutability features are omitted for simplicity.
+
 ## Usage
 ```python
 from hpyhex import Hex, Piece, HexEngine
@@ -910,6 +1000,10 @@ These methods are useful for game logic, AI decision making, and visualization o
 The `HexEngine` provides methods to obtain adjacency structures representing the connectivity between hexagonal cells. These are essential for graph-based algorithms, convolution operations, and advanced board state evaluation in hexagonal grid games.
 
 For more on graph algorithms and representations, see the [Graph Theory](https://en.wikipedia.org/wiki/Graph_theory) article on Wikipedia.
+
+For more on convolution operations on graphs, see the [Graph Convolutional Network](https://en.wikipedia.org/wiki/Graph_convolutional_network) article on Wikipedia and the [Convolutional Neural Networks](https://en.wikipedia.org/wiki/Convolutional_neural_network) article on Wikipedia.
+
+For explaination of the hexagonal system used in hpyhex, see the documentation from the `hpyhex` library or the [Hexagonal System](#hexagonal-system) section in this documentation.
 
 **Important Note**: Both the adjacency list, adjacency matrix, and correspondence list methods are static methods that require the radius of the hexagonal grid as an argument. They do not depend on the specific state of a `HexEngine` instance. This design is intentional to allow users to obtain adjacency structures for any hexagonal grid size without needing to create a full `HexEngine` instance, and to reuse these structures across multiple instances or computations.
 
