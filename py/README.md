@@ -923,19 +923,19 @@ from hpyhex import HexEngine
 engine = HexEngine(radius=3)
 
 # Get adjacency list as 2D array (default: int64 with -1 sentinel)
-adj_list = engine.to_numpy_adjacency_list()
+adj_list = HexEngine.to_numpy_adjacency_list(engine.radius)
 # adj_list.shape == (37, 6)  # 37 cells, up to 6 neighbors each
 # adj_list[i, j] = neighbor index or -1 if no neighbor
 
 # Typed versions for different integer types
-adj_list_int8 = engine.to_numpy_adjacency_list_int8()    # int8, sentinel -1
-adj_list_uint8 = engine.to_numpy_adjacency_list_uint8()  # uint8, sentinel 255
-adj_list_int16 = engine.to_numpy_adjacency_list_int16()  # int16, sentinel -1
-adj_list_uint16 = engine.to_numpy_adjacency_list_uint16() # uint16, sentinel 65535
-adj_list_int32 = engine.to_numpy_adjacency_list_int32()  # int32, sentinel -1
-adj_list_uint32 = engine.to_numpy_adjacency_list_uint32() # uint32, sentinel 4294967295
-adj_list_int64 = engine.to_numpy_adjacency_list_int64()  # int64, sentinel -1
-adj_list_uint64 = engine.to_numpy_adjacency_list_uint64() # uint64, sentinel 18446744073709551615
+adj_list_int8 = HexEngine.to_numpy_adjacency_list_int8(engine.radius)    # int8, sentinel -1
+adj_list_uint8 = HexEngine.to_numpy_adjacency_list_uint8(engine.radius)  # uint8, sentinel 255
+adj_list_int16 = HexEngine.to_numpy_adjacency_list_int16(engine.radius)  # int16, sentinel -1
+adj_list_uint16 = HexEngine.to_numpy_adjacency_list_uint16(engine.radius) # uint16, sentinel 65535
+adj_list_int32 = HexEngine.to_numpy_adjacency_list_int32(engine.radius)  # int32, sentinel -1
+adj_list_uint32 = HexEngine.to_numpy_adjacency_list_uint32(engine.radius) # uint32, sentinel 4294967295
+adj_list_int64 = HexEngine.to_numpy_adjacency_list_int64(engine.radius)  # int64, sentinel -1
+adj_list_uint64 = HexEngine.to_numpy_adjacency_list_uint64(engine.radius) # uint64, sentinel 18446744073709551615
 ```
 
 ##### Sentinel Values
@@ -957,23 +957,23 @@ The adjacency matrix provides a dense representation where `matrix[i,j] = True` 
 
 ```python
 # Boolean matrix (default)
-adj_matrix = engine.to_numpy_adjacency_matrix()
+adj_matrix = HexEngine.to_numpy_adjacency_matrix(engine.radius)
 # adj_matrix.shape == (37, 37)
 # adj_matrix[i, j] = True if cells i and j are adjacent
 
 # Typed versions
-adj_matrix_bool = engine.to_numpy_adjacency_matrix_bool()    # bool
-adj_matrix_int8 = engine.to_numpy_adjacency_matrix_int8()    # int8, 0 or 1
-adj_matrix_uint8 = engine.to_numpy_adjacency_matrix_uint8()  # uint8, 0 or 1
-adj_matrix_int16 = engine.to_numpy_adjacency_matrix_int16()  # int16, 0 or 1
-adj_matrix_uint16 = engine.to_numpy_adjacency_matrix_uint16() # uint16, 0 or 1
-adj_matrix_int32 = engine.to_numpy_adjacency_matrix_int32()  # int32, 0 or 1
-adj_matrix_uint32 = engine.to_numpy_adjacency_matrix_uint32() # uint32, 0 or 1
-adj_matrix_int64 = engine.to_numpy_adjacency_matrix_int64()  # int64, 0 or 1
-adj_matrix_uint64 = engine.to_numpy_adjacency_matrix_uint64() # uint64, 0 or 1
-adj_matrix_float32 = engine.to_numpy_adjacency_matrix_float32() # float32, 0.0 or 1.0
-adj_matrix_float64 = engine.to_numpy_adjacency_matrix_float64() # float64, 0.0 or 1.0
-adj_matrix_float16 = engine.to_numpy_adjacency_matrix_float16() # float16, 0.0 or 1.0 (requires "half" feature)
+adj_matrix_bool = HexEngine.to_numpy_adjacency_matrix_bool(engine.radius)    # bool
+adj_matrix_int8 = HexEngine.to_numpy_adjacency_matrix_int8(engine.radius)    # int8, 0 or 1
+adj_matrix_uint8 = HexEngine.to_numpy_adjacency_matrix_uint8(engine.radius)  # uint8, 0 or 1
+adj_matrix_int16 = HexEngine.to_numpy_adjacency_matrix_int16(engine.radius)  # int16, 0 or 1
+adj_matrix_uint16 = HexEngine.to_numpy_adjacency_matrix_uint16(engine.radius) # uint16, 0 or 1
+adj_matrix_int32 = HexEngine.to_numpy_adjacency_matrix_int32(engine.radius)  # int32, 0 or 1
+adj_matrix_uint32 = HexEngine.to_numpy_adjacency_matrix_uint32(engine.radius) # uint32, 0 or 1
+adj_matrix_int64 = HexEngine.to_numpy_adjacency_matrix_int64(engine.radius)  # int64, 0 or 1
+adj_matrix_uint64 = HexEngine.to_numpy_adjacency_matrix_uint64(engine.radius) # uint64, 0 or 1
+adj_matrix_float32 = HexEngine.to_numpy_adjacency_matrix_float32(engine.radius) # float32, 0.0 or 1.0
+adj_matrix_float64 = HexEngine.to_numpy_adjacency_matrix_float64(engine.radius) # float64, 0.0 or 1.0
+adj_matrix_float16 = HexEngine.to_numpy_adjacency_matrix_float16(engine.radius) # float16, 0.0 or 1.0 (requires "half" feature)
 ```
 
 ##### Using Adjacency Matrix for Convolution Operations
@@ -984,7 +984,7 @@ For convolution operations of radius 1, you can use the adjacency matrix to aggr
 import numpy as np
 
 # Get adjacency matrix (boolean)
-adj_matrix = engine.to_numpy_adjacency_matrix_bool()
+adj_matrix = HexEngine.to_numpy_adjacency_matrix_bool(engine.radius)
 # adj_matrix.shape == (37, 37)
 
 # Block values (e.g., occupied = 1, empty = 0)
@@ -1003,7 +1003,7 @@ To find cells within a larger radius, you can combine adjacency matrices:
 
 ```python
 # Get base adjacency matrix
-adj_r1 = engine.to_numpy_adjacency_matrix_bool()
+adj_r1 = HexEngine.to_numpy_adjacency_matrix_bool(engine.radius)
 
 # Radius 2 kernel: cells within 2 steps (OR of matrix and its square)
 adj_r2 = adj_r1 | (adj_r1 @ adj_r1)
@@ -1028,7 +1028,7 @@ def get_radius_kernel_bfs(engine, max_radius):
     n = len(engine.to_numpy())  # Number of cells
     kernel = np.zeros((n, n), dtype=bool)
     
-    adj_list = engine.to_numpy_adjacency_list_int64()
+    adj_list = HexEngine.to_numpy_adjacency_list_int64(engine.radius)  # Using int64 for neighbors
     
     for start in range(n):
         visited = np.zeros(n, dtype=bool)
