@@ -1087,6 +1087,59 @@ Graph algorithms can be used to derive various relational structures beyond simp
 
 Adjacency matrices require O(N²) space, which becomes memory-intensive for large grids (e.g., radius 10 has 331 cells, requiring ~100KB for boolean matrix). Since hexagonal graphs are sparse (each node connects to ~6 neighbors), adjacency lists are preferred for efficiency and scalability. Use adjacency matrices only for small grids or when matrix-based algorithms are specifically required.
 
+#### Correspondence List
+
+The correspondence list provides a mapping from each block index in the hexagonal grid to another index, shifted by a specified Hex offset. This is useful for operations that require translating positions across the grid, such as convolution kernels or spatial transformations.
+
+The indexed mapping is called a correspondence list, where each entry corresponds to a block in the hexagonal grid.
+
+It has the following properties:
+
+- The inverse of a correspondence list can be obtained by applying the negative of the original shift, and applying correspondence list T obtained from shift S with its inverse T^-1 results in the identity mapping, except those within S from the border of the grid.
+- The correspondence lists A and B obtained from shifts S_A and S_B respectively can be composed to form a new correspondence list C that represents the combined shift S_C = S_A + S_B. This operation is commutative and associative, and the out of bound indices will be the same. This means S_A + S_B is equivalent to S_B + S_A when applied to the correspondence lists.
+- The correspondence list of the origin (0, 0) is the identity list.
+
+If a correspondence matrix M is constructed from a correspondence list L that is a result of shift S, then it has the following properties:
+
+- M[i, j] = 1 if j is the shifted index of i by S, otherwise M[i, j] = 0.
+- The correspondence matrix M is sparse, with exactly one non-zero entry per row for valid shifts.
+- if L_A is the inverse of L_B, it is not necessary that M_A is the inverse of M_B, since the multiplication of sparse matrices may lead to loss of information due to out of bound indices. This means M_A * M_B is not necessarily the identity matrix, but it will have less non-zero entries than the identity matrix.
+- if L_A + L_B = L_C, then M_A * M_B = M_C and M_B * M_A = M_C. This means the multiplication of correspondence matrices is commutative and associative, similar to correspondence lists.
+- If |S| = s and grid radius = r, then the number of valid (non-sentinel) entries in the correspondence list is approximately equal to the total number of cells in a hexagonal grid of radius (r - s). This is because the shift S effectively reduces the usable area of the grid by s layers of cells from the border.
+
+##### Getting Correspondence Lists
+
+```python
+from hpyhex import HexEngine, Hex
+
+engine = HexEngine(radius=3)
+shift = Hex(1, 0)  # Shift by (1, 0)
+
+# Get correspondence list as 1D array (default: int64 with -1 sentinel)
+corr_list = HexEngine.to_numpy_correspondence_list(radius=engine.radius, shift=shift)
+# corr_list.shape == (37,)  # One entry per cell
+# corr_list[i] = shifted index or -1 if out of bounds
+
+# Typed versions for different integer types
+corr_list_int64 = HexEngine.to_numpy_correspondence_list_int64(engine.radius, shift)    # int64, sentinel -1
+corr_list_uint16 = HexEngine.to_numpy_correspondence_list_uint16(engine.radius, shift)  # uint16, sentinel 65535
+corr_list_uint32 = HexEngine.to_numpy_correspondence_list_uint32(engine.radius, shift)  # uint32, sentinel 4294967295
+corr_list_uint64 = HexEngine.to_numpy_correspondence_list_uint64(engine.radius, shift)  # uint64, sentinel 18446744073709551615
+corr_list_int16 = HexEngine.to_numpy_correspondence_list_int16(engine.radius, shift)    # int16, sentinel -1
+corr_list_int32 = HexEngine.to_numpy_correspondence_list_int32(engine.radius, shift)    # int32, sentinel -1
+```
+
+##### Sentinel Values
+
+- **Signed integer types** (int16, int32, int64): Use -1 as the sentinel value to indicate out-of-bounds shifts
+- **Unsigned integer types** (uint16, uint32, uint64): Use the type's maximum value as sentinel
+
+To get the maximum value for unsigned types in various languages:
+- In Python, you get those sentinel values using `np.iinfo(dtype).max` for unsigned types.
+- In C, you can import `<limits.h>` and use constants like `UINT16_MAX`, `UINT32_MAX`, etc. for unsigned types.
+- In C++, use `std::numeric_limits<uint16_t>::max()` for unsigned types.
+- In Rust, use `u16::MAX`, `u32::MAX`, etc. for unsigned types.
+
 #### Advanced Board State Evaluation
 
 Combine adjacency structures with position masks and piece placement for strategic game analysis.

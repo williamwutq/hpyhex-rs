@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added adjacency matrix methods for HexEngine supporting all numeric types.
 - Added adjacency list methods for HexEngine supporting integer types.
 - Added comprehensive documentation for adjacency structures in README.md, including usage guides for convolution operations, graph algorithms, and advanced board state evaluation techniques.
+- Added correspondence list methods for HexEngine supporting all integer types.
 
 ### Changed
 - Refactor `HexEngine.index_block` for performance by avoiding creation of temporary Python references.
