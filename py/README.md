@@ -84,9 +84,9 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Examples
 
-See the [examples directory](./examples/) for complete example scripts demonstrating various functionalities of the library, including basic usage, game simulations, serialization, and NumPy integration.
+See the [examples directory](https://github.com/williamwutq/hpyhex-rs/tree/master/py/examples/) for complete example scripts demonstrating various functionalities of the library, including basic usage, game simulations, serialization, and NumPy integration.
 
-Also see the [benchmark directory](./bench/) for performance benchmarking code, which are excellent examples of the hpyhex API usage, supplemental to the simple [hpyhex](https://pypi.org/project/hpyhex/) documentation.
+Also see the [benchmark directory](https://github.com/williamwutq/hpyhex-rs/tree/master/py/bench) for performance benchmarking code, which are excellent examples of the hpyhex API usage, supplemental to the simple [hpyhex](https://pypi.org/project/hpyhex/) documentation.
 
 ## Main Classes
 
@@ -221,7 +221,7 @@ def check_positions(self, piece: Union[Piece, int]) -> List[Hex]:
 
 Obviously, if the fact that `hpyhex-rs` provides a Rust-backed implementation of `check_positions` is ignored, the above Python implementation can be used as `hpyhex-rs` also provides the `radius` attribute and `check_add` method. However, this implementation is inefficient as it creates various temporary Python objects, which are managed by the GIL, and performs various method calls (such as `range`) in Python, which are slow.
 
-The `hpyhex-rs` package provides a Rust-backed implementation of `check_positions`, which performs all operations in Rust memory, avoiding the overhead of Python object management and method calls. In the entire expensive process of checking all possible positions, the GIL is only acquired once. The radius is not passed as a Python object, but as a direct integer in the Rust struct. The nested loops are performed in Rust, and `Hex` objects are created directly as structs without going through Python constructors. Further, instead of calling the `check_add` method, a special version of `check_add` that takes in raw Rust structs representing `Hex` and `Piece` is used, avoiding the overhead of interacting with Python objects at all. These optimizations mean the Rust-backed `check_positions` is more than **100 times** faster than the native Python implementation, as per [benchmarking](./bench/bench.py) results.
+The `hpyhex-rs` package provides a Rust-backed implementation of `check_positions`, which performs all operations in Rust memory, avoiding the overhead of Python object management and method calls. In the entire expensive process of checking all possible positions, the GIL is only acquired once. The radius is not passed as a Python object, but as a direct integer in the Rust struct. The nested loops are performed in Rust, and `Hex` objects are created directly as structs without going through Python constructors. Further, instead of calling the `check_add` method, a special version of `check_add` that takes in raw Rust structs representing `Hex` and `Piece` is used, avoiding the overhead of interacting with Python objects at all. These optimizations mean the Rust-backed `check_positions` is more than **100 times** faster than the native Python implementation, as per [benchmarking](https://github.com/williamwutq/hpyhex-rs/tree/master/py/bench/bench.py) results.
 
 ### Don't Reinvent the Wheel
 It is tempting to implement your own versions of the various abstractions provided by this package, such as `Game`, which intuitively is just a combination of `HexEngine` and a piece queue, and does not offer too much extra customization. Unless your purpose is different from the original intention of `hpyhex`, it is recommended to use the provided `Game` class directly, as it interacts with the optimized Rust versions of `HexEngine` and `PieceFactory` without the overhead of creating intermediate Python objects. For extra functionality, consider building on top of `Game` instead of re-implementing it completely.
@@ -319,7 +319,7 @@ Note that the feature is experimental and not officially supported nor tested ex
 
 ### Examples
 
-See the [examples directory](./examples/) for complete example scripts demonstrating NumPy integration. These examples cover converting `HexEngine` and `Piece` objects to and from NumPy arrays, serializing game states, and integrating with machine learning workflows. The demonstrations include both basic usage and advanced scenarios. The example framework is PyTorch for machine learning, but the NumPy integration is framework-agnostic and can be used with any library that supports NumPy arrays (which are most of them).
+See the [examples directory](https://github.com/williamwutq/hpyhex-rs/tree/master/py/examples/) for complete example scripts demonstrating NumPy integration. These examples cover converting `HexEngine` and `Piece` objects to and from NumPy arrays, serializing game states, and integrating with machine learning workflows. The demonstrations include both basic usage and advanced scenarios. The example framework is PyTorch for machine learning, but the NumPy integration is framework-agnostic and can be used with any library that supports NumPy arrays (which are most of them).
 
 ### No Serialization for Hex
 
