@@ -4097,8 +4097,7 @@ impl HexEngine {
     /// - coo: The Hex coordinate.
     /// Returns:
     /// - int: The index of the Block, or -1 if out of range.
-    pub fn index_block(&self, coo: &pyo3::Bound<'_, PyAny>) -> PyResult<isize> {
-        let r = self.radius as i32;
+    pub fn index_block(&self, coo: &pyo3::Bound<'_, PyAny>) -> isize {
         let (i, k) = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
             (hex.i, hex.k)
         } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
@@ -4106,34 +4105,9 @@ impl HexEngine {
         } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
             (tuple3.0, tuple3.2)
         } else {
-            return Ok(-1);
+            return -1;
         };
-        let py_hex: Option<Py<Hex>> = if let Ok(hex) = coo.extract::<PyRef<Hex>>() {
-            Some(hex.into())
-        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
-            Some(get_hex(tuple.0, tuple.1)) // TODO: unnecessary use of get_hex
-        } else if let Ok(tuple3) = coo.extract::<(i32, i32, i32)>() {
-            Some(get_hex(tuple3.0, tuple3.2))  // TODO: unnecessary use of get_hex
-        } else {
-            None
-        };
-        // To explain why the former are unnecessary use of get_hex:
-        // We only need the i and k values, which we already have. Frontend functions should
-        // Only be used at the end of the process to reduce overhead.
-        match py_hex {
-            Some(_) => {
-                if Self::check_range_coords(i, k, self.radius)? {
-                    if i < r {
-                        Ok((k + i * r + i * (i - 1) / 2) as isize)
-                    } else {
-                        Ok((k - (r - 1).pow(2) + i * r * 3 - i * (i + 5) / 2) as isize)
-                    }
-                } else {
-                    Ok(-1)
-                }
-            },
-            None => Ok(-1),
-        }
+        self.linear_index_of(i, k).unwrap_or(-1)
     }
 
     /// Get the Hex coordinate of the Block at the specified index.
@@ -4178,7 +4152,7 @@ impl HexEngine {
                 Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
             }
         } else {
-            let idx = self.index_block(coo)?;
+            let idx = self.index_block(coo);
             if idx == -1 {
                 Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
             } else {
@@ -4207,7 +4181,7 @@ impl HexEngine {
                 Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
             }
         } else {
-            let idx = self.index_block(coo)?;
+            let idx = self.index_block(coo);
             if idx == -1 {
                 Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
             } else {
