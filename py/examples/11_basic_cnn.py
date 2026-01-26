@@ -360,7 +360,8 @@ def generate_evaluator_samples(n_samples=5000, radius=5, queue_length=3,
         # Get all valid moves and their scores
         try:
             ranked_moves = nrsearch_ranked(game.engine, game.queue)
-        except Exception:
+        except ValueError:
+            # No valid moves available
             continue
         
         if not ranked_moves:
@@ -433,7 +434,8 @@ def generate_selector_samples(n_samples=5000, radius=5, queue_length=3,
         # Get best move from NRSearch
         try:
             best_piece_idx, best_pos = nrsearch(game.engine, game.queue)
-        except Exception:
+        except ValueError:
+            # No valid moves available
             continue
         
         # Create inputs
@@ -767,7 +769,7 @@ def main():
     BATCH_SIZE = 32
     EPOCHS = 15
     N_CONV_LAYERS = 2
-    KERNEL_SIZE = 3  # kernel_radius=1 means kernel_size=3
+    KERNEL_SIZE = 3  # kernel_radius=1 means kernel_size=2*radius+1=3 (covers center + 1 neighbor on each side)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"\nUsing device: {device}")
