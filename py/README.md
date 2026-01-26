@@ -175,6 +175,10 @@ For examples, see [examples 1](./examples/01_binary_serialization.py) for serial
 - `hpyhex_rs_serialize() -> bytes`: Serializes the `HexEngine` into a byte vector. The format includes the radius as a 4-byte little-endian integer followed by the block states.
 - `hpyhex_rs_deserialize(data: bytes) -> HexEngine`: Deserializes a byte vector into a `HexEngine` instance.
 
+### Game Serialization
+- `hpyhex_rs_serialize() -> bytes`: Serializes the `Game` into a byte vector. First, the score and turn of the `Game` are serialized into 4-byte little-edian integers, followed by the Vector of `Piece`s, and then the Game's engine with `HexEngine.hpyhex_rs_serialize`.
+- `hpyhex_rs_deserialize(data: bytes) -> HexEngine`: Deserializes a byte vector into a `Game` instance, creating its own `HexEngine` instance.
+
 ## Native Methods
 
 - `hpyhex_rs_add_piece_with_index(piece_index: int, position_index: int) -> bool`: A special method in the `Game` class that allows adding a piece using its index in the piece queue and the position index in the engine directly. This method is not part of the original `hpyhex` API but is provided for performance optimization.
