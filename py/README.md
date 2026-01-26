@@ -189,6 +189,8 @@ For examples, see [examples 1](./examples/01_binary_serialization.py) for serial
 
 - `hpyhex_rs_adjacency_list(radius: int) -> List[List[int]]`: A static method that generates the adjacency list for blocks in a hexagonal grid of the specified radius. Each inner list contains the indices of neighboring blocks for the corresponding block. This provides direct access to adjacency information, enabling efficient batch workflows and eliminating redundant calculations across multiple HexEngine instances with the same radius.
 
+See the [Adjacency Structure for HexEngine](#adjacency-structure-for-hexEngine) section for more details on how to use the adjacency list. The section describes usage of the adjacency list in the context of NumPy integration, but the same principles apply when using the native method.
+
 ## Usage Advices
 
 ### Use Objects Provided by This Package
@@ -902,6 +904,183 @@ mask_f32 = engine.to_numpy_positions_mask_float32(piece) # float32, 0.0 or 1.0
 ```
 
 These methods are useful for game logic, AI decision making, and visualization of possible moves.
+
+### Adjacency Structure for HexEngine
+
+The `HexEngine` provides methods to obtain adjacency structures representing the connectivity between hexagonal cells. These are essential for graph-based algorithms, convolution operations, and advanced board state evaluation in hexagonal grid games.
+
+For more on graph algorithms and representations, see the [Graph Theory](https://en.wikipedia.org/wiki/Graph_theory) article on Wikipedia.
+
+#### Adjacency List
+
+The adjacency list represents the graph structure where each cell is connected to its neighboring cells. For hexagonal grids, each cell has up to 6 neighbors. This sparse representation is memory-efficient and suitable for most graph algorithms.
+
+##### Getting Adjacency Lists
+
+```python
+from hpyhex import HexEngine
+
+engine = HexEngine(radius=3)
+
+# Get adjacency list as 2D array (default: int64 with -1 sentinel)
+adj_list = engine.to_numpy_adjacency_list()
+# adj_list.shape == (37, 6)  # 37 cells, up to 6 neighbors each
+# adj_list[i, j] = neighbor index or -1 if no neighbor
+
+# Typed versions for different integer types
+adj_list_int8 = engine.to_numpy_adjacency_list_int8()    # int8, sentinel -1
+adj_list_uint8 = engine.to_numpy_adjacency_list_uint8()  # uint8, sentinel 255
+adj_list_int16 = engine.to_numpy_adjacency_list_int16()  # int16, sentinel -1
+adj_list_uint16 = engine.to_numpy_adjacency_list_uint16() # uint16, sentinel 65535
+adj_list_int32 = engine.to_numpy_adjacency_list_int32()  # int32, sentinel -1
+adj_list_uint32 = engine.to_numpy_adjacency_list_uint32() # uint32, sentinel 4294967295
+adj_list_int64 = engine.to_numpy_adjacency_list_int64()  # int64, sentinel -1
+adj_list_uint64 = engine.to_numpy_adjacency_list_uint64() # uint64, sentinel 18446744073709551615
+```
+
+##### Sentinel Values
+
+- **Signed integer types** (int8, int16, int32, int64): Use -1 as the sentinel value to indicate missing neighbors
+- **Unsigned integer types** (uint8, uint16, uint32, uint64): Use the type's maximum value as sentinel (e.g., 255 for uint8, 65535 for uint16)
+
+To get the maximum value for unsigned types in various languages:
+- In Python, you get those sentinel values using `np.iinfo(dtype).max` for unsigned types.
+- In C, you can import `<limits.h>` and use constants like `UINT8_MAX`, `UINT16_MAX`, etc. for unsigned types.
+- In C++, use `std::numeric_limits<uint8_t>::max()` for unsigned types.
+- In Rust, use `u8::MAX`, `u16::MAX`, etc. for unsigned types.
+
+#### Adjacency Matrix
+
+The adjacency matrix provides a dense representation where `matrix[i,j] = True` if cells i and j are adjacent.
+
+##### Getting Adjacency Matrices
+
+```python
+# Boolean matrix (default)
+adj_matrix = engine.to_numpy_adjacency_matrix()
+# adj_matrix.shape == (37, 37)
+# adj_matrix[i, j] = True if cells i and j are adjacent
+
+# Typed versions
+adj_matrix_bool = engine.to_numpy_adjacency_matrix_bool()    # bool
+adj_matrix_int8 = engine.to_numpy_adjacency_matrix_int8()    # int8, 0 or 1
+adj_matrix_uint8 = engine.to_numpy_adjacency_matrix_uint8()  # uint8, 0 or 1
+adj_matrix_int16 = engine.to_numpy_adjacency_matrix_int16()  # int16, 0 or 1
+adj_matrix_uint16 = engine.to_numpy_adjacency_matrix_uint16() # uint16, 0 or 1
+adj_matrix_int32 = engine.to_numpy_adjacency_matrix_int32()  # int32, 0 or 1
+adj_matrix_uint32 = engine.to_numpy_adjacency_matrix_uint32() # uint32, 0 or 1
+adj_matrix_int64 = engine.to_numpy_adjacency_matrix_int64()  # int64, 0 or 1
+adj_matrix_uint64 = engine.to_numpy_adjacency_matrix_uint64() # uint64, 0 or 1
+adj_matrix_float32 = engine.to_numpy_adjacency_matrix_float32() # float32, 0.0 or 1.0
+adj_matrix_float64 = engine.to_numpy_adjacency_matrix_float64() # float64, 0.0 or 1.0
+adj_matrix_float16 = engine.to_numpy_adjacency_matrix_float16() # float16, 0.0 or 1.0 (requires "half" feature)
+```
+
+##### Using Adjacency Matrix for Convolution Operations
+
+For convolution operations of radius 1, you can use the adjacency matrix to aggregate values from neighboring cells:
+
+```python
+import numpy as np
+
+# Get adjacency matrix (boolean)
+adj_matrix = engine.to_numpy_adjacency_matrix_bool()
+# adj_matrix.shape == (37, 37)
+
+# Block values (e.g., occupied = 1, empty = 0)
+block_values = engine.to_numpy_uint8()  # shape (37,)
+
+# Convolution: sum of neighbor values for each cell
+convolved = adj_matrix @ block_values  # shape (37,)
+# convolved[i] = sum of block_values[j] for all neighbors j of i
+```
+
+This is similar to convolution kernels in image processing, where each cell's new value is computed based on its neighbors.
+
+##### Generating Convolution Kernels for Larger Radii
+
+To find cells within a larger radius, you can combine adjacency matrices:
+
+```python
+# Get base adjacency matrix
+adj_r1 = engine.to_numpy_adjacency_matrix_bool()
+
+# Radius 2 kernel: cells within 2 steps (OR of matrix and its square)
+adj_r2 = adj_r1 | (adj_r1 @ adj_r1)
+
+# Radius 3 kernel: cells within 3 steps
+adj_r3 = adj_r2 | (adj_r1 @ adj_r2)
+
+# General approach: OR of matrix powers up to desired radius
+def get_radius_kernel(adj_matrix, radius):
+    kernel = adj_matrix.copy()
+    current = adj_matrix
+    for r in range(2, radius + 1):
+        current = current @ adj_matrix
+        kernel = kernel | current
+    return kernel
+```
+
+Alternatively, implement breadth-first search (BFS) with limited depth to generate the kernel:
+
+```python
+def get_radius_kernel_bfs(engine, max_radius):
+    n = len(engine.to_numpy())  # Number of cells
+    kernel = np.zeros((n, n), dtype=bool)
+    
+    adj_list = engine.to_numpy_adjacency_list_int64()
+    
+    for start in range(n):
+        visited = np.zeros(n, dtype=bool)
+        queue = [(start, 0)]  # (cell, distance)
+        visited[start] = True
+        
+        while queue:
+            cell, dist = queue.pop(0)
+            if dist < max_radius:
+                # Get neighbors from adjacency list
+                for j in range(6):
+                    neighbor = adj_list[cell, j]
+                    if neighbor != -1 and not visited[neighbor]:
+                        visited[neighbor] = True
+                        kernel[start, neighbor] = True
+                        kernel[neighbor, start] = True  # Undirected graph
+                        queue.append((neighbor, dist + 1))
+    
+    return kernel
+```
+
+##### Dynamic Relation Kernels
+
+For more complex relationships, apply topological sort on the graph defined by the adjacency list to create custom kernels based on specific criteria (e.g., distance, connectivity).
+
+Graph algorithms can be used to derive various relational structures beyond simple adjacency, enabling advanced analysis and operations on the hexagonal grid. These algorithms can be accelerated by NumPy or specialized libraries like NetworkX or SciPy.
+
+##### Memory Considerations
+
+Adjacency matrices require O(N²) space, which becomes memory-intensive for large grids (e.g., radius 10 has 331 cells, requiring ~100KB for boolean matrix). Since hexagonal graphs are sparse (each node connects to ~6 neighbors), adjacency lists are preferred for efficiency and scalability. Use adjacency matrices only for small grids or when matrix-based algorithms are specifically required.
+
+#### Advanced Board State Evaluation
+
+Combine adjacency structures with position masks and piece placement for strategic game analysis.
+
+##### Counting Isolated Islands
+
+Isolated islands refer to disconnected groups of occupied cells on the board. Counting these helps evaluate board fragmentation and strategic positioning. A board with many small islands may be harder to play effectively, as pieces placed in one island cannot influence others. This metric is useful for game AI to assess board quality and make strategic decisions about piece placement.
+
+##### Detecting Strategic Anomalies
+
+Strategic anomalies are problematic board configurations that can hinder gameplay. The most common anomaly is isolated regions with fewer than 4 connected cells, which are often impossible to fill with standard pieces. These regions represent "dead space" that cannot be utilized effectively, reducing the overall board efficiency. 
+
+Detection of such anomalies can be performed using the adjacency list to identify connected components and evaluate their sizes using graph traversal algorithms (e.g., DFS or BFS). Regions with fewer than 4 connected occupied cells can be flagged as anomalies.
+
+Detecting such anomalies helps AI systems avoid moves that create unwinnable positions or identify when a board state has become strategically compromised.
+
+##### Position Mask Integration
+
+Position masks indicate where pieces can legally be placed, but combining this with adjacency information provides deeper strategic insights. By analyzing the connectivity of potential placement positions, AI can evaluate not just whether a move is legal, but how well it integrates with the existing board structure. Positions that increase connectivity (bridging islands) or avoid creating anomalies are generally more valuable. This approach enables sophisticated move ordering and position evaluation beyond simple validity checks.
+
+These adjacency-based techniques enable sophisticated game strategies by analyzing board connectivity, identifying problematic isolated regions, and evaluating position quality beyond simple validity checks.
 
 ### Serialization for Game
 

@@ -3138,15 +3138,19 @@ impl HexEngine {
     }
 
     #[cfg(feature = "numpy")]
-    fn to_numpy_adjacency_matrix_impl<T>(&self, py: Python) -> Py<PyArray2<T>>
+    fn to_numpy_adjacency_matrix_impl<T>(py: Python, radius: usize) -> Py<PyArray2<T>>
     where
         T: BitScalar + Copy + numpy::Element,
     {
         use ndarray::Array2;
-        let n = self.states.len();
+        let n = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
         let shape = (n, n);
         let mut vec: Vec<T> = vec![T::zero(); n * n];
-        let adjacency_list = Self::adjacency_list_static(self.radius);
+        let adjacency_list = Self::adjacency_list_static(radius);
         for (i, neighbors) in adjacency_list.iter().enumerate() {
             for &j in neighbors {
                 vec[i * n + j] = T::one();
@@ -3157,15 +3161,19 @@ impl HexEngine {
     }
 
     #[cfg(feature = "numpy")]
-    fn to_numpy_adjacency_list_impl<T>(&self, py: Python) -> Py<PyArray2<T>>
+    fn to_numpy_adjacency_list_impl<T>(py: Python, radius: usize) -> Py<PyArray2<T>>
     where
         T: SizeScalar + Copy + numpy::Element,
     {
         use ndarray::{Array2};
-        let n = self.states.len();
+        let n = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
         let shape = (n, 6);
         let mut vec: Vec<T> = vec![T::sentinel(); n * 6];
-        let adjacency_list = Self::adjacency_list_static(self.radius);
+        let adjacency_list = Self::adjacency_list_static(radius);
         for (i, neighbors) in adjacency_list.iter().enumerate() {
             for (j, &neighbor) in neighbors.iter().enumerate() {
                 vec[i * 6 + j] = T::from_usize(neighbor);
@@ -3360,6 +3368,410 @@ impl HexEngine {
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
+
+    /// Get a NumPy adjacency list as a 2D ndarray.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is -1 for int64 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list(py: Python, radius: usize) -> Py<PyArray2<i64>> {
+        Self::to_numpy_adjacency_list_int64(py, radius)
+    }
+
+    /// Get a NumPy adjacency list as a 2D ndarray of uint16.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is u16::MAX for uint16 representation.
+    /// - Python: numpy.iinfo(numpy.uint16).max.
+    /// - C: UINT16_MAX of <stdint.h>.
+    /// - C++: std::numeric_limits<uint16_t>::max().
+    /// - Rust: std::u16::MAX.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list_uint16(py: Python, radius: usize) -> Py<PyArray2<u16>> {
+        Self::to_numpy_adjacency_list_impl::<u16>(py, radius)
+    }
+
+    /// Get a NumPy adjacency list as a 2D ndarray of uint32.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is u32::MAX for uint32 representation.
+    /// - Python: numpy.iinfo(numpy.uint32).max.
+    /// - C: UINT32_MAX of <stdint.h>.
+    /// - C++: std::numeric_limits<uint32_t>::max().
+    /// - Rust: std::u32::MAX.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list_uint32(py: Python, radius: usize) -> Py<PyArray2<u32>> {
+        Self::to_numpy_adjacency_list_impl::<u32>(py, radius)
+    }
+
+    /// Get a NumPy adjacency list as a 2D ndarray of uint64.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is u64::MAX for uint64 representation.
+    /// - Python: numpy.iinfo(numpy.uint64).max.
+    /// - C: UINT64_MAX of <stdint.h>.
+    /// - C++: std::numeric_limits<uint64_t>::max().
+    /// - Rust: std::u64::MAX.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list_uint64(py: Python, radius: usize) -> Py<PyArray2<u64>> {
+        Self::to_numpy_adjacency_list_impl::<u64>(py, radius)
+    }
+
+    /// Get a NumPy adjacency list as a 2D ndarray of int16.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is -1 for int16 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list_int16(py: Python, radius: usize) -> Py<PyArray2<i16>> {
+        Self::to_numpy_adjacency_list_impl::<i16>(py, radius)
+    }
+
+    /// Get a NumPy adjacency list as a 2D ndarray of int32.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is -1 for int32 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list_int32(py: Python, radius: usize) -> Py<PyArray2<i32>> {
+        Self::to_numpy_adjacency_list_impl::<i32>(py, radius)
+    }
+
+    /// Get a NumPy adjacency list as a 2D ndarray of int64.
+    /// 
+    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+    /// 
+    /// The sentinel value used here is -1 for int64 representation.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_list_int64(py: Python, radius: usize) -> Py<PyArray2<i64>> {
+        Self::to_numpy_adjacency_list_impl::<i64>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is True if block i is adjacent to block j, and False otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is true if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix(py: Python, radius: usize) -> Py<PyArray2<bool>> {
+        Self::to_numpy_adjacency_matrix_impl::<bool>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of bools.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is True if block i is adjacent to block j, and False otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is true if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_bool(py: Python, radius: usize) -> Py<PyArray2<bool>> {
+        Self::to_numpy_adjacency_matrix_impl::<bool>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of int8.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_int8(py: Python, radius: usize) -> Py<PyArray2<i8>> {
+        Self::to_numpy_adjacency_matrix_impl::<i8>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of uint8.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_uint8(py: Python, radius: usize) -> Py<PyArray2<u8>> {
+        Self::to_numpy_adjacency_matrix_impl::<u8>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of int16.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_int16(py: Python, radius: usize) -> Py<PyArray2<i16>> {
+        Self::to_numpy_adjacency_matrix_impl::<i16>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of uint16.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_uint16(py: Python, radius: usize) -> Py<PyArray2<u16>> {
+        Self::to_numpy_adjacency_matrix_impl::<u16>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of int32.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_int32(py: Python, radius: usize) -> Py<PyArray2<i32>> {
+        Self::to_numpy_adjacency_matrix_impl::<i32>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of uint32.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_uint32(py: Python, radius: usize) -> Py<PyArray2<u32>> {
+        Self::to_numpy_adjacency_matrix_impl::<u32>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of int64.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_int64(py: Python, radius: usize) -> Py<PyArray2<i64>> {
+        Self::to_numpy_adjacency_matrix_impl::<i64>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of uint64.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_uint64(py: Python, radius: usize) -> Py<PyArray2<u64>> {
+        Self::to_numpy_adjacency_matrix_impl::<u64>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of float32.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1.0 if block i is adjacent to block j, and 0.0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1.0 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_float32(py: Python, radius: usize) -> Py<PyArray2<f32>> {
+        Self::to_numpy_adjacency_matrix_impl::<f32>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of float64.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1.0 if block i is adjacent to block j, and 0.0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1.0 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    #[cfg(feature = "numpy")]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_float64(py: Python, radius: usize) -> Py<PyArray2<f64>> {
+        Self::to_numpy_adjacency_matrix_impl::<f64>(py, radius)
+    }
+
+    /// Get a NumPy adjacency matrix as a 2D ndarray of float16.
+    /// 
+    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+    /// Each entry (i, j) in the matrix is 1.0 if block i is adjacent to block j, and 0.0 otherwise.
+    /// 
+    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1.0 if block i is adjacent to block j.
+    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+    /// over the grid structure.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// Returns:
+    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
+    /// Warning:
+    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
+    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
+    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
+    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
+    /// Use with caution.
+    #[cfg(all(feature = "numpy", feature = "half"))]
+    #[staticmethod]
+    pub fn to_numpy_adjacency_matrix_float16(py: Python, radius: usize) -> Py<PyArray2<F16>> {
+        Self::to_numpy_adjacency_matrix_impl::<F16>(py, radius)
+    }
 
     /// Get a NumPy bool ndarray mask indicating valid positions for adding the given Piece.
     /// 
