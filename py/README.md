@@ -1140,6 +1140,135 @@ To get the maximum value for unsigned types in various languages:
 - In C++, use `std::numeric_limits<uint16_t>::max()` for unsigned types.
 - In Rust, use `u16::MAX`, `u32::MAX`, etc. for unsigned types.
 
+##### Generating Custom Hexagonal Kernels from Correspondence Lists
+
+Correspondence lists enable creating arbitrary convolution patterns beyond the standard 6-neighbor kernel. By defining custom shift patterns, you can build specialized kernels for different spatial operations.
+
+A correspondence list maps each cell to its shifted position. Multiple correspondence lists can be combined with learnable weights to create convolution kernels:
+
+```python
+import numpy as np
+from hpyhex import HexEngine, Hex
+
+radius = 5
+
+# Define kernel as list of hex shifts
+kernel_shifts = [
+    (0, 0),    # Self
+    (-1, -1),  # Neighbor 0
+    (-1, 0),   # Neighbor 1
+    (0, -1),   # Neighbor 2
+    (0, 1),    # Neighbor 3
+    (1, 0),    # Neighbor 4
+    (1, 1),    # Neighbor 5
+    # ... expand with more shifts for larger kernels
+]
+
+# Create correspondence matrices for each shift
+correspondence_matrices = []
+for shift in kernel_shifts:
+    corr_list = HexEngine.to_numpy_correspondence_list_int64(radius, Hex(shift[0], shift[1]))
+    
+    # Convert to sparse matrix
+    num_cells = len(corr_list)
+    matrix = np.zeros((num_cells, num_cells))
+    for i in range(num_cells):
+        j = corr_list[i]
+        if j != -1:
+            matrix[i, j] = 1.0
+    
+    correspondence_matrices.append(matrix)
+
+# Apply convolution with learned weights
+weights = np.array([1.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])  # Example weights
+board_state = np.random.rand(num_cells)
+
+result = sum(w * (M @ board_state) for w, M in zip(weights, correspondence_matrices))
+```
+
+Correspondence matrices compose via multiplication due to their commutative property:
+
+```python
+def create_correspondence_matrix(radius, shift):
+    '''
+    Create a correspondence matrix for a given shift by first getting the correspondence list
+    and then converting it to a dense matrix.
+    '''
+    corr_list = HexEngine.to_numpy_correspondence_list(radius, shift)
+    num_cells = len(corr_list)
+    matrix = np.zeros((num_cells, num_cells))
+    for i in range(num_cells):
+        j = corr_list[i]
+        if j != -1:
+            matrix[i, j] = 1.0
+    return matrix
+
+# Two-hop kernel: applies shift A then shift B
+M_A = create_correspondence_matrix(radius, Hex(1, 0))
+M_B = create_correspondence_matrix(radius, Hex(0, 1))
+M_composed = M_A @ M_B  # Equivalent to shift Hex(1, 1)
+
+# Multi-scale kernel: combine different rings
+M_center = create_correspondence_matrix(radius, Hex(0, 0))
+M_ring1 = sum(create_correspondence_matrix(radius, Hex(s[0], s[1])) for s in ring1_shifts)
+M_ring2 = sum(create_correspondence_matrix(radius, Hex(s[0], s[1])) for s in ring2_shifts)
+
+# Learnable weights for each ring
+w0, w1, w2 = 1.0, 0.5, 0.25  # Example: center-weighted
+M_kernel = w0 * M_center + w1 * M_ring1 + w2 * M_ring2
+
+result = M_kernel @ board_state
+```
+
+**Applications of Custom Kernels**
+
+**Edge Detection** - Ring-1 kernel without center detects local changes:
+```python
+edge_shifts = [(-1, -1), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 1)]
+# Weights: negative center, positive neighbors approximates Laplacian
+```
+
+**Multi-Scale Features** - Stack kernels with increasing receptive fields:
+```python
+model = nn.Sequential(
+    HexConvCustom(radius=5, kernel_shifts=ring1_shifts, in_channels=1, out_channels=8),
+    nn.ReLU(),
+    HexConvCustom(radius=5, kernel_shifts=filled2_shifts, in_channels=8, out_channels=16),
+    nn.ReLU(),
+    HexConvCustom(radius=5, kernel_shifts=cross_shifts, in_channels=16, out_channels=1)
+)
+```
+
+**Pattern Recognition** - Asymmetric kernels for specific shapes:
+```python
+# L-shape pattern
+l_shape_shifts = [(0, 0), (1, 0), (2, 0), (0, 1), (0, 2)]
+conv_l = HexConvCustom(radius=5, kernel_shifts=l_shape_shifts)
+```
+
+**Improved Density Index** - Replace `compute_dense_index` with learned features:
+```python
+# Trainable density estimation
+density_conv = HexConvCustom(radius=5, kernel_shifts=filled2_shifts, 
+                            in_channels=1, out_channels=1)
+# Train on boards where nrsearch performs well
+```
+
+**Performance Considerations for Custom Kernels from Correspondence Matrices**
+
+- **Memory**: Each kernel stores k matrices of size (n×n) where n = number of cells
+  - For radius 5 (91 cells): filled-2 kernel (19 shifts) requires ~150KB
+  - Use sparse tensors for large grids or many shifts
+  
+- **Computation**: Time complexity O(k × n) per forward pass
+  - Highly parallelizable on GPU via matrix multiplication
+  - Batch all shifts together for efficiency
+  
+- **Parameter Count**: out_channels × in_channels × kernel_size
+  - Ring-1: 7 parameters per channel pair
+  - Filled-2: 19 parameters per channel pair
+  - Cross-3: 19 parameters per channel pair (1 + 6×3)
+
 #### Advanced Board State Evaluation
 
 Combine adjacency structures with position masks and piece placement for strategic game analysis.
