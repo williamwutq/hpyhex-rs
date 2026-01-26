@@ -5528,8 +5528,7 @@ impl Game {
         }
         let piece = self._Game__queue[piece_index].clone();
         // Add piece to engine and increment score and turn
-        let engine_bound = self._Game__engine.bind(python);
-        let add_result = engine_bound.call_method1("add_piece", (coord, piece.clone()));
+        let add_result = { self._Game__engine.bind(python) }.call_method1("add_piece", (coord, piece.clone()));
         if let Err(ref e) = add_result {
             if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
                 return Ok(false);
@@ -5541,20 +5540,17 @@ impl Game {
         // Replace used piece
         let new_piece = PieceFactory::generate_piece()?;
         self._Game__queue[piece_index] = new_piece;
-        // Eliminate and add score TODO: inefficient
-        let eliminated = engine_bound.call_method0("eliminate")?;
-        let eliminated_len = eliminated.len().unwrap_or(0);
+        let mut engine = self._Game__engine.borrow_mut(python);
+        let eliminated = engine.eliminate()?;
+        let eliminated_len = eliminated.len();
         self._Game__score += (eliminated_len as u64) * 5;
         self._Game__turn += 1;
         // Check whether the game has ended
         let mut has_move = false;
         for p in &self._Game__queue {
-            let positions = engine_bound.call_method1("check_positions", (p.clone(),));
-            if let Ok(pos) = positions {
-                if pos.len().unwrap_or(0) > 0 {
-                    has_move = true;
-                    break;
-                }
+            if HexEngine::check_has_positions(&engine, p) {
+                has_move = true;
+                break;
             }
         }
         if !has_move {
