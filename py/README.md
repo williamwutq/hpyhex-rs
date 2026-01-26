@@ -911,7 +911,7 @@ The `HexEngine` provides methods to obtain adjacency structures representing the
 
 For more on graph algorithms and representations, see the [Graph Theory](https://en.wikipedia.org/wiki/Graph_theory) article on Wikipedia.
 
-**Important Note**: Both the adjacency list and adjacency matrix methods are static methods that require the radius of the hexagonal grid as an argument. They do not depend on the specific state of a `HexEngine` instance. This design is intentional to allow users to obtain adjacency structures for any hexagonal grid size without needing to create a full `HexEngine` instance, and to reuse these structures across multiple instances or computations.
+**Important Note**: Both the adjacency list, adjacency matrix, and correspondence list methods are static methods that require the radius of the hexagonal grid as an argument. They do not depend on the specific state of a `HexEngine` instance. This design is intentional to allow users to obtain adjacency structures for any hexagonal grid size without needing to create a full `HexEngine` instance, and to reuse these structures across multiple instances or computations.
 
 #### Adjacency List
 
