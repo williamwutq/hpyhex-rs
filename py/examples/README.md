@@ -240,6 +240,86 @@ python examples/09_selection_based_mlp.py
 
 **Note:** This selection-based approach enables efficient RL training with policy gradients. The example can take significant time to run due to dataset generation and model training, but produces a useful, trained neural network model that demonstrates practical ML applications in game AI.
 
+### 10. Graph Algorithms for Strategic Analysis (`10_graph_algorithms.py`)
+
+Demonstrates using graph algorithms to analyze board state and inform strategic decision-making. Shows how to identify fragmentation, optimize placement density, and avoid creating problematic board configurations.
+
+**Key Features:**
+- Graph-based board analysis (island detection, density computation)
+- Fragmentation prediction for move evaluation
+- Comprehensive board health metrics
+- Strategic game player combining multiple graph metrics
+- Detailed game simulation with metric tracking
+
+**Analysis Capabilities:**
+1. **Island Detection**: Find connected components of unoccupied cells
+2. **Placement Density**: Measure how tightly pieces pack together
+3. **Fragmentation Prediction**: Forecast board state after moves
+4. **Strategic Anomalies**: Identify problematic small islands (<4 cells)
+5. **Board Health Evaluation**: Comprehensive metrics for decision making
+
+**Strategic Considerations:**
+- Maximize placement density for efficient space usage
+- Minimize number of unoccupied islands to reduce fragmentation
+- Avoid creating small islands that cannot accommodate future pieces
+- Balance elimination opportunities with long-term board health
+
+**Use Cases:**
+- Advanced game AI with strategic planning
+- Board evaluation for search algorithms
+- Understanding spatial decision-making
+- Teaching AI strategic concepts beyond immediate rewards
+
+**Run:**
+```bash
+python examples/10_graph_algorithms.py
+```
+
+**Note:** The strategic player demonstrates how graph analysis can achieve higher scores by considering long-term board structure rather than just immediate gains.
+
+### 11. CNN-Based Models (`11_basic_cnn.py`)
+
+Showcases Convolutional Neural Networks (CNNs) for learning spatial patterns in the hexagonal grid. Includes both evaluation-based and selection-based models using adjacency matrix representations.
+
+**Why CNNs are Better:**
+CNNs are superior to MLPs for this task because they:
+- Preserve and exploit spatial relationships in the grid
+- Use fewer parameters through weight sharing
+- Learn translation-invariant patterns
+- Build hierarchical features (edges → clusters → strategies)
+
+**Key Features:**
+- Adjacency matrix representation of hexagonal grid
+- CNN Evaluator (like Example 8, but with CNNs)
+- CNN Selector (like Example 9, but with CNNs)
+- Configurable architecture (2 layers, kernel radius 1 by default)
+- Training and benchmarking on small datasets (5000 samples)
+
+**Architecture:**
+- Convolutional layers for spatial pattern learning
+- Batch normalization for training stability
+- Global pooling to aggregate spatial information
+- Fully connected layers for final predictions
+
+**Extensibility:**
+- Easily increase `n_conv_layers` for deeper reasoning
+- Adjust `kernel_size` for larger receptive fields
+- Tune `hidden_channels` for more capacity
+- Scale to larger datasets for better performance
+
+**Use Cases:**
+- Spatial reasoning for game AI
+- Learning from grid-based environments
+- Comparing CNN vs. MLP approaches
+- Foundation for advanced RL algorithms
+
+**Run:**
+```bash
+python examples/11_basic_cnn.py
+```
+
+**Note:** CNNs typically outperform MLPs by 10-30% in grid-based games due to their ability to learn spatial patterns. This example uses a small dataset for testing; use 100k+ samples for production models.
+
 ### Quick Start
 
 ```python
