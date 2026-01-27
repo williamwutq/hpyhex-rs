@@ -1,4 +1,4 @@
-For the Rust crate of the same name, see [hpyhex-rs on crates.io](https://crates.io/crates/hpyhex-rs) or [hpyhex-rs Rust Source](../README.md).
+For the Rust crate of the same name, see [hpyhex-rs on crates.io](https://crates.io/crates/hpyhex-rs) or [hpyhex-rs Rust Source](https://github.com/williamwutq/hpyhex-rs/tree/master/README.md).
 
 # hpyhex-rs
 Simplified implementations of the HappyHex game components and hexagonal system in Rust.
@@ -71,13 +71,13 @@ pip install hpyhex-rs
 Developed by William Wu.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/williamwutq/hpyhex-rs/tree/master/py/LICENSE) file for details. Visit [MIT License](https://opensource.org/licenses/MIT) for more information about the MIT License. The choice of license is to offer compatibility with the original `hpyhex` package and the broader HappyHex project, which also uses the MIT License.
 
 ## Quickstart
 
 1. Install the package:
    ```bash
-   pip install hpyhex
+   pip install hpyhex-rs
    ```
 2. Import and use the main classes as shown above.
 3. Create custom algorithms to interact with the game environment.
@@ -323,7 +323,7 @@ If you are building a GUI application for a simple version of HappyHex and deepl
 
 ## The Statistics
 
-(See [bench directory](./bench/) for full benchmarking code and results.)
+(See [bench directory](https://github.com/williamwutq/hpyhex-rs/tree/master/py/bench/) for full benchmarking code and results.)
 
 All are tested on Apple M2 Pro with 16GB RAM, Python 3.11, Rust 1.92.0, macOS Sonoma 14.5.
 
