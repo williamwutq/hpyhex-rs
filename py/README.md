@@ -200,7 +200,7 @@ coo = Hex(0, 1)
 piece = PieceFactory.get_piece("triangle_3_a")
 
 # Create a game engine with radius 3
-engine = HexEngine(radius=3)
+engine = HexEngine(3)
 
 # Add a piece to the engine
 engine.add_piece(piece, coo)
@@ -209,6 +209,7 @@ engine.add_piece(piece, coo)
 score = len(engine.eliminate()) * 5
 
 # Create a game with engine radius and queue size
+# Note that although the parameters are named engine and queue, they refer to the radius of the engine and the size of the piece queue respectively. They are not named engine_radius or queue_size.
 game = Game(engine=3, queue=5)
 print(game)
 
@@ -241,7 +242,7 @@ a_random_engine = random_engine(6)
 engine_array = a_random_engine.to_numpy_uint32()
 
 # Create an engine from a NumPy uint32 array
-arr_engine = np.random.randint(0, 2**42, size=(169,), dtype=np.uint32)  # Example for radius 6
+arr_engine = np.random.randint(0, 2, size=91, dtype=np.uint32) # Example for radius 6
 new_engine = HexEngine.from_numpy_uint32(arr_engine, radius=6)
 
 # Note that all dtypes listed in the NumPy Integration section are supported, and float16 is also supported if compiled with the "half" feature.
@@ -749,7 +750,7 @@ Unlike rectangular grids, hexagonal grids don't map naturally to 2D arrays. The 
 ```python
 from hpyhex import HexEngine
 
-engine = HexEngine(radius=3)
+engine = HexEngine(radius=4)
 # Array shape will be (37,)
 
 arr = engine.to_numpy()
@@ -771,7 +772,7 @@ The `to_numpy()` method returns a boolean array by default:
 ```python
 from hpyhex import HexEngine, Hex, PieceFactory
 
-engine = HexEngine(radius=3)
+engine = HexEngine(radius=4)
 piece = PieceFactory.get_piece("triangle_3_a")
 engine.add_piece(piece, Hex(0, 0))
 
@@ -810,11 +811,11 @@ import numpy as np
 from hpyhex import HexEngine
 
 # From boolean array (radius automatically inferred from length)
-arr = np.zeros(37, dtype=bool)  # 37 cells = radius 3
+arr = np.zeros(37, dtype=bool)  # 37 cells = radius 4
 arr[0] = True
 arr[5] = True
 engine = HexEngine.from_numpy_bool(arr)
-print(engine.radius)  # 3
+print(engine.radius)  # 4
 
 # From integer arrays (non-zero values treated as occupied)
 arr_u8 = np.array([1, 0, 1, 0, 1] + [0]*32, dtype=np.uint8)
@@ -986,7 +987,7 @@ piece = PieceFactory.get_piece("triangle_3_a")
 
 # Get boolean mask of valid positions
 mask = engine.to_numpy_positions_mask(piece)
-# mask.shape == (37,)
+# mask.shape == (19,)
 # mask[i] = True if piece can be placed at cell i
 
 # Available for all numeric types
@@ -1022,7 +1023,7 @@ engine = HexEngine(radius=3)
 
 # Get adjacency list as 2D array (default: int64 with -1 sentinel)
 adj_list = HexEngine.to_numpy_adjacency_list(engine.radius)
-# adj_list.shape == (37, 6)  # 37 cells, up to 6 neighbors each
+# adj_list.shape == (19, 6)  # 19 cells, up to 6 neighbors each
 # adj_list[i, j] = neighbor index or -1 if no neighbor
 
 # Typed versions for different integer types
@@ -1208,12 +1209,12 @@ If a correspondence matrix M is constructed from a correspondence list L that is
 ```python
 from hpyhex import HexEngine, Hex
 
-engine = HexEngine(radius=3)
+engine = HexEngine(radius=5)
 shift = Hex(1, 0)  # Shift by (1, 0)
 
 # Get correspondence list as 1D array (default: int64 with -1 sentinel)
 corr_list = HexEngine.to_numpy_correspondence_list(radius=engine.radius, shift=shift)
-# corr_list.shape == (37,)  # One entry per cell
+# corr_list.shape == (61,)  # One entry per cell
 # corr_list[i] = shifted index or -1 if out of bounds
 
 # Typed versions for different integer types
@@ -1353,7 +1354,7 @@ density_conv = HexConvCustom(radius=5, kernel_shifts=filled2_shifts,
 **Performance Considerations for Custom Kernels from Correspondence Matrices**
 
 - **Memory**: Each kernel stores k matrices of size (n×n) where n = number of cells
-  - For radius 5 (91 cells): filled-2 kernel (19 shifts) requires ~150KB
+  - For radius 5 (61 cells): filled-2 kernel (19 shifts) requires ~7.1 MB
   - Use sparse tensors for large grids or many shifts
   
 - **Computation**: Time complexity O(k × n) per forward pass
@@ -1454,12 +1455,12 @@ print(len(game.queue))     # 3
 For specific numeric types:
 ```python
 # Radius-based
-game_u8 = Game.from_numpy_with_radius_uint8(radius=3, arr_u8)
-game_f32 = Game.from_numpy_with_radius_float32(radius=3, arr_f32)
+game_u8 = Game.from_numpy_with_radius_uint8(radius=3, arr=arr_u8)
+game_f32 = Game.from_numpy_with_radius_float32(radius=3, arr=arr_f32)
 
 # Queue length-based
-game_u8 = Game.from_numpy_with_queue_length_uint8(length=3, arr_u8)
-game_f32 = Game.from_numpy_with_queue_length_float32(length=3, arr_f32)
+game_u8 = Game.from_numpy_with_queue_length_uint8(length=3, arr=arr_u8)
+game_f32 = Game.from_numpy_with_queue_length_float32(length=3, arr=arr_f32)
 ```
 
 #### Queue-Only Conversion
@@ -1576,9 +1577,9 @@ Use `move_with_numpy_mask_<type>()` methods to make a move by specifying a boole
 import numpy as np
 from hpyhex import Game
 
-game = Game(radius=3, queue=3)
+game = Game(radius=5, queue=3)
 # Create a 2D mask: (queue_length, engine_cells)
-mask = np.zeros((3, 37), dtype=np.bool_)
+mask = np.zeros((3, 61), dtype=np.bool_)
 mask[1, 10] = True  # Select piece 1, place at engine position 10
 
 success = game.move_with_numpy_mask_bool(mask)
