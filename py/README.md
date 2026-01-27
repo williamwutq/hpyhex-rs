@@ -1325,7 +1325,7 @@ edge_shifts = [(-1, -1), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 1)]
 # Weights: negative center, positive neighbors approximates Laplacian
 ```
 
-**Multi-Scale Features** - Stack kernels with increasing receptive fields:
+**Multi-Scale Features** - Stack kernels with increasing receptive fields with Torch:
 ```python
 model = nn.Sequential(
     HexConvCustom(radius=5, kernel_shifts=ring1_shifts, in_channels=1, out_channels=8),
@@ -1365,6 +1365,72 @@ density_conv = HexConvCustom(radius=5, kernel_shifts=filled2_shifts,
   - Ring-1: 7 parameters per channel pair
   - Filled-2: 19 parameters per channel pair
   - Cross-3: 19 parameters per channel pair (1 + 6×3)
+
+##### Direct Convolution with Correspondence Lists
+
+Direct convolution with correspondence lists enables efficient computation of convolutional operations on hexagonal grids by leveraging precomputed mappings between grid positions. This approach avoids the need for dense kernel matrices and instead uses sparse indexing to gather relevant input values.
+
+In traditional convolution, a kernel slides over the input feature map, computing weighted sums of neighboring values. For hexagonal grids, correspondence lists provide a way to define which input positions contribute to each output position for a given kernel pattern. Each correspondence list corresponds to a specific shift or kernel position, mapping each output cell to its corresponding input cell under that shift.
+
+To illustrate this, first consider the definition of the convolution operation, where the output at each position is computed as a weighted sum of input values from positions defined by the correspondence lists. This is easily achieved by iterating over the output positions and using the correspondence lists to gather input values.
+
+Consider an input feature map `x` with shape `(batch_size, input_channels, num_cells)`, a weight tensor `w` with shape `(output_channels, input_channels, kernel_size)`, and correspondence lists `corr` as a 2D array of shape `(kernel_size, num_cells)`.
+
+For each output position `i`, the convolution computes a weighted sum of input values from positions specified by the correspondence lists:
+
+```python
+for b in range(batch_size):
+    for c_out in range(output_channels):
+        for i in range(num_cells):
+            sum_val = 0.0
+            for k in range(kernel_size):
+                input_pos = corr[k, i]
+                if input_pos != -1:  # valid mapping
+                    for c_in in range(input_channels):
+                        sum_val += w[c_out, c_in, k] * x[b, c_in, input_pos]
+            output[b, c_out, i] = sum_val
+```
+
+This shows how each output cell aggregates contributions from multiple input cells, weighted by the kernel parameters, using the correspondence lists to determine which input cells contribute to each output cell.
+
+The above code can then be vectorized with matrix operations provided by NumPy as follows:
+
+```python
+def hex_convolution(x, w, corr):
+    """
+    x: shape (batch_size, input_channels, num_cells)
+    w: shape (output_channels, input_channels, kernel_size)
+    corr: shape (kernel_size, num_cells), each entry is int (input index or -1 for invalid)
+    Returns: output of shape (batch_size, output_channels, num_cells)
+    """
+    batch_size, input_channels, num_cells = x.shape
+    output_channels, _, kernel_size = w.shape
+
+    # Gather input values for each kernel position
+    # For invalid indices (-1), fill with zeros
+    # We'll use np.take with mode='clip' and mask out invalids
+    input_indices = np.clip(corr, 0, num_cells - 1)  # shape: (kernel_size, num_cells)
+    valid_mask = (corr != -1)                        # shape: (kernel_size, num_cells)
+
+    # Gathered: (batch_size, input_channels, kernel_size, num_cells)
+    gathered = np.take(x, input_indices, axis=2)     # shape: (batch_size, input_channels, kernel_size, num_cells)
+    gathered = gathered * valid_mask[None, None, :, :]  # mask out invalids
+
+    # Now, contract input_channels and kernel_size with weights
+    # w: (output_channels, input_channels, kernel_size)
+    # gathered: (batch_size, input_channels, kernel_size, num_cells)
+    # einsum: 'oik,bikn->bon'
+    output = np.einsum('oik,bikn->bon', w, gathered)
+    return output
+```
+
+The computation involves gathering input values using the correspondence lists as indices, applying the weights through element-wise multiplication and summation over channels and kernel positions. This sparse approach is particularly efficient for hexagonal grids where traditional dense convolutions would be wasteful due to the irregular connectivity.
+
+**Performance Considerations**
+
+- **Memory Efficiency**: This method avoids storing large dense kernel matrices, using only the correspondence lists and weight tensors.
+- **Computation Efficiency**: The gather operation and subsequent einsum are optimized in NumPy, allowing for efficient execution on both CPU and GPU. The example shows how to leverage NumPy's advanced indexing and broadcasting capabilities to perform the convolution operation efficiently, and similar techniques can be applied in deep learning frameworks like PyTorch or TensorFlow.
+- **Scalability**: The approach scales well with larger grids and more complex kernels, as the correspondence lists remain compact. However, on smaller grids, the overhead of gather operations may outweigh the benefits compared to dense convolutions.
 
 #### Advanced Board State Evaluation
 
