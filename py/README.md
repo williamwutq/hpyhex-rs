@@ -159,12 +159,14 @@ Aₖ = Aₖ₋₁ + 6*(k - 1); A₁ = 1
 ```
 
 Valid hexagonal grid sizes for common radii:
-- Radius 1: 7 cells
-- Radius 2: 19 cells
-- Radius 3: 37 cells
-- Radius 4: 61 cells
-- Radius 5: 91 cells
-- Radius 10: 331 cells
+- Radius 0: 0 cell (Not valid for HexEngine, but can be valid for other purposes)
+- Radius 1: 1 cell
+- Radius 2: 7 cells
+- Radius 3: 19 cells
+- Radius 4: 37 cells
+- Radius 5: 61 cells
+- Radius 6: 91 cells
+- Radius 10: 271 cells
 
 ### Hex Class Details
 
