@@ -3505,6 +3505,51 @@ impl HexEngine {
         HexEngine::adjacency_list_static(radius)
     }
 
+    /// Convert a list of (value, Hex) pairs into a python list aligned with the hexagonal grid of the specified radius.
+    /// 
+    /// The resulting list has a length corresponding to the total number of blocks in the grid,
+    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
+    /// are filled with sentinel values.
+    /// 
+    /// Any python object can be used as the value type, and it is not required that all values are of the same type.
+    /// 
+    /// Arguments:
+    /// - radius: The radius of the hexagonal grid.
+    /// - sentinel: The sentinel value to use for unfilled positions.
+    /// - values: A list of (value, Hex) pairs.
+    /// Returns:
+    /// - list: A list representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
+    #[staticmethod]
+    pub fn hpyhex_rs_pair_vec_to_list_any<'a>(radius: usize, sentinel: Bound<'a, PyAny>, values: Bound<'a, PyList>) -> PyResult<Vec<Bound<'a, PyAny>>> {
+        let n = if radius == 0 { 0 } else { 1 + 3 * radius * (radius - 1) };
+        let mut vec: Vec<Bound<'a, PyAny>> = vec![sentinel; n];
+        for item in values.iter() {
+            let tuple: &Bound<'a, PyTuple> = match item.downcast::<PyTuple>() {
+                Ok(t) => t,
+                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Items must be tuples of (value, Hex)")),
+            };
+            let value_item: Bound<'a, PyAny> = match tuple.get_item(0) {
+                Ok(v) => v,
+                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
+            };
+            let hex_item: Bound<'a, PyAny> = match tuple.get_item(1) {
+                Ok(h) => h,
+                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
+            };
+            let hex: Hex = match hex_item.extract::<Hex>() {
+                Ok(h) => h,
+                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Second item in tuple must be a Hex")),
+            };
+            match Self::linear_index_of_static(radius, hex.i, hex.k) {
+                Ok(index) => if index != -1 {
+                    vec[index as usize] = value_item;
+                }
+                _ => {},
+            }
+        };
+        Ok(vec)
+    }
+
     /* ---------------------------------------- NUMPY ---------------------------------------- */
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray aligned with the hexagonal grid of the specified radius.
     /// 
@@ -3752,8 +3797,8 @@ impl HexEngine {
     /// Use with caution.
     #[cfg(all(feature = "numpy", feature = "half"))]
     #[staticmethod]
-    pub fn pair_vec_to_numpy_float16(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<half::f16>>> {
-        let nan = half::f16::from_f32(f32::NAN);
+    pub fn pair_vec_to_numpy_float16(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<F16>>> {
+        let nan = F16::from_f32(f32::NAN);
         Self::pair_vec_to_numpy_impl::<F16>(py, radius, nan, values)
     }
 
