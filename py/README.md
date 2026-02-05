@@ -1061,13 +1061,21 @@ arr_i16 = HexEngine.pair_vec_to_numpy(radius=3, values=pairs)
 
 # Specific dtypes
 arr_u8 = HexEngine.pair_vec_to_numpy_uint8(radius=3, values=pairs)    # uint8, sentinel u8::MAX
-arr_i32 = HexEngine.pair_vec_to_numpy_int32(radius=3, values=pairs)   # int32, sentinel i32::MAX
+arr_i8 = HexEngine.pair_vec_to_numpy_int8(radius=3, values=pairs)     # int8, sentinel -1
+arr_u16 = HexEngine.pair_vec_to_numpy_uint16(radius=3, values=pairs)  # uint16, sentinel u16::MAX
+arr_i16 = HexEngine.pair_vec_to_numpy_int16(radius=3, values=pairs)   # int16, sentinel -1
+arr_u32 = HexEngine.pair_vec_to_numpy_uint32(radius=3, values=pairs)  # uint32, sentinel u32::MAX
+arr_i32 = HexEngine.pair_vec_to_numpy_int32(radius=3, values=pairs)   # int32, sentinel -1
+arr_u64 = HexEngine.pair_vec_to_numpy_uint64(radius=3, values=pairs)  # uint64, sentinel u64::MAX
+arr_i64 = HexEngine.pair_vec_to_numpy_int64(radius=3, values=pairs)   # int64, sentinel -1
 arr_f32 = HexEngine.pair_vec_to_numpy_float32(radius=3, values=pairs) # float32, sentinel f32::NAN
 arr_f64 = HexEngine.pair_vec_to_numpy_float64(radius=3, values=pairs) # float64, sentinel f64::NAN
 
 # Half precision (requires "half" feature)
 arr_f16 = HexEngine.pair_vec_to_numpy_float16(radius=3, values=pairs) # float16, sentinel f16::NAN
 ```
+
+Note that boolean is not supported for this conversion, since having a sentinel value requires a third state beyond True/False. To achieve similar functionality with boolean arrays, consider using int8 with -1 as sentinel, then mask out the sentinel values in your application logic (e.g. convert -1 to False or True as needed).
 
 #### Sentinel Values
 
