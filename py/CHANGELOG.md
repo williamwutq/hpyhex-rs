@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added description of direct convolution with correspondence lists in documentation.
+- Added `hpyhex_rs_pair_vec_to_list_any` method to `HexEngine` class for converting lists of (value, Hex) pairs to grid-aligned lists with custom sentinels.
+- Added NumPy `pair_vec_to_numpy_*` methods to `HexEngine` class for converting lists of (value, Hex) pairs to grid-aligned arrays with fixed sentinels for various dtypes.
+- Added comprehensive documentation for pair vector to list conversion methods in README.md, including usage guides and supported data types.
 
 ### Fixed
 - Fixed minor typos and incorrect radius to length conversions in documentation.
