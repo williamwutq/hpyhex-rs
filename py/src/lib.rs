@@ -92,6 +92,10 @@ pub trait SizeScalar: Copy {
     fn sentinel() -> Self;
 }
 
+pub trait ExtractablePrimitive: Sized + Copy + 'static {
+    fn extract_from_any(value: &pyo3::Bound<'_, PyAny>) -> pyo3::PyResult<Self>;
+}
+
 macro_rules! int_bitscalar {
     ($($t:ty),*) => {
         $(impl BitScalar for $t {
@@ -130,10 +134,22 @@ macro_rules! iint_sizescalar {
     };
 }
 
+macro_rules! impl_extractable_primitive {
+    ($($t:ty),*) => {
+        $(impl ExtractablePrimitive for $t {
+            fn extract_from_any(value: &pyo3::Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
+                value.extract::<$t>()
+            }
+        })*
+    };
+}
+
 int_bitscalar!(i8, u8, i16, u16, i32, u32, i64, u64);
 float_bitscalar!(f32, f64);
 // u8 and i8 are not used since they are usually too small for sizes
 iint_sizescalar!(i16, i32, i64);
+impl_extractable_primitive!(i8, u8, i16, u16, i32, u32, i64, u64, f32, f64);
+
 impl SizeScalar for u16 {
     #[inline] fn to_usize(self) -> Option<usize> {
         match self {
@@ -179,6 +195,14 @@ impl BitScalar for F16 {
     #[inline] fn zero() -> Self { F16(half::f16::from_f32(0.0)) }
     #[inline] fn one() -> Self { F16(half::f16::from_f32(1.0)) }
     #[inline] fn predicate(self) -> bool { self.0.to_f32() > 0.0 }
+}
+
+#[cfg(feature = "half")]
+impl ExtractablePrimitive for F16 {
+    fn extract_from_any(value: &pyo3::Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
+        let f: f32 = value.extract()?;
+        Ok(F16(half::f16::from_f32(f)))
+    }
 }
 
 use std::sync::OnceLock;
@@ -3261,9 +3285,9 @@ impl HexEngine {
     /// - A vector of values aligned with the hexagonal grid, with sentinel values for unfilled positions.
     #[cfg(feature = "numpy")]
     #[inline(always)]
-    fn pair_vec_to_numpy_impl<'a, T>(py: Python, radius: usize, sentinel: T, values: Bound<'a, PyList>) -> PyResult<Py<PyArray1<T>>>
+    fn pair_vec_to_numpy_impl<'a, T>(py: Python<'a>, radius: usize, sentinel: T, values: Bound<'a, PyList>) -> PyResult<Py<PyArray1<T>>>
     where
-        T: numpy::Element,
+        T: numpy::Element + ExtractablePrimitive,
     {
         use ndarray::Array1;
         let n = if radius == 0 { 0 } else { 1 + 3 * radius * (radius - 1) };
@@ -3281,10 +3305,7 @@ impl HexEngine {
                 Ok(h) => h,
                 Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
             };
-            let value: T = match value_item.extract::<T>() {
-                Ok(v) => v,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("First item in tuple must be of the correct type")),
-            };
+            let value: T = T::extract_from_any(&value_item)?;
             let hex: Hex = match hex_item.extract::<Hex>() {
                 Ok(h) => h,
                 Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Second item in tuple must be a Hex")),
