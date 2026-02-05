@@ -10,7 +10,7 @@ use numpy::ndarray;
 use numpy::{PyArrayDescr, dtype_bound};
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyAny, PyType, PyTuple};
+use pyo3::types::{PyList, PyAny, PyType, PyTuple, PyString};
 
 #[pymodule]
 fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
@@ -2517,6 +2517,218 @@ impl TryFrom<usize> for HexEngine {
 
 // This is the backend scope, nothing is exposed to Python here
 impl HexEngine {
+    /// Render the hexagonal grid as a string.
+    /// 
+    /// This method generates a visual representation of the hexagonal grid using the specified
+    /// prefix, suffix, space, fill, and empty strings.
+    /// 
+    /// Arguments:
+    /// - prefix: A string to prepend to each line.
+    /// - suffix: A string to append to each line.
+    /// - space: A string representing empty space between blocks.
+    /// - fill: A string representing filled blocks.
+    /// - empty: A string representing empty blocks.
+    /// Returns:
+    /// - A string representing the rendered hexagonal grid.
+    pub fn render(&self, prefix: &str, suffix: &str, space: &str, fill: &str, empty: &str) -> String {
+        let r = self.radius;
+        let mut idx = 0;
+        let mut s = String::new();
+        // Top half
+        for i in 0..r {
+            s.push_str(prefix);
+            // Leading spaces
+            for _ in 0..(r - i) {
+                s.push_str(space);
+            }
+            // Hexagon blocks
+            for _ in 0..(r + i) {
+                let c = if self.states[idx] { fill } else { empty };
+                s.push_str(c);
+                s.push_str(space);
+                idx += 1;
+            }
+            // Remaining spaces
+            for _ in 0..(r - i - 1) {
+                s.push_str(space);
+            }
+            s.push_str(suffix);
+            s.push('\n');
+        }
+        // Bottom half
+        for i in 0..(r - 1) {
+            s.push_str(prefix);
+            // Leading spaces
+            for _ in 0..(i + 2) {
+                s.push_str(space);
+            }
+            // Hexagon blocks
+            for _ in 0..(2 * r - 2 - i) {
+                let c = if self.states[idx] { fill } else { empty };
+                s.push_str(c);
+                s.push_str(space);
+                idx += 1;
+            }
+            // Remaining spaces
+            for _ in 0..(i + 1) {
+                s.push_str(space);
+            }
+            s.push_str(suffix);
+            s.push('\n');
+        }
+        s
+    }
+
+    /// Render a static hexagonal grid from a list of values as a string.
+    /// 
+    /// This method generates a visual representation of a hexagonal grid using the specified
+    /// prefix and suffix strings. The values are converted to strings and padded to ensure
+    /// uniform width for proper alignment.
+    /// 
+    /// Arguments:
+    /// - values: A PyList of values to be displayed in the hexagonal grid.
+    /// - prefix: A string to prepend to each line.
+    /// - suffix: A string to append to each line.
+    /// - extra: A boolean indicating whether to add extra lines for better alignment.
+    /// Returns:
+    /// - A string representing the rendered hexagonal grid.
+    pub fn render_static(_py: Python, values: Bound<'_, PyList>, prefix: &str, suffix: &str, extra: bool) -> PyResult<String> {
+        let len = values.len();
+        let r = match Self::calc_radius(len){
+            Some(radius) => radius,
+            None => {
+                return Ok(format!("Length {} does not correspond to a valid hexagonal grid size.", len));
+            }
+        };
+
+        // Convert all values to strings, trimming floats if needed
+        let mut strs: Vec<String> = values
+            .iter()
+            .map(|item| {
+                let mut s = item.str()?.to_string();
+
+                // Trim floats to at most 8 decimal places
+                if let Some(dot) = s.find('.') {
+                    let decimals = s.len() - dot - 1;
+                    if decimals > 8 {
+                        s.truncate(dot + 1 + 8);
+                    }
+                    // Remove trailing zeros
+                    while s.ends_with('0') {
+                        s.pop();
+                    }
+                    if s.ends_with('.') {
+                        s.pop();
+                    }
+                }
+                Ok(s)
+            })
+            .collect::<PyResult<Vec<String>>>()?;
+
+        // Find max width
+        let width = strs.iter().map(|s| s.len()).max().unwrap_or(1);
+        let space = " ".repeat(width);
+
+        // Determine number of extra lines per line for proper alignment
+        let extra_lines = if extra && width > 3 { width / 2 - 1 } else { 0 };
+
+        // Pad all strings to same width
+        for s in &mut strs {
+            if s.len() < width {
+                let pad = width - s.len();
+                s.push_str(&" ".repeat(pad));
+            }
+        }
+
+        let mut idx = 0;
+        let mut out = String::new();
+
+        // First extra lines for top alignment
+        for _ in 0..extra_lines {
+            out.push_str(prefix);
+            // All spaces
+            for _ in 0..(r * 4 - 1) {
+                out.push_str(&space);
+            }
+            out.push_str(suffix);
+            out.push('\n');
+        }
+
+        // Top half
+        for i in 0..r {
+            out.push_str(prefix);
+
+            // Leading spaces
+            for _ in 0..(r - i) {
+                out.push_str(&space);
+            }
+
+            // Blocks
+            for _ in 0..(r + i) {
+                out.push_str(&strs[idx]);
+                out.push_str(&space);
+                idx += 1;
+            }
+
+            // Remaining spaces
+            for _ in 0..(r - i - 1) {
+                out.push_str(&space);
+            }
+
+            out.push_str(suffix);
+            out.push('\n');
+
+            // Extra lines for alignment
+            for _ in 0..extra_lines {
+                out.push_str(prefix);
+                // All spaces
+                for _ in 0..(r * 4 - 1) {
+                    out.push_str(&space);
+                }
+                out.push_str(suffix);
+                out.push('\n');
+            }
+        }
+
+        // Bottom half
+        for i in 0..(r - 1) {
+            out.push_str(prefix);
+
+            // Leading spaces
+            for _ in 0..(i + 2) {
+                out.push_str(&space);
+            }
+
+            // Blocks
+            for _ in 0..(2 * r - 2 - i) {
+                out.push_str(&strs[idx]);
+                out.push_str(&space);
+                idx += 1;
+            }
+
+            // Remaining spaces
+            for _ in 0..(i + 1) {
+                out.push_str(&space);
+            }
+
+            out.push_str(suffix);
+            out.push('\n');
+
+            // Extra lines for alignment
+            for _ in 0..extra_lines {
+                out.push_str(prefix);
+                // All spaces
+                for _ in 0..(r * 4 - 1) {
+                    out.push_str(&space);
+                }
+                out.push_str(suffix);
+                out.push('\n');
+            }
+        }
+
+        Ok(out)
+    }
+
     /// Create a HexEngine instance from a raw state vector without validation.
     /// 
     /// This unsafe method assumes that the provided state vector length corresponds to a valid hexagonal grid
@@ -3503,6 +3715,38 @@ impl HexEngine {
     #[staticmethod]
     pub fn hpyhex_rs_adjacency_list(radius: usize) -> Vec<Vec<usize>> {
         HexEngine::adjacency_list_static(radius)
+    }
+
+    /// Render the HexEngine state as a string representation.
+    /// 
+    /// Arguments:
+    /// - prefix: String to prepend to each line (default: "").
+    /// - suffix: String to append to each line (default: "").
+    /// - space: String to represent empty space (default: " ").
+    /// - fill: String to represent filled blocks (default: "X").
+    /// - empty: String to represent empty blocks (default: "O").
+    /// Returns:
+    /// - str: The string representation of the HexEngine.
+    #[pyo3(signature = (prefix="".to_string(), suffix="".to_string(), space=" ".to_string(), fill="X".to_string(), empty="O".to_string()))]
+    pub fn hpyhex_rs_render<'py>(&self, py: Python<'py>, prefix: String, suffix: String, space: String, fill: String, empty: String) -> Bound<'py, PyString> {
+        let s = self.render(&prefix, &suffix, &space, &fill, &empty);
+        PyString::new_bound(py, &s)
+    }
+
+    /// Render an external HexEngine state from a list of values as a string
+    /// 
+    /// Arguments:
+    /// - values: A list of boolean values representing the HexEngine state.
+    /// - prefix: String to prepend to each line (default: "").
+    /// - suffix: String to append to each line (default: "").
+    /// - extra: Whether to include extra line for proper alignment (default: false).
+    /// Returns:
+    /// - str: The string representation of the HexEngine.
+    #[pyo3(signature = (values, prefix="".to_string(), suffix="".to_string(), extra=false))]
+    #[staticmethod]
+    pub fn hpyhex_rs_render_external<'py>(py: Python<'py>, values: Bound<'py, PyList>, prefix: String, suffix: String, extra: bool) -> PyResult<Bound<'py, PyString>> {
+        let s = Self::render_static(py, values, &prefix, &suffix, extra)?;
+        Ok(PyString::new_bound(py, &s))
     }
 
     /// Convert a list of (value, Hex) pairs into a python list aligned with the hexagonal grid of the specified radius.
