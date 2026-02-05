@@ -3567,7 +3567,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn pair_vec_to_numpy(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i16>>> {
-        Self::pair_vec_to_numpy_impl::<i16>(py, radius, i16::MAX, values)
+        Self::pair_vec_to_numpy_impl::<i16>(py, radius, -1, values)
     }
 
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray of int16 aligned with the hexagonal grid of the specified radius.
@@ -3586,7 +3586,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn pair_vec_to_numpy_int16(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i16>>> {
-        Self::pair_vec_to_numpy_impl::<i16>(py, radius, i16::MAX, values)
+        Self::pair_vec_to_numpy_impl::<i16>(py, radius, -1, values)
     }
 
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint16 aligned with the hexagonal grid of the specified radius.
@@ -3618,7 +3618,7 @@ impl HexEngine {
     /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
     /// are filled with sentinel values.
     /// 
-    /// The sentinel value used here is i8::MAX for int8 representation.
+    /// The sentinel value used here is -1 for int8 representation.
     /// 
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
@@ -3628,7 +3628,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn pair_vec_to_numpy_int8(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i8>>> {
-        Self::pair_vec_to_numpy_impl::<i8>(py, radius, i8::MAX, values)
+        Self::pair_vec_to_numpy_impl::<i8>(py, radius, -1, values)
     }
 
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint8 aligned with the hexagonal grid of the specified radius.
@@ -3660,7 +3660,7 @@ impl HexEngine {
     /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
     /// are filled with sentinel values.
     /// 
-    /// The sentinel value used here is i32::MAX for int32 representation.
+    /// The sentinel value used here is -1 for int32 representation.
     /// 
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
@@ -3670,7 +3670,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn pair_vec_to_numpy_int32(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i32>>> {
-        Self::pair_vec_to_numpy_impl::<i32>(py, radius, i32::MAX, values)
+        Self::pair_vec_to_numpy_impl::<i32>(py, radius, -1, values)
     }
 
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint32 aligned with the hexagonal grid of the specified radius.
@@ -3702,7 +3702,7 @@ impl HexEngine {
     /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
     /// are filled with sentinel values.
     /// 
-    /// The sentinel value used here is i64::MAX for int64 representation.
+    /// The sentinel value used here is -1 for int64 representation.
     /// 
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
@@ -3712,7 +3712,7 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     #[staticmethod]
     pub fn pair_vec_to_numpy_int64(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i64>>> {
-        Self::pair_vec_to_numpy_impl::<i64>(py, radius, i64::MAX, values)
+        Self::pair_vec_to_numpy_impl::<i64>(py, radius, -1, values)
     }
 
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint64 aligned with the hexagonal grid of the specified radius.
