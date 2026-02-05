@@ -272,6 +272,51 @@ For examples, see [examples 1](./examples/01_binary_serialization.py) for serial
 - `hpyhex_rs_serialize() -> bytes`: Serializes the `Game` into a byte vector. First, the score and turn of the `Game` are serialized into 4-byte little-edian integers, followed by the Vector of `Piece`s, and then the Game's engine with `HexEngine.hpyhex_rs_serialize`.
 - `hpyhex_rs_deserialize(data: bytes) -> HexEngine`: Deserializes a byte vector into a `Game` instance, creating its own `HexEngine` instance.
 
+## Native Representation
+
+- `hpyhex_rs_render(prefix: str = "", suffix: str = "", space: str = " ", fill: str = "X", empty: str = "O") -> str`: An instance method on `HexEngine` that renders the current state of the hexagonal grid as a string. The grid is displayed with filled blocks represented by `fill`, empty blocks by `empty`, and spacing controlled by `space`. Optional `prefix` and `suffix` can be added to each line.
+
+```python
+>>> from hpyhex import random_engine, HexEngine
+>>> print(random_engine(7).hpyhex_rs_render())
+       X X O X O O X       
+      X O O O X O O O      
+     X X X X O O X O X     
+    O O X O O X X O X O    
+   O O O O O X X O X O O   
+  O X O O X X O O X X X O  
+ X X O X X X X O O O X O X 
+  O O O X O O X O O O O X  
+   O X X O X O X X O O X   
+    O O O O X O O O X X    
+     O X O X O X X O X     
+      X X X O X X O X      
+       O X X X O O O 
+```
+
+- `hpyhex_rs_render_external(values: List[Any], prefix: str = "", suffix: str = "", extra: bool = False) -> str`: A static method that renders a list of values into a string representation of a hexagonal grid. The values are arranged in a hexagonal pattern, with optional prefix and suffix for each line, and an extra line toggle for better alignment. Supports any Python object types as values, converting them to strings for display.
+
+```python
+>>> from hpyhex import HexEngine
+>>> print(HexEngine.hpyhex_rs_render_external([2, 5, 6.7, 4, 3.65, 4, 5, 3, 0, 0, 45, [6,], 9, 3, 6, 6.7, "He", 4, 9], extra=True))
+                                            
+            2       5       6.7             
+                                            
+        4       3.65    4       5           
+                                            
+    3       0       0       45      [6]     
+                                            
+        9       3       6       6.7         
+                                            
+            He      4       9               
+                                            
+>>> import math
+>>> print(HexEngine.hpyhex_rs_render_external(["Number", "PI?", ["r", 5], math.pi, 3, "Math", -5.42]))
+                    Number              PI?                           
+          ['r', 5]            3.14159265          3                   
+                    Math                -5.42                         
+```
+
 ## Native Methods
 
 - `hpyhex_rs_add_piece_with_index(piece_index: int, position_index: int) -> bool`: A special method in the `Game` class that allows adding a piece using its index in the piece queue and the position index in the engine directly. This method is not part of the original `hpyhex` API but is provided for performance optimization.
