@@ -282,6 +282,8 @@ For examples, see [examples 1](./examples/01_binary_serialization.py) for serial
 
 - `hpyhex_rs_adjacency_list(radius: int) -> List[List[int]]`: A static method that generates the adjacency list for blocks in a hexagonal grid of the specified radius. Each inner list contains the indices of neighboring blocks for the corresponding block. This provides direct access to adjacency information, enabling efficient batch workflows and eliminating redundant calculations across multiple HexEngine instances with the same radius.
 
+- `hpyhex_rs_pair_vec_to_list_any(radius: int, sentinel: Any, values: List[Tuple[Any, Hex]]) -> List[Any]`: Converts a list of (value, Hex) pairs into a list aligned with the hexagonal grid, filling unfilled positions with the specified sentinel value. Supports any Python object types for values and sentinels. NumPy versions also exist for various dtypes with fixed sentinels (see [Pair Vector to List Conversion section](#pair-vector-to-list-conversion) for details).
+
 See the [Adjacency Structure for HexEngine](#adjacency-structure-for-hexEngine) section for more details on how to use the adjacency list. The section describes usage of the adjacency list in the context of NumPy integration, but the same principles apply when using the native method.
 
 ## Usage Advices
@@ -997,6 +999,92 @@ mask_f32 = engine.to_numpy_positions_mask_float32(piece) # float32, 0.0 or 1.0
 ```
 
 These methods are useful for game logic, AI decision making, and visualization of possible moves.
+
+### Pair Vector to List Conversion
+
+The `HexEngine` provides methods to convert a list of (value, Hex coordinate) pairs into 1D Numpy arrays aligned with the hexagonal grid.
+
+This functionality is useful for creating custom board representations, feature maps, or any scenario where you need to map values to specific grid positions. It allows sparse specification of values at specific coordinates, automatically filling the rest of the grid with a sentinel value determined by the data type.
+
+The indexing of the resulting data structures is equivalent to `index_block()`, where each index corresponds to a specific Hex coordinate in the grid.
+
+#### Getting NumPy Arrays
+
+```python
+# Default int16 with sentinel i16::MAX
+arr_i16 = HexEngine.pair_vec_to_numpy(radius=3, values=pairs)
+
+# Specific dtypes
+arr_u8 = HexEngine.pair_vec_to_numpy_uint8(radius=3, values=pairs)    # uint8, sentinel u8::MAX
+arr_i32 = HexEngine.pair_vec_to_numpy_int32(radius=3, values=pairs)   # int32, sentinel i32::MAX
+arr_f32 = HexEngine.pair_vec_to_numpy_float32(radius=3, values=pairs) # float32, sentinel f32::NAN
+arr_f64 = HexEngine.pair_vec_to_numpy_float64(radius=3, values=pairs) # float64, sentinel f64::NAN
+
+# Half precision (requires "half" feature)
+arr_f16 = HexEngine.pair_vec_to_numpy_float16(radius=3, values=pairs) # float16, sentinel f16::NAN
+```
+
+#### Sentinel Values
+
+NumPy methods use fixed sentinel values for type consistency:
+
+- **Signed integer types** (int8, int16, int32, int64): Use -1 as the sentinel value
+- **Unsigned integer types** (uint8, uint16, uint32, uint64): Use the type's maximum value as sentinel
+- **Floating point types** (float16, float32, float64): Use NaN as the sentinel value
+
+To get the maximum value for unsigned types in various languages:
+- In Python, use `np.iinfo(dtype).max` for unsigned types
+- In C, use constants like `UINT8_MAX`, `UINT16_MAX`, etc.
+- In C++, use `std::numeric_limits<uint8_t>::max()`
+- In Rust, use `u8::MAX`, `u16::MAX`, etc.
+
+To get the NaN value for floating point types:
+- In Python, use `float('nan')` or `np.nan`
+- In C, use `NAN` from `<math.h>`
+- In C++, use `std::numeric_limits<float>::quiet_NaN()` and `std::numeric_limits<double>::quiet_NaN()`
+- In Rust, use `f32::NAN`, `f64::NAN`
+
+Or ideally, since there are multiple NaN representations, use functions that check for NaN rather than direct equality:
+- In Python, use `math.isnan(value)` or `np.isnan(value)`
+- In C, use `isnan(value)` from `<math.h>`
+- In C++, use `std::isnan(value)` from `<cmath>`
+- In Rust, use `value.is_nan()`
+
+#### Grid Indexing
+
+The array/list indices correspond directly to grid positions as determined by `index_block()`:
+
+```python
+# Get index for a coordinate
+hex_coo = Hex(1, -2)
+index = HexEngine(3).index_block(hex_coo)
+# Or use the faster HexEngine.hpyhex_rs_index_block(radius=3, hex_coo)
+
+# The value at that index in the converted array/list
+# corresponds to the value for that Hex coordinate
+```
+
+#### Supported Methods
+
+The following methods are available for converting pair vectors to NumPy arrays, compared to [`hpyhex_rs_pair_vec_to_list_any()`](#native-methods), which provides maximum flexibility with Python objects:
+
+| Method                             | Return Type                | Sentinel Value | Notes                             |
+|------------------------------------|----------------------------|----------------|-----------------------------------|
+| `hpyhex_rs_pair_vec_to_list_any()` | `List[Any]`                | parameter      | Flexible Python objects           |
+| `pair_vec_to_numpy()`              | `numpy.ndarray[int16]`     | `-1`           | Default method                    |
+| `pair_vec_to_numpy_int8()`         | `numpy.ndarray[int8]`      | `-1`           | Signed 8-bit                      |
+| `pair_vec_to_numpy_uint8()`        | `numpy.ndarray[uint8]`     | `u8::MAX`      | Unsigned 8-bit                    |
+| `pair_vec_to_numpy_int16()`        | `numpy.ndarray[int16]`     | `-1`           | Signed 16-bit                     |
+| `pair_vec_to_numpy_uint16()`       | `numpy.ndarray[uint16]`    | `u16::MAX`     | Unsigned 16-bit                   |
+| `pair_vec_to_numpy_int32()`        | `numpy.ndarray[int32]`     | `-1`           | Signed 32-bit                     |
+| `pair_vec_to_numpy_uint32()`       | `numpy.ndarray[uint32]`    | `u32::MAX`     | Unsigned 32-bit                   |
+| `pair_vec_to_numpy_int64()`        | `numpy.ndarray[int64]`     | `-1`           | Signed 64-bit                     |
+| `pair_vec_to_numpy_uint64()`       | `numpy.ndarray[uint64]`    | `u64::MAX`     | Unsigned 64-bit                   |
+| `pair_vec_to_numpy_float32()`      | `numpy.ndarray[float32]`   | `f32::NAN`     | Single precision                  |
+| `pair_vec_to_numpy_float64()`      | `numpy.ndarray[float64]`   | `f64::NAN`     | Double precision                  |
+| `pair_vec_to_numpy_float16()`      | `numpy.ndarray[float16]`   | `f16::NAN`     | Half precision (experimental)     |
+
+The `pair_vec_to_numpy_*` methods produce 1D NumPy arrays of length equal to the number of cells in the hexagonal grid for the given radius, providing NumPy-compatible representations of sparse value mappings. The `hpyhex_rs_pair_vec_to_list_any` method produces a Python list of the same length and is intended for maximum flexibility with Python objects.
 
 ### Adjacency Structure for HexEngine
 
