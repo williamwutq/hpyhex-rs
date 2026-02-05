@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactor `HexEngine.index_block` for performance by avoiding creation of temporary Python references.
 - Optimize `add_piece_checked` method of `Game` class.
 
-## [UNRELEASED]
+## [0.2.3] - 2026-02-05
 
 ### Added
 - Added description of direct convolution with correspondence lists in documentation.
