@@ -24,6 +24,12 @@ const VERSION_MAGIC: [u8; 8] = str_to_bytes("hpyhexRS");
 /// Bit shift values used for the hashing obfuscation process
 const OBFUSC_SHIFTS: [u8; 8] = [31, 37, 41, 27, 23, 29, 33, 43];
 /// A large prime number used in the hash function for mixing bits
+/// 
+/// It is noticible that this is not a prime number, but it is used in the java version,
+/// so we will keep it for consistency. For simple obfuscation purposes, it is sufficient
+/// to use this large odd number which has its factors in thousands.
+/// 
+/// `14514072000185962301` = `7561 * 1919596878744341`
 const OBFUSC_PRIMT:  u64     = 0xC96C5795D7870F3Du64;
 
 /// Obfuscates a long integer using bit shifts and prime multiplications.
@@ -136,4 +142,139 @@ const fn parse_version(s: &str) -> u32 {
     parts[part_idx] = part;
 
     version_bytes(parts[0], parts[1], parts[2])
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(C)]
+struct NibbleWriter {
+    buffer: Vec<u8>,
+    current_byte: u8,
+    is_high_nibble: bool,
+}
+
+impl NibbleWriter {
+    /// Creates a new NibbleWriter with an empty buffer and ready to write the high nibble of the first byte.
+    /// 
+    /// ## Returns
+    /// A new instance of `NibbleWriter` ready for writing nibbles to its internal buffer.
+    pub(crate) fn new() -> Self {
+        Self {
+            buffer: Vec::new(),
+            current_byte: 0,
+            is_high_nibble: true,
+        }
+    }
+
+    /// Writes a single 4-bit nibble to the buffer, managing the current byte and nibble position.
+    /// The nibble is masked to ensure only the lower 4 bits are used.
+    /// 
+    /// ## Parameters
+    /// - `nibble`: The 8-bit unsigned integer containing the nibble to write (only the lower 4 bits are used).
+    pub(crate) fn write_nibble(&mut self, nibble: u8) {
+        let nibble = nibble & 0x0F; // Ensure it's only 4 bits
+        if self.is_high_nibble {
+            self.current_byte = nibble << 4; // Place in high nibble
+        } else {
+            self.current_byte |= nibble; // Place in low nibble
+            self.buffer.push(self.current_byte); // Write full byte to buffer
+            self.current_byte = 0; // Reset current byte
+        }
+        self.is_high_nibble = !self.is_high_nibble; // Toggle nibble position
+    }
+
+    /// Writes a full byte (8 bits) to the buffer by splitting it into two nibbles.
+    /// The byte is written in big-endian order, with the high nibble written first, followed by the low nibble.
+    /// 
+    /// ## Parameters
+    /// - `byte`: The 8-bit unsigned integer to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_u8(&mut self, byte: u8) {
+        self.write_nibble(byte >> 4); // Write high nibble
+        self.write_nibble(byte & 0x0F); // Write low nibble
+    }
+
+    /// Writes a 16-bit unsigned integer to the buffer by splitting it into two bytes and writing each byte as nibbles.
+    /// The integer is written in big-endian order, with the high byte written first, followed by the low byte.
+    /// 
+    /// ## Parameters
+    /// - `value`: The 16-bit unsigned integer to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_u16(&mut self, value: u16) {
+        self.write_u8((value >> 8) as u8); // Write high byte
+        self.write_u8(value as u8); // Write low byte
+    }
+
+    /// Writes a 32-bit unsigned integer to the buffer by splitting it into four bytes and writing each byte as nibbles.
+    /// The integer is written in big-endian order, with the most significant byte written first, followed by the less significant bytes.
+    /// 
+    /// ## Parameters
+    /// - `value`: The 32-bit unsigned integer to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_u32(&mut self, value: u32) {
+        self.write_u16((value >> 16) as u16); // Write high word
+        self.write_u16(value as u16); // Write low word
+    }
+
+    /// Writes a 64-bit unsigned integer to the buffer by splitting it into eight bytes and writing each byte as nibbles.
+    /// The integer is written in big-endian order, with the most significant byte written first, followed by the less significant bytes.
+    /// 
+    /// ## Parameters
+    /// - `value`: The 64-bit unsigned integer to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_u64(&mut self, value: u64) {
+        self.write_u32((value >> 32) as u32);
+        self.write_u32(value as u32);
+    }
+
+    /// Writes a slice of bytes to the buffer by writing each byte as nibbles.
+    /// The bytes are written in the order they appear in the slice, with each byte split into high and low nibbles.
+    /// 
+    /// ## Parameters
+    /// - `bytes`: A slice of bytes to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_bytes(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.write_u8(byte);
+        }
+    }
+
+    /// Writes a boolean value to the buffer as a single nibble, where `true` is represented as `1` and `false` is represented as `0`.
+    /// This allows for compact storage of boolean values in the binary format.
+    /// 
+    /// ## Parameters
+    /// - `value`: The boolean value to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_bool(&mut self, value: bool) {
+        self.write_nibble(if value { 1 } else { 0 });
+    }
+
+    /// Writes a divider to the buffer by writing a specific nibble value (0xF) multiple times.
+    /// This is used to separate different sections of the binary data for easier parsing and validation.
+    /// 
+    /// ## Parameters
+    /// - `length`: The number of divider nibbles to write to the buffer.
+    #[inline(always)]
+    pub(crate) fn write_divider(&mut self, length: usize) {
+        for _ in 0..length {
+            self.write_nibble(0xF); // Use 0xF as a divider nibble
+        }
+    }
+
+    /// Finalizes the buffer by flushing any remaining high nibble if necessary and returns the complete byte vector.
+    /// If the last nibble written was a high nibble, it will be flushed to the buffer as a full byte before returning.
+    /// 
+    /// ## Returns
+    /// A `Vec<u8>` containing the complete byte data that has been written to the buffer, ready for output or storage.
+    pub(crate) fn into_bytes(mut self) -> Vec<u8> {
+        if !self.is_high_nibble {
+            self.buffer.push(self.current_byte); // Flush remaining high nibble if needed
+        }
+        self.buffer
+    }
+}
+
+impl Into<Vec<u8>> for NibbleWriter {
+    fn into(self) -> Vec<u8> {
+        self.into_bytes()
+    }
 }
