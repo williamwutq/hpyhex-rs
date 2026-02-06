@@ -1,4 +1,4 @@
-#![cfg(feature = "extended")]
+// #![cfg(feature = "extended")]
 //! # Extended Hex Game Module
 //!
 //! This module provides extended functionality for the hexagonal grid game engine,

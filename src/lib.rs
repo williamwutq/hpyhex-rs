@@ -52,11 +52,14 @@
 //! Designed by William Wu. Adapted for Rust.
 mod hex;
 mod game;
+mod games;
 mod meta;
 
 #[cfg(any(feature = "default", feature = "core"))]
 pub use hex::*;
 #[cfg(any(feature = "default", feature = "game"))]
 pub use game::*;
-#[cfg(feature = "extended")]
+//#[cfg(feature = "extended")]
 pub use meta::*;
+//#[cfg(feature = "extended")]
+pub use games::*;
