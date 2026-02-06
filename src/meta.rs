@@ -1,5 +1,30 @@
-
 #![cfg(feature = "extended")]
+//! # Extended Hex Game Module
+//!
+//! This module provides extended functionality for the hexagonal grid game engine,
+//! including metadata support for grid blocks, randomizable traits, and an extended game state.
+//!
+//! ## Features
+//!
+//! - [`ExtendedHexEngine`]: A grid engine that associates metadata with each block.
+//! - [`Randomizable`]: A trait for generating random instances of types.
+//! - [`PieceQueue`]: A circular queue for pieces with metadata.
+//! - [`ExtendedGame`]: A thread-safe game state managing the engine, queue, score, and turns.
+//!
+//! This module is gated behind the "extended" feature flag.
+//!
+//! ## Example
+//!
+//! ```rust
+//! use hpyhex_rs::meta::{ExtendedHexEngine, Randomizable};
+//!
+//! // Create an extended engine with u32 metadata
+//! let mut engine = ExtendedHexEngine::<u32>::new(3);
+//!
+//! // Set some metadata
+//! engine.set_metadata(Hex::new(0, 0), 42).unwrap();
+//! ```
+
 use crate::hex::{Hex, HexEngine, Piece};
 use std::fmt;
 
@@ -242,7 +267,7 @@ where
     /// Iterates over all blocks, yielding (coordinate, state, metadata)
     /// 
     /// ## Returns
-    /// An iterator over tuples of `(Hex, bool, T)` for each block in the
+    /// An iterator over tuples of `(Hex, bool, T)` for each block in the grid.
     pub fn iter(&self) -> impl Iterator<Item = (Hex, bool, T)> + '_ {
         self.base.iter().enumerate().filter_map(move |(i, (coo, state))| {
             let meta = self.metadata[i].clone();
