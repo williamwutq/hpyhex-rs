@@ -7,6 +7,8 @@
 use crate::hex::{Hex, HexEngine, Piece};
 use crate::meta::{ExtendedHexEngine, ExtendedGame};
 
+// The following section are pulled from the java version. Don't question the constants.
+// source: ./src/hexio/HexLogger.java
 /// The version of this encoder compatible with .hpyhex binary format
 const VERSION: &str = "0.1.0";
 /// The version bytes for the current encoder, parsed from the VERSION string
@@ -19,6 +21,68 @@ const DATA_MAGIC: [u8; 8]    = str_to_bytes("!HEX-BIN");
 /// 
 /// The java version uses "JAVAHXLG"
 const VERSION_MAGIC: [u8; 8] = str_to_bytes("hpyhexRS");
+/// Bit shift values used for the hashing obfuscation process
+const OBFUSC_SHIFTS: [u8; 8] = [31, 37, 41, 27, 23, 29, 33, 43];
+/// A large prime number used in the hash function for mixing bits
+const OBFUSC_PRIMT:  u64     = 0xC96C5795D7870F3Du64;
+
+/// Obfuscates a long integer using bit shifts and prime multiplications.
+/// This function provides a layered transformation for security purposes.
+/// 
+/// This is used for validating the integrity of the binary file and preventing tampering,
+/// as well as for generating unique identifiers for game states.
+/// 
+/// ## Parameters
+/// - `input`: The 64-bit unsigned integer to obfuscate.
+/// 
+/// ## Returns
+/// A new 64-bit unsigned integer that is the obfuscated version of the input.
+pub const fn obfuscate(mut input: u64) -> u64 {
+    input ^= (input << OBFUSC_SHIFTS[0]) | (input >> OBFUSC_SHIFTS[1]);
+    input = input.wrapping_mul(OBFUSC_PRIMT);
+    input ^= (input << OBFUSC_SHIFTS[2]) | (input >> OBFUSC_SHIFTS[3]);
+    input = input.wrapping_mul(OBFUSC_PRIMT);
+    input ^= (input << OBFUSC_SHIFTS[4]) | (input >> OBFUSC_SHIFTS[5]);
+    input = input.wrapping_mul(OBFUSC_PRIMT);
+    input ^= (input << OBFUSC_SHIFTS[6]) | (input >> OBFUSC_SHIFTS[7]);
+    input
+}
+
+/// Interleaves the bits of two 32-bit integers into a single 64-bit long.
+/// It is superior to just combining two integers together.
+///
+/// The first integer contributes its bits to the even-numbered bit positions
+/// (0, 2, 4, ...) of the result, while the second integer contributes its bits
+/// to the odd-numbered bit positions (1, 3, 5, ...).
+/// 
+/// ## Inputs
+/// - `even`: The 32-bit unsigned integer whose bits will occupy the even positions in the output.
+/// - `odd`: The 32-bit unsigned integer whose bits will occupy the odd positions in the output.
+/// 
+/// ## Output
+/// A 64-bit unsigned integer where the bits of `even` and `odd` are interleaved.
+/// For example, if `even` is `0b1010` and `odd` is `0b0101`, the output will be `0b10011001`.
+pub const fn interleave_integers(even: u32, odd: u32) -> u64 {
+    let mut e_l = even as u64;
+    let mut o_l = odd as u64;
+
+    e_l = (e_l | (e_l << 16)) & 0x0000_FFFF_0000_FFFF;
+    o_l = (o_l | (o_l << 16)) & 0x0000_FFFF_0000_FFFF;
+
+    e_l = (e_l | (e_l << 8)) & 0x00FF_00FF_00FF_00FF;
+    o_l = (o_l | (o_l << 8)) & 0x00FF_00FF_00FF_00FF;
+
+    e_l = (e_l | (e_l << 4)) & 0x0F0F_0F0F_0F0F_0F0F;
+    o_l = (o_l | (o_l << 4)) & 0x0F0F_0F0F_0F0F_0F0F;
+
+    e_l = (e_l | (e_l << 2)) & 0x3333_3333_3333_3333;
+    o_l = (o_l | (o_l << 2)) & 0x3333_3333_3333_3333;
+
+    e_l = (e_l | (e_l << 1)) & 0x5555_5555_5555_5555;
+    o_l = (o_l | (o_l << 1)) & 0x5555_5555_5555_5555;
+
+    e_l ^ (o_l << 1)
+}
 
 /// Converts a string to a fixed-size byte array, padding with zeros if necessary.
 /// 
