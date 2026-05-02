@@ -1,4 +1,3 @@
-
 //! # hpyhex-rs: High-Performance Hexagonal Grid Library
 //!
 //! This crate provides a fast, robust, and extensible environment for hexagonal grid-based games and machine learning applications, inspired by the HappyHex projects in Python and Java.
@@ -50,15 +49,15 @@
 //! - Java: [HappyHex](https://github.com/williamwutq/game_HappyHex)
 //!
 //! Designed by William Wu. Adapted for Rust.
-mod hex;
 mod game;
 mod games;
+mod hex;
 mod meta;
 
-#[cfg(any(feature = "default", feature = "core"))]
-pub use hex::*;
 #[cfg(any(feature = "default", feature = "game"))]
 pub use game::*;
+#[cfg(any(feature = "default", feature = "core"))]
+pub use hex::*;
 //#[cfg(feature = "extended")]
 pub use meta::*;
 //#[cfg(feature = "extended")]

@@ -1,9 +1,9 @@
 //! Comprehensive game environment for Hex, including grid engine, piece factory, and game logic.
 //!
 //! ## Feature Flag: game
-//! 
+//!
 //! ## Overview
-//! 
+//!
 //! This module implements the core gameplay environment for Hex, inspired by the Python and Java versions of HappyHex.
 //! It integrates grid management, piece generation, and game state tracking into a unified, robust system suitable for both interactive play and automated agents.
 //!
@@ -47,24 +47,24 @@
 //! Designed by William Wu. Adapted for Rust.
 
 #![cfg(any(feature = "default", feature = "game"))]
-use crate::hex::{Piece, HexEngine, Hex};
+use crate::hex::{Hex, HexEngine, Piece};
 use rand::Rng;
 use std::fmt;
 
 /// Generates a random HexEngine with a given radius.
-/// 
+///
 /// Creates a random boolean pattern and applies elimination rules.
 /// This is more efficient than generating all possible engines.
-/// 
+///
 /// This is a free function because it is not a part of the HexEngine struct itself,
 /// but rather to extend its functionality specifically for game initialization.
-/// 
+///
 /// # Arguments
 /// * `radius` - The radius of the hexagonal game board (must be >= 2)
-/// 
+///
 /// # Returns
 /// A randomized HexEngine instance
-/// 
+///
 /// # Panics
 /// Panics if radius < 2
 pub fn random_engine(radius: usize) -> HexEngine {
@@ -75,7 +75,7 @@ pub fn random_engine(radius: usize) -> HexEngine {
 
     // For length > 64, generate enough random u64s to cover all bits
     let mut bits = Vec::with_capacity(length);
-    let num_chunks = (length + 63) / 64;
+    let num_chunks = length.div_ceil(64);
     let mut randoms = Vec::with_capacity(num_chunks);
     for _ in 0..num_chunks {
         randoms.push(rng.random::<u64>());
@@ -87,8 +87,7 @@ pub fn random_engine(radius: usize) -> HexEngine {
         bits.push((randoms[chunk] >> bit) & 1 == 1);
     }
 
-    let mut engine = HexEngine::from_states(bits)
-        .expect("Generated states should be valid");
+    let mut engine = HexEngine::from_states(bits).expect("Generated states should be valid");
     engine.eliminate();
     engine
 }
@@ -164,9 +163,9 @@ pub struct PieceFactory;
 
 impl PieceFactory {
     /// All predefined pieces with their names and bitfield values
-    /// 
+    ///
     /// These are pieces that are most commonly used in the game.
-    /// 
+    ///
     /// The names are rustified versions of the original piece names.
     /// For example, "triangle_3_a" corresponds to java version "Triangle3A".
     ///
@@ -213,10 +212,10 @@ impl PieceFactory {
     ];
 
     /// Gets a piece by name
-    /// 
+    ///
     /// # Arguments
     /// * `name` - The name of the piece to retrieve
-    /// 
+    ///
     /// # Returns
     /// The piece if found, None otherwise
     pub const fn get_piece(name: &str) -> Option<Piece> {
@@ -232,10 +231,10 @@ impl PieceFactory {
     }
 
     /// Gets the name of a piece based on its bitfield value
-    /// 
+    ///
     /// # Arguments
     /// * `piece` - The piece whose name is to be retrieved
-    /// 
+    ///
     /// # Returns
     /// The name if found, None otherwise
     pub const fn get_piece_name(piece: Piece) -> Option<&'static str> {
@@ -252,21 +251,21 @@ impl PieceFactory {
     }
 
     /// Generates a random piece based on weighted probability distribution
-    /// 
+    ///
     /// Uses a mix of easier and harder pieces with different probabilities.
-    /// 
+    ///
     /// The generation algorithm is the exact same as used in the original game,
     /// except the possiblility of enter easy mode is 50% instead of a settable value.
-    /// 
+    ///
     /// # Returns
     /// A randomly generated Piece
     pub fn generate_piece() -> Piece {
         let mut rng = rand::rng();
-        
+
         if rng.random_bool(0.5) {
             // Easier generation
             let i = rng.random_range(0..74);
-            
+
             match i {
                 0..=7 => Self::get_piece("triangle_3_a").unwrap(),
                 8..=15 => Self::get_piece("triangle_3_b").unwrap(),
@@ -312,7 +311,7 @@ impl PieceFactory {
         } else {
             // Harder generation
             let i = rng.random_range(0..86);
-            
+
             match i {
                 0..=5 => Self::get_piece("triangle_3_a").unwrap(),
                 6..=11 => Self::get_piece("triangle_3_b").unwrap(),
@@ -354,7 +353,7 @@ impl PieceFactory {
     }
 
     /// Returns all pieces defined in this factory
-    /// 
+    ///
     /// # Returns
     /// An array of all predefined pieces
     pub const fn all_pieces() -> [Piece; 37] {
@@ -404,11 +403,11 @@ impl PieceFactory {
 const fn const_str_eq(a: &str, b: &str) -> bool {
     let a_bytes = a.as_bytes();
     let b_bytes = b.as_bytes();
-    
+
     if a_bytes.len() != b_bytes.len() {
         return false;
     }
-    
+
     let mut i = 0;
     while i < a_bytes.len() {
         if a_bytes[i] != b_bytes[i] {
@@ -423,7 +422,7 @@ const fn const_str_eq(a: &str, b: &str) -> bool {
 ///
 /// The `Game` struct manages the hexagonal grid engine, a fixed-length queue of pieces, game score, turn tracking, and end-state detection.
 /// It provides methods to add pieces, make moves, and query game status, handling errors gracefully and maintaining consistent state.
-/// 
+///
 /// The integrated game evironment, first introduced in the Python adaptation, eliminated the need for separate engine and queue management,
 /// making it easier to implement game logic and interact with the game state.
 ///
@@ -445,9 +444,9 @@ const fn const_str_eq(a: &str, b: &str) -> bool {
 /// # Queue Behavior
 ///
 /// The queue always maintains a fixed number of pieces. When a piece is placed, it is replaced by a new piece generated internally. The queue only stores static pieces. External addition of pieces is not supported.
-/// 
+///
 /// # Thread Safety
-/// 
+///
 /// The `Game` struct is designed to be thread-safe for concurrent read access. However, mutable operations should be synchronized externally to prevent data races. This may be achieved using a `Mutex` or similar synchronization primitive.
 ///
 /// # Example
@@ -480,14 +479,14 @@ pub struct Game {
 
 impl Game {
     /// Creates a new game with specified engine and queue
-    /// 
+    ///
     /// # Arguments
     /// * `radius` - The radius of the hexagonal game board (>= 2)
     /// * `queue_size` - The number of pieces in the queue (>= 1)
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
-    /// 
+    ///
     /// # Panics
     /// Panics if radius < 2 or queue_size < 1
     pub fn new(radius: usize, queue_size: usize) -> Self {
@@ -495,7 +494,7 @@ impl Game {
     }
 
     /// Creates a new game with initial turn and score
-    /// 
+    ///
     /// # Arguments
     /// * `radius` - The radius of the hexagonal game board (>= 2)
     /// * `queue_size` - The number of pieces in the queue (>= 1)
@@ -525,7 +524,7 @@ impl Game {
     }
 
     /// Creates a game from an existing engine
-    /// 
+    ///
     /// # Arguments
     /// * `engine` - The HexEngine to use
     /// * `queue_size` - The number of pieces in the queue (>= 1)
@@ -550,11 +549,11 @@ impl Game {
     }
 
     /// Adds a piece to the game at the specified coordinates
-    /// 
+    ///
     /// # Arguments
     /// * `piece_index` - Index of the piece in the queue
     /// * `coord` - Coordinates where the piece should be placed
-    /// 
+    ///
     /// # Returns
     /// `true` if the piece was successfully added, `false` otherwise
     pub fn add_piece(&mut self, piece_index: usize, coord: Hex) -> bool {
@@ -590,10 +589,10 @@ impl Game {
     }
 
     /// Makes a move using the specified algorithm
-    /// 
+    ///
     /// # Arguments
     /// * `algorithm` - A function that takes the engine and queue and returns (piece_index, coordinate)
-    /// 
+    ///
     /// # Returns
     /// `true` if the move was successfully made, `false` otherwise
     pub fn make_move<F>(&mut self, algorithm: F) -> bool
@@ -611,7 +610,7 @@ impl Game {
     }
 
     /// Checks if the game has ended (no valid moves remaining)
-    /// 
+    ///
     /// Updates the `end` field accordingly
     fn check_end(&mut self) {
         for piece in &self.queue {
@@ -624,7 +623,7 @@ impl Game {
     }
 
     /// Returns whether the game has ended
-    /// 
+    ///
     /// # Returns
     /// `true` if the game is over, `false` otherwise
     #[inline]
@@ -633,7 +632,7 @@ impl Game {
     }
 
     /// Returns the current result as (turn, score)
-    /// 
+    ///
     /// # Returns
     /// A tuple containing the current turn number and score
     #[inline]
@@ -642,7 +641,7 @@ impl Game {
     }
 
     /// Returns the current turn number
-    /// 
+    ///
     /// # Returns
     /// The current turn number
     #[inline]
@@ -651,7 +650,7 @@ impl Game {
     }
 
     /// Returns the current score
-    /// 
+    ///
     /// # Returns
     /// The current score
     #[inline]
@@ -660,7 +659,7 @@ impl Game {
     }
 
     /// Returns a reference to the game engine
-    /// 
+    ///
     /// # Returns
     /// A reference to the HexEngine
     #[inline]
@@ -669,9 +668,9 @@ impl Game {
     }
 
     /// Returns a mutable reference to the game engine
-    /// 
+    ///
     /// Modifying the engine directly may lead to invalid game states.
-    /// 
+    ///
     /// # Returns
     /// A mutable reference to the HexEngine
     #[inline]
@@ -680,7 +679,7 @@ impl Game {
     }
 
     /// Returns a reference to the piece queue
-    /// 
+    ///
     /// # Returns
     /// A reference to the vector of pieces in the queue
     #[inline]
@@ -689,9 +688,9 @@ impl Game {
     }
 
     /// Returns a mutable reference to the piece queue
-    /// 
+    ///
     /// Modifying the queue directly may lead to invalid game states.
-    /// 
+    ///
     /// # Returns
     /// A mutable reference to the vector of pieces in the queue
     #[inline]
@@ -702,7 +701,7 @@ impl Game {
 
 impl Clone for Game {
     /// Clones the game state
-    /// 
+    ///
     /// # Returns
     /// A new Game instance with the same state
     fn clone(&self) -> Self {
@@ -735,7 +734,7 @@ impl fmt::Display for Game {
 
 impl fmt::Debug for Game {
     /// Formats the game state for debugging
-    /// 
+    ///
     /// # Returns
     /// A formatted string representing the game state
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -751,11 +750,11 @@ impl fmt::Debug for Game {
 
 impl From<(HexEngine, usize)> for Game {
     /// Creates a Game from a HexEngine and queue size
-    /// 
+    ///
     /// # Arguments
     /// * `engine` - The HexEngine to use
     /// * `queue_size` - The number of pieces in the queue (>= 1)
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn from((engine, queue_size): (HexEngine, usize)) -> Self {
@@ -765,11 +764,11 @@ impl From<(HexEngine, usize)> for Game {
 
 impl From<(usize, usize)> for Game {
     /// Creates a Game from radius and queue size
-    /// 
+    ///
     /// # Arguments
     /// * `radius` - The radius of the hexagonal game board (>= 2)
     /// * `queue_size` - The number of pieces in the queue (>= 1)
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn from((radius, queue_size): (usize, usize)) -> Self {
@@ -779,11 +778,11 @@ impl From<(usize, usize)> for Game {
 
 impl From<(usize, HexEngine)> for Game {
     /// Creates a Game from queue size and a HexEngine
-    /// 
+    ///
     /// # Arguments
     /// * `queue_size` - The number of pieces in the queue (>= 1)
     /// * `engine` - The HexEngine to use
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn from((queue_size, engine): (usize, HexEngine)) -> Self {
@@ -793,11 +792,11 @@ impl From<(usize, HexEngine)> for Game {
 
 impl From<(HexEngine, Vec<Piece>)> for Game {
     /// Creates a Game from a HexEngine and a predefined piece queue
-    /// 
+    ///
     /// # Arguments
     /// * `engine` - The HexEngine to use
     /// * `queue` - The vector of pieces to use as the queue
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn from((engine, queue): (HexEngine, Vec<Piece>)) -> Self {
@@ -815,11 +814,11 @@ impl From<(HexEngine, Vec<Piece>)> for Game {
 
 impl From<(Vec<Piece>, HexEngine)> for Game {
     /// Creates a Game from a predefined piece queue and a HexEngine
-    /// 
+    ///
     /// # Arguments
     /// * `queue` - The vector of pieces to use as the queue
     /// * `engine` - The HexEngine to use
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn from((queue, engine): (Vec<Piece>, HexEngine)) -> Self {
@@ -835,51 +834,51 @@ impl From<(Vec<Piece>, HexEngine)> for Game {
     }
 }
 
-impl Into<(HexEngine, Vec<Piece>)> for Game {
+impl From<Game> for (HexEngine, Vec<Piece>) {
     /// Converts the Game into a tuple of HexEngine and piece queue
-    /// 
+    ///
     /// # Returns
     /// A tuple containing the HexEngine and vector of pieces
-    fn into(self) -> (HexEngine, Vec<Piece>) {
-        (self.engine, self.queue)
+    fn from(val: Game) -> Self {
+        (val.engine, val.queue)
     }
 }
 
-impl Into<(Vec<Piece>, HexEngine)> for Game {
+impl From<Game> for (Vec<Piece>, HexEngine) {
     /// Converts the Game into a tuple of piece queue and HexEngine
-    /// 
+    ///
     /// # Returns
     /// A tuple containing the vector of pieces and HexEngine
-    fn into(self) -> (Vec<Piece>, HexEngine) {
-        (self.queue, self.engine)
+    fn from(val: Game) -> Self {
+        (val.queue, val.engine)
     }
 }
 
-impl Into<(usize, usize)> for Game {
+impl From<Game> for (usize, usize) {
     /// Converts the Game into a pair of turn and score
-    /// 
+    ///
     /// The order is (turn, score).
-    /// 
+    ///
     /// # Returns
     /// A tuple containing the turn number and score
-    fn into(self) -> (usize, usize) {
-        (self.turn, self.score)
+    fn from(val: Game) -> Self {
+        (val.turn, val.score)
     }
 }
 
-impl Into<HexEngine> for Game {
+impl From<Game> for HexEngine {
     /// Converts the Game into its HexEngine while discarding all other state
-    /// 
+    ///
     /// # Returns
     /// The HexEngine of the game
-    fn into(self) -> HexEngine {
-        self.engine
+    fn from(val: Game) -> Self {
+        val.engine
     }
 }
 
 impl AsRef<HexEngine> for Game {
     /// Returns a reference to the HexEngine
-    /// 
+    ///
     /// # Returns
     /// An immutable reference to the HexEngine
     fn as_ref(&self) -> &HexEngine {
@@ -887,24 +886,24 @@ impl AsRef<HexEngine> for Game {
     }
 }
 
-impl Into<Vec<u8>> for Game {
+impl From<Game> for Vec<u8> {
     /// Converts the Game into a vector of bytes representing the game state
-    /// 
+    ///
     /// # Returns
     /// A vector of bytes representing the Game's binary state
-    fn into(self) -> Vec<u8> {
+    fn from(val: Game) -> Self {
         let mut vec = Vec::<u8>::new();
         // Add score and turn as u32
-        vec.extend_from_slice(&(self.score as u32).to_le_bytes());
-        vec.extend_from_slice(&(self.turn as u32).to_le_bytes());
+        vec.extend_from_slice(&(val.score as u32).to_le_bytes());
+        vec.extend_from_slice(&(val.turn as u32).to_le_bytes());
         // Add length of queue as u32
-        vec.extend_from_slice(&(self.queue.len() as u32).to_le_bytes());
+        vec.extend_from_slice(&(val.queue.len() as u32).to_le_bytes());
         // Add queue pieces as u8
-        for piece in &self.queue {
+        for piece in &val.queue {
             vec.push(piece.as_u8());
         }
         // Add engine binary representation
-        let engine_vec: Vec<u8> = self.engine.into();
+        let engine_vec: Vec<u8> = val.engine.into();
         vec.extend_from_slice(&engine_vec);
         vec
     }
@@ -914,10 +913,10 @@ impl TryFrom<&[u8]> for Game {
     type Error = String;
 
     /// Creates a Game from a byte slice representing the game state
-    /// 
+    ///
     /// # Arguments
     /// * `data` - A byte slice containing the binary representation of the Game
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
@@ -925,13 +924,25 @@ impl TryFrom<&[u8]> for Game {
         let mut offset = 0;
 
         // Read score and turn as u32
-        let score = u32::from_le_bytes(data[offset..offset + 4].try_into().map_err(|e: TryFromSliceError| e.to_string())?) as usize;
+        let score = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .map_err(|e: TryFromSliceError| e.to_string())?,
+        ) as usize;
         offset += 4;
-        let turn = u32::from_le_bytes(data[offset..offset + 4].try_into().map_err(|e: TryFromSliceError| e.to_string())?) as usize;
+        let turn = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .map_err(|e: TryFromSliceError| e.to_string())?,
+        ) as usize;
         offset += 4;
 
         // Read length of queue as u32
-        let queue_len = u32::from_le_bytes(data[offset..offset + 4].try_into().map_err(|e: TryFromSliceError| e.to_string())?) as usize;
+        let queue_len = u32::from_le_bytes(
+            data[offset..offset + 4]
+                .try_into()
+                .map_err(|e: TryFromSliceError| e.to_string())?,
+        ) as usize;
         offset += 4;
 
         if data.len() < offset + queue_len {
@@ -966,10 +977,10 @@ impl TryFrom<Vec<u8>> for Game {
     type Error = String;
 
     /// Creates a Game from a vector of bytes representing the game state
-    /// 
+    ///
     /// # Arguments
     /// * `data` - A vector of bytes containing the binary representation of the Game
-    /// 
+    ///
     /// # Returns
     /// A new Game instance
     fn try_from(data: Vec<u8>) -> Result<Self, Self::Error> {
@@ -1033,14 +1044,14 @@ mod tests {
     #[test]
     fn test_game_add_piece() {
         let mut game = Game::new(2, 3);
-        
+
         // Get a simple piece
         let piece = PieceFactory::get_piece("uno").unwrap();
         game.queue[0] = piece;
 
         let initial_score = game.score();
         let success = game.add_piece(0, Hex::new(0, 0));
-        
+
         assert!(success, "Should successfully add piece");
         assert_eq!(game.turn(), 1, "Turn should increment");
         assert!(game.score() > initial_score, "Score should increase");
@@ -1049,30 +1060,34 @@ mod tests {
     #[test]
     fn test_game_invalid_piece_index() {
         let mut game = Game::new(2, 3);
-        assert!(!game.add_piece(10, Hex::new(0, 0)), "Invalid index should fail");
+        assert!(
+            !game.add_piece(10, Hex::new(0, 0)),
+            "Invalid index should fail"
+        );
     }
 
     #[test]
     fn test_game_make_move() {
         let mut game = Game::new(2, 3);
-        
+
         // Simple algorithm that always picks first piece at origin
-        let algorithm = |_engine: &HexEngine, _queue: &[Piece]| {
-            Some((0, Hex::new(1, 1)))
-        };
+        let algorithm = |_engine: &HexEngine, _queue: &[Piece]| Some((0, Hex::new(1, 1)));
 
         let success = game.make_move(algorithm);
-        assert!(success || game.is_end(), "Move should succeed or game should end");
+        assert!(
+            success || game.is_end(),
+            "Move should succeed or game should end"
+        );
     }
 
     #[test]
     fn test_game_end_detection() {
         let mut game = Game::new(2, 1);
-        
+
         // Fill the entire board
         let full_piece = PieceFactory::get_piece("full").unwrap();
         game.queue[0] = full_piece;
-        
+
         // Keep adding pieces until game ends
         let mut moves = 0;
         while !game.is_end() && moves < 10 {
@@ -1083,7 +1098,7 @@ mod tests {
                 break;
             }
         }
-        
+
         // Game should eventually end or fill up
         assert!(game.is_end() || moves >= 1);
     }
@@ -1099,7 +1114,7 @@ mod tests {
     fn test_game_clone() {
         let game = Game::new(2, 3);
         let cloned = game.clone();
-        
+
         assert_eq!(game.turn(), cloned.turn());
         assert_eq!(game.score(), cloned.score());
         assert_eq!(game.is_end(), cloned.is_end());
