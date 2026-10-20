@@ -2785,32 +2785,11 @@ impl HexEngine {
     /// - `index`: The linear index to convert
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
-    fn hex_coordinate_of(&self, mut index: usize) -> PyResult<Hex> {
+    fn hex_coordinate_of(&self, index: usize) -> PyResult<Hex> {
         if index >= self.states.len() {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
         }
-
-        let r = self.radius as i32;
-        
-        // First half
-        for i in 0..r {
-            let len = (i + r) as usize;
-            if index < len {
-                return Ok(Hex { i, k: index as i32 });
-            }
-            index -= len;
-        }
-        
-        // Second half
-        for i in 0..(r - 1) {
-            let len = (2 * r - 2 - i) as usize;
-            if index < len {
-                return Ok(Hex { i: i + r, k: index as i32 + i + 1 });
-            }
-            index -= len;
-        }
-        
-        Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
+        Ok(Self::closed_form_coordinate_of(self.radius, self.states.len(), index))
     }
     /// Converts linear index to coordinate for a static radius.
     /// 
@@ -2822,8 +2801,7 @@ impl HexEngine {
     /// - `index`: The linear index to convert
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
-    fn static_hex_coordinate_of(radius: usize, mut index: usize) -> PyResult<Hex> {
-        let r = radius as i32;
+    fn static_hex_coordinate_of(radius: usize, index: usize) -> PyResult<Hex> {
         let total_blocks = if radius == 0 {
             0
         } else {
@@ -2832,26 +2810,35 @@ impl HexEngine {
         if index >= total_blocks {
             return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
         }
-
-        // First half
-        for i in 0..r {
-            let len = (i + r) as usize;
-            if index < len {
-                return Ok(Hex { i, k: index as i32 });
-            }
-            index -= len;
-        }
-        
-        // Second half
-        for i in 0..(r - 1) {
-            let len = (2 * r - 2 - i) as usize;
-            if index < len {
-                return Ok(Hex { i: i + r, k: index as i32 + i + 1 });
-            }
-            index -= len;
-        }
-        
-        Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"))
+        Ok(Self::closed_form_coordinate_of(radius, total_blocks, index))
+    }
+    /// Converts an in-bounds linear index to coordinate in O(1).
+    /// 
+    /// Rows i < radius each hold one more block than the last, so row i starts at
+    /// i * r + i * (i - 1) / 2 with k = 0, and the row of an index in that first half is the
+    /// largest i with i^2 + (2r - 1) i <= 2 index, which the quadratic formula gives exactly
+    /// through isqrt. The grid is symmetric under (i, k) -> (2r - 2 - i, 2r - 2 - k), which
+    /// reverses the block order, so an index in the second half is counted from the end.
+    /// 
+    /// Arguments:
+    /// - `radius`: The radius of the hexagonal grid, at least 1.
+    /// - `total_blocks`: The number of blocks in the grid.
+    /// - `index`: The linear index to convert, less than `total_blocks`.
+    /// Returns:
+    /// - The corresponding `Hex` coordinate.
+    fn closed_form_coordinate_of(radius: usize, total_blocks: usize, index: usize) -> Hex {
+        let m = 2 * radius - 1;
+        let first_half = |index: usize| {
+            let i = ((m * m + 8 * index).isqrt() - m) / 2;
+            (i, index - i * (i + m) / 2)
+        };
+        let (i, k) = if index < radius * radius + radius * (radius - 1) / 2 {
+            first_half(index)
+        } else {
+            let (i, k) = first_half(total_blocks - 1 - index);
+            (m - 1 - i, m - 1 - k)
+        };
+        Hex { i: i as i32, k: k as i32 }
     }
     /// Converts coordinate to linear index
     /// 

@@ -1130,32 +1130,35 @@ impl HexEngine {
     /// ## Returns
     /// An `Option<Hex>` containing the coordinate if index is valid, or `None` if out of bounds.
     #[inline]
-    pub fn coordinate_of(&self, mut index: usize) -> Option<Hex> {
+    pub fn coordinate_of(&self, index: usize) -> Option<Hex> {
         if index >= self.states.len() {
             return None;
         }
 
-        let r = self.radius as i32;
+        let r = self.radius;
+        // Blocks in the first half: rows i < r, each one block longer than the last.
+        let first_half = r * r + r * (r - 1) / 2;
+        let (i, k) = if index < first_half {
+            Self::coordinate_in_first_half(r, index)
+        } else {
+            // The grid is symmetric under (i, k) -> (2r - 2 - i, 2r - 2 - k),
+            // which reverses the block order, so count from the end instead.
+            let (i, k) = Self::coordinate_in_first_half(r, self.states.len() - 1 - index);
+            (2 * r - 2 - i, 2 * r - 2 - k)
+        };
+        Some(Hex::new(i as i32, k as i32))
+    }
 
-        // First half
-        for i in 0..r {
-            let len = (i + r) as usize;
-            if index < len {
-                return Some(Hex::new(i, index as i32));
-            }
-            index -= len;
-        }
-
-        // Second half
-        for i in 0..(r - 1) {
-            let len = (2 * r - 2 - i) as usize;
-            if index < len {
-                return Some(Hex::new(i + r, index as i32 + i + 1));
-            }
-            index -= len;
-        }
-
-        None
+    /// Converts an index in the first `radius` rows to `(i, k)` in O(1).
+    ///
+    /// Row `i` of the first half starts at `i * r + i * (i - 1) / 2` with `k = 0`,
+    /// so the row is the largest `i` with `i^2 + (2r - 1) i <= 2 index`, which
+    /// the quadratic formula gives exactly through `isqrt`.
+    #[inline]
+    fn coordinate_in_first_half(radius: usize, index: usize) -> (usize, usize) {
+        let m = 2 * radius - 1;
+        let i = ((m * m + 8 * index).isqrt() - m) / 2;
+        (i, index - i * (i + m) / 2)
     }
 
     /// Gets the state at a coordinate
@@ -1636,10 +1639,7 @@ impl HexEngine {
     /// ## Returns
     /// A `HexEngineIterator` for iterating over block states.
     pub fn iter(&self) -> HexEngineIterator<'_> {
-        HexEngineIterator {
-            engine: self,
-            index: 0,
-        }
+        HexEngineIterator::new(self)
     }
 }
 
@@ -1650,6 +1650,9 @@ impl HexEngine {
 pub struct HexEngineIterator<'a> {
     engine: &'a HexEngine,
     index: usize,
+    // Coordinate of the block at `index`, advanced incrementally.
+    i: i32,
+    k: i32,
 }
 
 impl<'a> HexEngineIterator<'a> {
@@ -1658,7 +1661,12 @@ impl<'a> HexEngineIterator<'a> {
     /// ## Parameters
     /// - `engine`: Reference to the HexEngine to iterate over
     pub fn new(engine: &'a HexEngine) -> Self {
-        HexEngineIterator { engine, index: 0 }
+        HexEngineIterator {
+            engine,
+            index: 0,
+            i: 0,
+            k: 0,
+        }
     }
 }
 
@@ -1673,12 +1681,31 @@ impl<'a> Iterator for HexEngineIterator<'a> {
         if self.index >= self.engine.states.len() {
             return None;
         }
-        let coo = self.engine.coordinate_of(self.index)?;
+        let coo = Hex::new(self.i, self.k);
         let state = self.engine.states[self.index];
         self.index += 1;
+        // Row i holds k from max(0, i - r + 1) to min(2r - 2, i + r - 1).
+        let r = self.engine.radius as i32;
+        if self.k < (2 * r - 2).min(self.i + r - 1) {
+            self.k += 1;
+        } else {
+            self.i += 1;
+            self.k = (self.i - r + 1).max(0);
+        }
         Some((coo, state))
     }
+
+    /// Returns the exact number of remaining blocks
+    ///
+    /// ## Returns
+    /// A tuple of the remaining count as both lower and upper bound.
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.engine.states.len() - self.index;
+        (len, Some(len))
+    }
 }
+
+impl ExactSizeIterator for HexEngineIterator<'_> {}
 
 impl Clone for HexEngine {
     /// Clones the HexEngine
@@ -2337,6 +2364,32 @@ mod tests {
             let coo = engine.coordinate_of(i).unwrap();
             let idx = engine.index_of(coo).unwrap();
             assert_eq!(idx, i, "Round-trip conversion should preserve index");
+        }
+    }
+
+    #[test]
+    fn test_engine_coordinate_of_all_radii() {
+        assert_eq!(HexEngine::new(0).coordinate_of(0), None);
+        for radius in 1..=40 {
+            let engine = HexEngine::new(radius);
+            // Expected order: by i, then by k, over every in-range block.
+            let r = radius as i32;
+            let mut expected = Vec::new();
+            for i in 0..2 * r - 1 {
+                for k in 0..2 * r - 1 {
+                    if engine.in_range(Hex::new(i, k)) {
+                        expected.push(Hex::new(i, k));
+                    }
+                }
+            }
+            assert_eq!(expected.len(), engine.len());
+            for (idx, &coo) in expected.iter().enumerate() {
+                assert_eq!(engine.coordinate_of(idx), Some(coo), "radius {radius}");
+            }
+            assert_eq!(engine.coordinate_of(engine.len()), None);
+            let iterated: Vec<Hex> = engine.iter().map(|(coo, _)| coo).collect();
+            assert_eq!(iterated, expected, "iterator order, radius {radius}");
+            assert_eq!(engine.iter().len(), engine.len());
         }
     }
 

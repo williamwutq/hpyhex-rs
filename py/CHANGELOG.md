@@ -74,3 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed minor typos and incorrect radius to length conversions in documentation.
+
+## [Unreleased]
+
+### Changed
+- `HexEngine` index-to-coordinate conversion (`coordinate_block` and every internal use) is now a constant-time closed form instead of a row-by-row scan.
