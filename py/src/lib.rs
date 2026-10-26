@@ -6150,7 +6150,7 @@ impl HexEngineIterator {
     }
 }
 
-use rand::Rng;
+use rand::RngExt;
 
 #[pyfunction]
 /// Generate a random HexEngine with a given radius. True randomness or random distribution is not guaranteed
@@ -6308,7 +6308,7 @@ impl PieceFactory {
     /// - Piece: A randomly selected piece object.
     #[staticmethod]
     pub fn generate_piece() -> PyResult<Piece> {
-        use rand::Rng;
+        use rand::RngExt;
         let mut rng = rand::rng();
         if rng.random_bool(0.5) {
             let i = rng.random_range(0..74);

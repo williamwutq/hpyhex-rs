@@ -409,6 +409,8 @@ impl TryFrom<&[u8]> for Hex {
 /// ## Example
 ///
 /// ```rust
+/// use hpyhex_rs::Piece;
+///
 /// // Create a piece with three blocks at (0,0), (0,1), and (1,1):
 /// let mut states = [false; 7];
 /// states[3] = true; // (0,0)
@@ -760,11 +762,7 @@ impl From<Piece> for [bool; 7] {
     /// An array of 7 booleans representing block occupancy.
     #[inline]
     fn from(val: Piece) -> Self {
-        let mut states = [false; 7];
-        for i in 0..7 {
-            states[i] = val.is_occupied_unsafe(i);
-        }
-        states
+        std::array::from_fn(|i| val.is_occupied_unsafe(i))
     }
 }
 
@@ -927,6 +925,8 @@ impl TryFrom<&[Hex]> for Piece {
 /// # Example
 ///
 /// ```rust
+/// use hpyhex_rs::{Hex, HexEngine, Piece};
+///
 /// let mut engine = HexEngine::new(2);
 /// let piece = Piece::new(0b1010101);
 /// let pos = Hex::new(0, 0);

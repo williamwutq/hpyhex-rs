@@ -48,7 +48,7 @@
 
 #![cfg(any(feature = "default", feature = "game"))]
 use crate::hex::{Hex, HexEngine, Piece};
-use rand::Rng;
+use rand::RngExt;
 use std::fmt;
 
 /// Generates a random HexEngine with a given radius.

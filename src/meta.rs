@@ -16,7 +16,7 @@
 //! ## Example
 //!
 //! ```rust
-//! use hpyhex_rs::meta::{ExtendedHexEngine, Randomizable};
+//! use hpyhex_rs::{ExtendedHexEngine, Hex};
 //!
 //! // Create an extended engine with u32 metadata
 //! let mut engine = ExtendedHexEngine::<u32>::new(3);
@@ -64,8 +64,8 @@ where
 /// `ExtendedHexEngine<T>`, or to use both interchangeably where only grid state is needed.
 ///
 /// - **Grid State:** All methods for querying and mutating the occupancy state of the grid (e.g., `get`,
-/// `set`, `add_piece`, `eliminate`, etc.) are available and behave identically to [`HexEngine`], with the
-/// addition that metadata is also managed alongside state changes.
+///   `set`, `add_piece`, `eliminate`, etc.) are available and behave identically to [`HexEngine`], with the
+///   addition that metadata is also managed alongside state changes.
 /// - **Metadata Storage:** For every block in the grid, a value of type `T` is stored in a parallel vector.
 ///   Metadata is initialized to `T::default()` and can be set or queried independently of the occupancy
 ///   state using methods like `set_metadata` and `get`.
@@ -272,10 +272,7 @@ where
         self.base
             .iter()
             .enumerate()
-            .filter_map(move |(i, (coo, state))| {
-                let meta = self.metadata[i].clone();
-                Some((coo, state, meta))
-            })
+            .map(move |(i, (coo, state))| (coo, state, self.metadata[i].clone()))
     }
 
     /// Searches for all coordinates with matching metadata
@@ -691,7 +688,7 @@ impl PieceFactory {
     }
 }
 
-use rand::Rng;
+use rand::RngExt;
 
 impl Randomizable<u8> for u8 {
     fn random() -> u8 {
@@ -817,6 +814,7 @@ where
     ///
     /// ## Returns
     /// A tuple containing the next `Piece` and its associated metadata.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> (Piece, T) {
         let (piece, meta) = self.pieces[self.index].clone();
         self.pieces[self.index] = {
@@ -842,6 +840,14 @@ where
     /// The length as a usize.
     pub fn len(&self) -> usize {
         self.pieces.len()
+    }
+
+    /// Returns whether the queue is empty
+    ///
+    /// ## Returns
+    /// True if the queue holds no pieces.
+    pub fn is_empty(&self) -> bool {
+        self.pieces.is_empty()
     }
 }
 
@@ -915,8 +921,8 @@ use std::sync::{Arc, Mutex};
 /// - The game environment is suitable for both interactive play and automated agents (e.g., reinforcement learning).
 /// - Compare to the standard `Game` struct, this extended version allows each block in the grid to have associated metadata of type `T`.
 /// - Compare to the standard `Game` struct, this extended version does not offer methods for directly manipulating the
-/// piece queue or engine from outside the struct, focusing instead on high-level game operations. This means moving data
-/// from the game will be done by cloning the engine or queue as needed, as their results will be immediately outdated after any game action.
+///   piece queue or engine from outside the struct, focusing instead on high-level game operations. This means moving data
+///   from the game will be done by cloning the engine or queue as needed, as their results will be immediately outdated after any game action.
 ///
 /// # Type Parameter
 /// - `T`: The metadata type associated with each block in the grid.
