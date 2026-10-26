@@ -1,16 +1,16 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 #[cfg(feature = "numpy")]
-use numpy::{PyArray1, PyArray2, PyArray, PyArrayMethods};
+use numpy::ndarray;
 #[cfg(feature = "numpy")]
 use numpy::ndarray::array;
 #[cfg(feature = "numpy")]
-use numpy::ndarray;
+use numpy::{PyArray, PyArray1, PyArray2, PyArrayMethods};
 #[cfg(all(feature = "numpy", feature = "half"))]
 use numpy::{PyArrayDescr, dtype};
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyAny, PyType, PyTuple, PyString};
+use pyo3::types::{PyAny, PyList, PyString, PyTuple, PyType};
 
 #[pymodule]
 fn hpyhex(_py: Python, m: &pyo3::Bound<'_, PyModule>) -> PyResult<()> {
@@ -58,13 +58,17 @@ unsafe impl numpy::Element for F16 {
 #[cfg(all(feature = "numpy", feature = "half"))]
 impl From<half::f16> for F16 {
     #[inline]
-    fn from(v: half::f16) -> Self { F16(v) }
+    fn from(v: half::f16) -> Self {
+        F16(v)
+    }
 }
 
 #[cfg(all(feature = "numpy", feature = "half"))]
 impl From<F16> for half::f16 {
     #[inline]
-    fn from(v: F16) -> Self { v.0 }
+    fn from(v: F16) -> Self {
+        v.0
+    }
 }
 
 #[cfg(all(feature = "numpy", feature = "half"))]
@@ -81,7 +85,7 @@ pub trait BitScalar: Copy {
     /// Returns the one value for the scalar type.
     fn one() -> Self;
     /// Evaluates the scalar as a boolean predicate.
-    /// 
+    ///
     /// Returns true if the scalar represents a truthy value, false if falsy.
     fn predicate(self) -> bool;
 }
@@ -154,50 +158,89 @@ iint_sizescalar!(i16, i32, i64);
 impl_extractable_primitive!(i8, u8, i16, u16, i32, u32, i64, u64, f32, f64);
 
 impl SizeScalar for u16 {
-    #[inline] fn to_usize(self) -> Option<usize> {
+    #[inline]
+    fn to_usize(self) -> Option<usize> {
         match self {
             u16::MAX => None,
             v => Some(v as usize),
         }
     }
-    #[inline] fn from_usize(v: usize) -> Self { v as Self }
-    #[inline] fn sentinel() -> Self { u16::MAX }
+    #[inline]
+    fn from_usize(v: usize) -> Self {
+        v as Self
+    }
+    #[inline]
+    fn sentinel() -> Self {
+        u16::MAX
+    }
 }
 
 impl SizeScalar for u32 {
-    #[inline] fn to_usize(self) -> Option<usize> {
+    #[inline]
+    fn to_usize(self) -> Option<usize> {
         match self {
             u32::MAX => None,
             v => Some(v as usize),
         }
     }
-    #[inline] fn from_usize(v: usize) -> Self { v as Self }
-    #[inline] fn sentinel() -> Self { u32::MAX }
+    #[inline]
+    fn from_usize(v: usize) -> Self {
+        v as Self
+    }
+    #[inline]
+    fn sentinel() -> Self {
+        u32::MAX
+    }
 }
 
 impl SizeScalar for u64 {
-    #[inline] fn to_usize(self) -> Option<usize> {
+    #[inline]
+    fn to_usize(self) -> Option<usize> {
         if self == u64::MAX {
             None
         } else {
             usize::try_from(self).ok()
         }
     }
-    #[inline] fn from_usize(v: usize) -> Self { v as Self }
-    #[inline] fn sentinel() -> Self { u64::MAX }
+    #[inline]
+    fn from_usize(v: usize) -> Self {
+        v as Self
+    }
+    #[inline]
+    fn sentinel() -> Self {
+        u64::MAX
+    }
 }
 
 impl BitScalar for bool {
-    #[inline] fn zero() -> Self { false }
-    #[inline] fn one() -> Self { true }
-    #[inline] fn predicate(self) -> bool { self }
+    #[inline]
+    fn zero() -> Self {
+        false
+    }
+    #[inline]
+    fn one() -> Self {
+        true
+    }
+    #[inline]
+    fn predicate(self) -> bool {
+        self
+    }
 }
 
 #[cfg(all(feature = "numpy", feature = "half"))]
 impl BitScalar for F16 {
-    #[inline] fn zero() -> Self { F16(half::f16::from_f32(0.0)) }
-    #[inline] fn one() -> Self { F16(half::f16::from_f32(1.0)) }
-    #[inline] fn predicate(self) -> bool { self.0.to_f32() > 0.0 }
+    #[inline]
+    fn zero() -> Self {
+        F16(half::f16::from_f32(0.0))
+    }
+    #[inline]
+    fn one() -> Self {
+        F16(half::f16::from_f32(1.0))
+    }
+    #[inline]
+    fn predicate(self) -> bool {
+        self.0.to_f32() > 0.0
+    }
 }
 
 #[cfg(all(feature = "numpy", feature = "half"))]
@@ -325,14 +368,22 @@ macro_rules! dtype_doc {
 /// The sentinel used for grid positions without a value in `pair_vec_to_numpy_*`.
 #[cfg(feature = "numpy")]
 macro_rules! dtype_sentinel {
-    (signed, $ty:ident) => { -1 };
-    (unsigned, $ty:ident) => { $ty::MAX };
-    (float, $ty:ident) => { $ty::NAN };
-    (half, $ty:ident) => { F16::from_f32(f32::NAN) };
+    (signed, $ty:ident) => {
+        -1
+    };
+    (unsigned, $ty:ident) => {
+        $ty::MAX
+    };
+    (float, $ty:ident) => {
+        $ty::NAN
+    };
+    (half, $ty:ident) => {
+        F16::from_f32(f32::NAN)
+    };
 }
 
-use std::sync::OnceLock;
 use std::hash::{Hash, Hasher};
+use std::sync::OnceLock;
 
 // Note: Hex has no need for serialization to numpy arrays, as it is just a coordinate container.
 
@@ -364,7 +415,7 @@ use std::hash::{Hash, Hasher};
 /// - i (int): The line i coordinate.
 /// - j (int): The computed line j coordinate (k - i).
 /// - k (int): The line k coordinate.
-/// 
+///
 /// Hpyhex-rs Serialization:
 /// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
 /// - hpyhex_rs_serialize(): Serialize the Hex to a byte vector in the format used by the Rust hpyhex-rs crate.
@@ -386,15 +437,25 @@ impl PartialEq for Hex {
 const CACHE_MIN: i32 = -64;
 const CACHE_MAX: i32 = 64;
 // Singleton cache for all small Hexes in the range -64..=64 for both i and k
-static HEX_CACHE: OnceLock<[[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN + 1) as usize]; (CACHE_MAX - CACHE_MIN + 1) as usize]> = OnceLock::new();
+static HEX_CACHE: OnceLock<
+    [[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN + 1) as usize]; (CACHE_MAX - CACHE_MIN + 1) as usize],
+> = OnceLock::new();
 
-fn initialize_hex_cache(py: Python) -> [[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN + 1) as usize]; (CACHE_MAX - CACHE_MIN + 1) as usize] {
+fn initialize_hex_cache(
+    py: Python,
+) -> [[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN + 1) as usize]; (CACHE_MAX - CACHE_MIN + 1) as usize]
+{
     use std::mem::MaybeUninit;
     const N: usize = (CACHE_MAX - CACHE_MIN + 1) as usize;
-    let mut cache: [[MaybeUninit<Option<Py<Hex>>>; N]; N] = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut cache: [[MaybeUninit<Option<Py<Hex>>>; N]; N] =
+        unsafe { MaybeUninit::uninit().assume_init() };
+    #[allow(clippy::needless_range_loop)]
     for i in 0..N {
         for k in 0..N {
-            let hex = Hex { i: (i as i32) + CACHE_MIN, k: (k as i32) + CACHE_MIN };
+            let hex = Hex {
+                i: (i as i32) + CACHE_MIN,
+                k: (k as i32) + CACHE_MIN,
+            };
             cache[i][k].write(Some(Py::new(py, hex).unwrap()));
         }
     }
@@ -418,9 +479,9 @@ fn get_hex(i: i32, k: i32) -> Py<Hex> {
     }
 }
 
-impl Into<(i32, i32)> for Hex {
-    fn into(self) -> (i32, i32) {
-        (self.i, self.k)
+impl From<Hex> for (i32, i32) {
+    fn from(val: Hex) -> Self {
+        (val.i, val.k)
     }
 }
 
@@ -429,6 +490,7 @@ impl Hex {
     ///
     /// Arguments:
     /// - minimize (bool): If true, use i16 representation if possible.
+    ///
     /// Returns:
     /// - Vec<u8>: The byte vector representation of the Hex coordinates.
     pub fn to_bytes(&self, minimize: bool) -> Vec<u8> {
@@ -466,19 +528,22 @@ impl Hex {
             }
             16 => {
                 let i_i64 = i64::from_le_bytes([
-                    value[0], value[1], value[2], value[3],
-                    value[4], value[5], value[6], value[7],
+                    value[0], value[1], value[2], value[3], value[4], value[5], value[6], value[7],
                 ]);
                 let k_i64 = i64::from_le_bytes([
-                    value[8], value[9], value[10], value[11],
-                    value[12], value[13], value[14], value[15],
+                    value[8], value[9], value[10], value[11], value[12], value[13], value[14],
+                    value[15],
                 ]);
                 match (i32::try_from(i_i64), i32::try_from(k_i64)) {
                     (Ok(i), Ok(k)) => Ok(get_hex(i, k)),
-                    _ => Err(pyo3::exceptions::PyTypeError::new_err("i or k value out of range for i32")),
+                    _ => Err(pyo3::exceptions::PyTypeError::new_err(
+                        "i or k value out of range for i32",
+                    )),
                 }
             }
-            _ => Err(pyo3::exceptions::PyTypeError::new_err("Invalid byte length for Hex conversion")),
+            _ => Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid byte length for Hex conversion",
+            )),
         }
     }
 }
@@ -488,9 +553,9 @@ impl Hex {
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
 
     /// Serialize the Piece to a byte vector according the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The serialization format is 4 bytes for i (i32) followed by 4 bytes for k (i32), both in little-endian order.
-    /// 
+    ///
     /// Returns:
     /// - bytes: A byte vector containing the serialized Piece data.
     pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
@@ -501,16 +566,16 @@ impl Hex {
     }
 
     /// Deserialize a Hex from a byte vector according the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The deserialization format expects 8 bytes: 4 bytes for i (i32) followed by 4 bytes for k (i32), both in little-endian order.
-    /// 
+    ///
     /// Arguments:
     /// - data (bytes, bytearray, or list[int]): The byte vector containing the serialized Hex data.
     /// Returns:
     /// - Hex: The deserialized Hex instance.
     #[staticmethod]
     pub fn hpyhex_rs_deserialize(data: &Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
-        use pyo3::types::{PyBytes, PyByteArray};
+        use pyo3::types::{PyByteArray, PyBytes};
         // Extract PyBytes, PyByteArray, or Vec<u8>
         let value: Vec<u8> = if let Ok(py_bytes) = data.cast::<PyBytes>() {
             py_bytes.as_bytes().to_vec()
@@ -519,11 +584,15 @@ impl Hex {
         } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
             vec_u8
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Input must be bytes, bytearray, or list of integers"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Input must be bytes, bytearray, or list of integers",
+            ));
         };
 
         if value.len() != 8 {
-            return Err(pyo3::exceptions::PyValueError::new_err("Invalid data length for Hex deserialization"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Invalid data length for Hex deserialization",
+            ));
         }
 
         let i = i32::from_le_bytes([value[0], value[1], value[2], value[3]]);
@@ -550,10 +619,10 @@ impl Hex {
     ) -> pyo3::PyResult<Py<Hex>> {
         if let Some(i_obj) = i {
             if let Ok(tuple) = i_obj.extract::<(i32, i32)>() {
-                return Ok(get_hex(tuple.0, tuple.1));
+                Ok(get_hex(tuple.0, tuple.1))
             } else if let Ok(tuple3) = i_obj.extract::<(i32, i32, i32)>() {
                 let (i_val, _j_val, k_val) = tuple3;
-                return Ok(get_hex(i_val, k_val));
+                Ok(get_hex(i_val, k_val))
             } else {
                 let i_val: i32 = i_obj.extract()?;
                 let k_val: i32 = if let Some(k_obj) = k {
@@ -561,7 +630,7 @@ impl Hex {
                 } else {
                     0
                 };
-                return Ok(get_hex(i_val, k_val));
+                Ok(get_hex(i_val, k_val))
             }
         } else {
             let i_val = 0;
@@ -570,7 +639,7 @@ impl Hex {
             } else {
                 0
             };
-            return Ok(get_hex(i_val, k_val));
+            Ok(get_hex(i_val, k_val))
         }
     }
 
@@ -704,7 +773,9 @@ impl Hex {
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
                 Ok(get_hex(self.i + tuple.0, self.k + tuple.1))
             } else {
-                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for addition with Hex"))
+                Err(pyo3::exceptions::PyTypeError::new_err(
+                    "Unsupported type for addition with Hex",
+                ))
             }
         })
     }
@@ -724,7 +795,9 @@ impl Hex {
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
                 Ok(get_hex(tuple.0 + self.i, tuple.1 + self.k))
             } else {
-                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for reverse addition with Hex"))
+                Err(pyo3::exceptions::PyTypeError::new_err(
+                    "Unsupported type for reverse addition with Hex",
+                ))
             }
         })
     }
@@ -744,7 +817,9 @@ impl Hex {
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
                 Ok(get_hex(self.i - tuple.0, self.k - tuple.1))
             } else {
-                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for subtraction with Hex"))
+                Err(pyo3::exceptions::PyTypeError::new_err(
+                    "Unsupported type for subtraction with Hex",
+                ))
             }
         })
     }
@@ -764,7 +839,9 @@ impl Hex {
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
                 Ok(get_hex(tuple.0 - self.i, tuple.1 - self.k))
             } else {
-                Err(pyo3::exceptions::PyTypeError::new_err("Unsupported type for reverse subtraction with Hex"))
+                Err(pyo3::exceptions::PyTypeError::new_err(
+                    "Unsupported type for reverse subtraction with Hex",
+                ))
             }
         })
     }
@@ -871,7 +948,7 @@ impl HexIterator {
 /// Represents a shape or unit made up of 7 Block instances,
 /// typically forming a logical structure such as a game piece.
 ///
-/// This implementation of piece contains no blocks, and instead only contains 
+/// This implementation of piece contains no blocks, and instead only contains
 /// a single u8 value representing the occupancy state of each block (7 bits used).
 ///
 /// This is a singleton class, meaning that each unique Piece state is cached
@@ -880,21 +957,21 @@ impl HexIterator {
 /// Attributes:
 /// - positions (list[Hex]): A list of Hex coordinates representing the positions of the blocks in the piece.
 /// - state (u8): A byte value representing the occupancy state of each block in the piece.
-/// 
+///
 /// Hpyhex-rs Serialization:
 /// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
 /// - hpyhex_rs_serialize(): Serialize the Piece to a byte vector in the format used by the Rust hpyhex-rs crate.
 /// - hpyhex_rs_deserialize(data): Deserialize a Piece from a byte vector in the format used by the Rust hpyhex-rs crate.
-/// 
+///
 /// Numpy Support (Requires "numpy" feature):
-/// 
+///
 /// Offer methods to convert the Piece's block states to NumPy ndarray representations and vice versa.
 /// The conversion will always be to an ndarray of shape (7,).
-/// 
+///
 /// In addition, provide methods to convert a list of Piece instances to stacked or flat NumPy ndarray representations,
 /// and vice versa. The stacked representation will have shape (N, 7) with stride (8, 1), while the flat
 /// representation will have shape (N*7,).
-/// 
+///
 /// Support the following NumPy array types:
 /// - bool
 /// - int8
@@ -908,13 +985,13 @@ impl HexIterator {
 /// - half (f16) [Requires "half" feature, experimental]
 /// - float32
 /// - float64
-/// 
+///
 /// The from_numpy_* methods will validate the input array shape and types, and raise a ValueError if the
 /// input is invalid. The to_numpy_* methods will return a new NumPy ndarray representing the block states.
-/// 
+///
 /// to_numpy() defaults to bool representation, but there are no from_numpy that can take in different types,
 /// because numpy ndarrays cannot be easily casted into each other.
-/// 
+///
 /// For a list of Piece instances, the vec_from_numpy_*_stacked and vec_from_numpy_*_flat functions
 /// can be used to convert from NumPy ndarray representations to a list of Piece instances, and they will
 /// raise a ValueError if the input is invalid. For converting a list of Piece instances to NumPy ndarray,
@@ -930,7 +1007,8 @@ fn initialize_piece_cache() -> [Py<Piece>; 128] {
     Python::attach(|py| {
         use std::mem::MaybeUninit;
         // Create an uninitialized array of MaybeUninit<Py<Piece>>
-        let mut cache: [MaybeUninit<Py<Piece>>; 128] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut cache: [MaybeUninit<Py<Piece>>; 128] =
+            unsafe { MaybeUninit::uninit().assume_init() };
         for state in 0u8..=127u8 {
             let piece = Piece { state };
             cache[state as usize].write(Py::new(py, piece).unwrap());
@@ -965,12 +1043,7 @@ impl std::fmt::Debug for Piece {
             }
             let hex = &Piece::positions[i];
             let occupied = (self.state & (1 << (6 - i))) != 0;
-            s.push_str(&format!(
-                "({}, {}, {})",
-                hex.i(),
-                hex.k(),
-                occupied
-            ));
+            s.push_str(&format!("({}, {}, {})", hex.i(), hex.k(), occupied));
         }
         s.push('}');
         write!(f, "{s}")
@@ -979,7 +1052,7 @@ impl std::fmt::Debug for Piece {
 
 impl Piece {
     /// Returns the number of occupied blocks
-    /// 
+    ///
     /// # Returns
     /// The count of occupied blocks as a u32.
     #[inline]
@@ -988,25 +1061,22 @@ impl Piece {
     }
 
     /// Get the cached Piece instance for the given state.
-    /// 
+    ///
     /// # Arguments
     /// - state (u8): The state byte representing the occupancy of the blocks.
-    /// 
+    ///
     /// # Returns
     /// - Py<Piece>: The cached Piece instance corresponding to the given state.
     #[inline]
     pub fn get_cached(state: u8) -> Py<Piece> {
         let truncated = state & 0b0111_1111; // Only 7 bits used
-        let cache = PIECE_CACHE.get_or_init(|| initialize_piece_cache());
+        let cache = PIECE_CACHE.get_or_init(initialize_piece_cache);
         Python::attach(|py| cache[truncated as usize].clone_ref(py))
     }
 }
 
 #[cfg(feature = "numpy")]
-fn vec_to_numpy_flat_impl<'py, T>(
-    py: Python<'py>,
-    pieces: Vec<Py<Piece>>,
-) -> Py<PyArray1<T>>
+fn vec_to_numpy_flat_impl<'py, T>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<T>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -1014,7 +1084,11 @@ where
     for piece in pieces.iter() {
         let piece_ref = piece.bind(py).extract::<PyRef<Piece>>().unwrap();
         for i in 0..7 {
-            let b = if (piece_ref.state & (1 << (6 - i))) != 0 { T::one() } else { T::zero() };
+            let b = if (piece_ref.state & (1 << (6 - i))) != 0 {
+                T::one()
+            } else {
+                T::zero()
+            };
             arr.push(b);
         }
     }
@@ -1022,10 +1096,7 @@ where
 }
 
 #[cfg(feature = "numpy")]
-fn vec_to_numpy_stacked_impl<'py, T>(
-    py: Python<'py>,
-    pieces: Vec<Py<Piece>>,
-) -> Py<PyArray2<T>>
+fn vec_to_numpy_stacked_impl<'py, T>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<T>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -1041,13 +1112,41 @@ where
         let s = piece_ref.state;
 
         let v = [
-            if s & 0b1000000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0100000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0010000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0001000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0000100 != 0 { T::one() } else { T::zero() },
-            if s & 0b0000010 != 0 { T::one() } else { T::zero() },
-            if s & 0b0000001 != 0 { T::one() } else { T::zero() },
+            if s & 0b1000000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0100000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0010000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0001000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0000100 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0000010 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0000001 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
         ];
 
         vec.extend_from_slice(&v);
@@ -1060,9 +1159,7 @@ where
 
 #[cfg(feature = "numpy")]
 #[inline(always)]
-fn vec_from_numpy_flat_impl<T>(
-    array: &Bound<'_, PyArray1<T>>,
-) -> PyResult<Vec<Py<Piece>>>
+fn vec_from_numpy_flat_impl<T>(array: &Bound<'_, PyArray1<T>>) -> PyResult<Vec<Py<Piece>>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -1087,9 +1184,7 @@ where
 
 #[cfg(feature = "numpy")]
 #[inline(always)]
-fn vec_from_numpy_stacked_impl<T>(
-    array: &Bound<'_, PyArray2<T>>,
-) -> PyResult<Vec<Py<Piece>>>
+fn vec_from_numpy_stacked_impl<T>(array: &Bound<'_, PyArray2<T>>) -> PyResult<Vec<Py<Piece>>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -1116,21 +1211,46 @@ where
 }
 
 #[cfg(feature = "numpy")]
-fn to_numpy_piece_impl<'py, T>(
-    py: Python<'py>,
-    piece: &Piece,
-) -> Py<PyArray1<T>>
+fn to_numpy_piece_impl<'py, T>(py: Python<'py>, piece: &Piece) -> Py<PyArray1<T>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
     let arr = array![
-        if (piece.state & 0b1000000) != 0 { T::one() } else { T::zero() },
-        if (piece.state & 0b0100000) != 0 { T::one() } else { T::zero() },
-        if (piece.state & 0b0010000) != 0 { T::one() } else { T::zero() },
-        if (piece.state & 0b0001000) != 0 { T::one() } else { T::zero() },
-        if (piece.state & 0b0000100) != 0 { T::one() } else { T::zero() },
-        if (piece.state & 0b0000010) != 0 { T::one() } else { T::zero() },
-        if (piece.state & 0b0000001) != 0 { T::one() } else { T::zero() },
+        if (piece.state & 0b1000000) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
+        if (piece.state & 0b0100000) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
+        if (piece.state & 0b0010000) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
+        if (piece.state & 0b0001000) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
+        if (piece.state & 0b0000100) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
+        if (piece.state & 0b0000010) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
+        if (piece.state & 0b0000001) != 0 {
+            T::one()
+        } else {
+            T::zero()
+        },
     ];
     PyArray1::from_array(py, &arr).unbind()
 }
@@ -1163,9 +1283,9 @@ impl Piece {
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
 
     /// Serialize the Piece to a byte vector according the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The serialization format is a single byte representing the occupancy state of the blocks.
-    /// 
+    ///
     /// Returns:
     /// - bytes: A byte vector containing the serialized Piece data.
     pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
@@ -1173,19 +1293,19 @@ impl Piece {
     }
 
     /// Deserialize a Piece from a byte vector according the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The deserialization format expects a single byte representing the occupancy state of the blocks.
-    /// 
+    ///
     /// Arguments:
     /// - data (bytes): A byte vector containing the serialized Piece data.
-    /// 
+    ///
     /// Returns:
     /// - Piece: The deserialized Piece instance.
     /// Raises:
     /// - ValueError: If the input data length is invalid.
     #[staticmethod]
     pub fn hpyhex_rs_deserialize(data: &Bound<'_, PyAny>) -> PyResult<Py<Piece>> {
-        use pyo3::types::{PyBytes, PyByteArray};
+        use pyo3::types::{PyByteArray, PyBytes};
         // Extract PyBytes, PyByteArray, or Vec<u8>
         let value: Vec<u8> = if let Ok(py_bytes) = data.cast::<PyBytes>() {
             py_bytes.as_bytes().to_vec()
@@ -1194,10 +1314,14 @@ impl Piece {
         } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
             vec_u8
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Input must be bytes, bytearray, or list of integers"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Input must be bytes, bytearray, or list of integers",
+            ));
         };
         if value.len() != 1 {
-            return Err(pyo3::exceptions::PyValueError::new_err("Invalid data length for Piece deserialization"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Invalid data length for Piece deserialization",
+            ));
         }
         let state = value[0] & 0b0111_1111; // Only 7 bits used
         Ok(Piece::get_cached(state))
@@ -1206,7 +1330,7 @@ impl Piece {
     /* ---------------------------------------- NUMPY EXPORTS ---------------------------------------- */
 
     /// Get the default NumPy ndarray representation of the Piece's block states.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
     #[cfg(feature = "numpy")]
@@ -1215,10 +1339,10 @@ impl Piece {
     }
 
     /// Convert a vector of Piece instances to a flat NumPy ndarray of boolean values.
-    /// 
+    ///
     /// Arguments:
     /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states of all pieces.
     #[cfg(feature = "numpy")]
@@ -1228,23 +1352,26 @@ impl Piece {
     }
 
     /// Convert a vector of Piece instances to a stacked NumPy ndarray of boolean values.
-    /// 
+    ///
     /// Arguments:
     /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 2D NumPy array of boolean values with shape (num_pieces, 7)
     ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
     #[cfg(feature = "numpy")]
     #[staticmethod]
-    pub fn vec_to_numpy_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<bool>> {
+    pub fn vec_to_numpy_stacked<'py>(
+        py: Python<'py>,
+        pieces: Vec<Py<Piece>>,
+    ) -> Py<PyArray2<bool>> {
         Self::vec_to_numpy_bool_stacked(py, pieces)
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
 
     /// The fixed positions of the 7 blocks in a standard Piece.
-    /// 
+    ///
     /// Returns:
     /// - list[Hex]: The list of Hex coordinates for the blocks in the Piece.
     #[classattr]
@@ -1259,7 +1386,7 @@ impl Piece {
         Hex { i: 1, k: 1 },
     ];
     /// Initialize a Piece with the given occupancy states.
-    /// 
+    ///
     /// Arguments:
     /// - states (int | list[bool] | None): The occupancy states of the blocks in the Piece.
     ///   - If an integer is provided, it is treated as a byte representation of the states.
@@ -1273,32 +1400,32 @@ impl Piece {
             } else if let Ok(list) = s.extract::<Vec<bool>>() {
                 if list.len() != 7 {
                     return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                        "List must have exactly 7 boolean elements"
+                        "List must have exactly 7 boolean elements",
                     ));
                 }
-                list.iter()
-                    .enumerate()
-                    .fold(0u8, |acc, (i, &b)| {
+                list.iter().enumerate().fold(
+                    0u8,
+                    |acc, (i, &b)| {
                         if b { acc | (1 << (6 - i)) } else { acc }
-                    })
+                    },
+                )
             } else if s.is_none() {
                 0
             } else {
                 return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                    "Invalid type for states"
+                    "Invalid type for states",
                 ));
             }
         } else {
             0
         };
-        let cache = PIECE_CACHE.get_or_init(|| initialize_piece_cache());
+        let cache = PIECE_CACHE.get_or_init(initialize_piece_cache);
         Ok(cache[key as usize].clone_ref(py))
     }
 
-
     /// Return a string representation of the Piece in byte format.
     /// This representation is useful for debugging and serialization.
-    /// 
+    ///
     /// Returns:
     /// - str: A string representation of the Piece in byte format.
     #[inline]
@@ -1307,10 +1434,10 @@ impl Piece {
     }
 
     /// Return a string representation of the Piece.
-    /// 
+    ///
     /// Format: Piece{Block(i, j, k, state), ...}, where i, j, and k are the line coordinates of each block,
     /// and state is the occupancy state, if occupied, else "null".
-    /// 
+    ///
     /// Returns:
     /// - str: The string representation of the Piece.
     pub fn __str__(&self) -> String {
@@ -1328,7 +1455,7 @@ impl Piece {
     }
 
     /// Return an iterator over the occupancy states of the Piece.
-    /// 
+    ///
     /// Yields:
     /// - bool: The occupancy state of each block in the Piece.
     pub fn __iter__(&self) -> PyResult<PieceIterator> {
@@ -1339,16 +1466,18 @@ impl Piece {
     }
 
     /// Return the number of occupied blocks in the Piece.
-    /// 
+    ///
     /// Returns:
     /// - int: The number of occupied blocks in the Piece.
     #[inline]
     pub fn __len__(&self) -> usize {
-        (0..7).filter(|&i| (self.state & (1 << (6 - i))) != 0).count()
+        (0..7)
+            .filter(|&i| (self.state & (1 << (6 - i))) != 0)
+            .count()
     }
 
     /// Check if the Piece has any occupied blocks.
-    /// 
+    ///
     /// Returns:
     /// - bool: True if any block is occupied, False otherwise.
     #[inline]
@@ -1357,7 +1486,7 @@ impl Piece {
     }
 
     /// Return a byte representation of the blocks in a standard 7-Block piece.
-    /// 
+    ///
     /// Returns:
     /// - int: A byte representation of the Piece, where each bit represents the occupancy state of a
     #[inline]
@@ -1366,13 +1495,14 @@ impl Piece {
     }
 
     /// Get the tuple of boolean values representing the occupancy state of each block in the Piece.
-    /// 
+    ///
     /// Returns:
     /// - tuple[bool, ...]: The tuple of boolean values for the Piece.
     #[getter]
     #[inline]
     pub fn states(&self) -> [bool; 7] {
         let mut arr = [false; 7];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..7 {
             arr[i] = (self.state & (1 << (6 - i))) != 0;
         }
@@ -1380,7 +1510,7 @@ impl Piece {
     }
 
     /// Get the list of Hex coordinates representing the positions of the blocks in the Piece.
-    /// 
+    ///
     /// Returns:
     /// - list[Hex]: The list of Hex coordinates for the Piece.
     #[getter]
@@ -1396,7 +1526,7 @@ impl Piece {
     }
 
     /// Returns True if the occupancy states match, False otherwise.
-    /// 
+    ///
     /// Arguments:
     /// - other (Piece): The Piece to compare with.
     /// Returns:
@@ -1407,7 +1537,7 @@ impl Piece {
     }
 
     /// Return a hash of the Piece's occupancy states.
-    /// 
+    ///
     /// This method directly uses the byte representation of the Piece to generate a hash value.
     /// Returns:
     /// - int: The hash value of the Piece.
@@ -1430,15 +1560,18 @@ impl Piece {
     pub fn count_neighbors(&self, coo: &Hex) -> usize {
         let mut count = 0;
         let idx = Piece::positions.iter().position(|h| h == coo);
-        if let Some(idx) = idx {
-            if (self.state & (1 << (6 - idx))) != 0 {
-                for (__i, pos) in Piece::positions.iter().enumerate() {
-                    let neighbor = Hex { i: pos.i + coo.i, k: pos.k + coo.k };
-                    if let Some(nidx) = Piece::positions.iter().position(|h| h == &neighbor) {
-                        if (self.state & (1 << (6 - nidx))) != 0 {
-                            count += 1;
-                        }
-                    }
+        if let Some(idx) = idx
+            && (self.state & (1 << (6 - idx))) != 0
+        {
+            for pos in Piece::positions.iter() {
+                let neighbor = Hex {
+                    i: pos.i + coo.i,
+                    k: pos.k + coo.k,
+                };
+                if let Some(nidx) = Piece::positions.iter().position(|h| h == &neighbor)
+                    && (self.state & (1 << (6 - nidx))) != 0
+                {
+                    count += 1;
                 }
             }
         }
@@ -1491,20 +1624,27 @@ impl Piece {
                 if !piece.__bool__() {
                     continue;
                 }
-                if bit(3) {
-                    result.push(p.clone_ref(py));
-                } else if piece.__len__() == 1 || piece.__len__() == 5 || piece.__len__() == 6 {
+                if bit(3) || piece.__len__() == 1 || piece.__len__() == 5 || piece.__len__() == 6 {
                     result.push(p.clone_ref(py));
                 } else if piece.__len__() == 2 {
-                    if (bit(0) && (bit(1) || bit(2))) || (bit(4) && (bit(1) || bit(6))) || (bit(5) && (bit(2) || bit(6))) {
+                    if (bit(0) && (bit(1) || bit(2)))
+                        || (bit(4) && (bit(1) || bit(6)))
+                        || (bit(5) && (bit(2) || bit(6)))
+                    {
                         result.push(p.clone_ref(py));
                     }
                 } else if piece.__len__() == 4 {
-                    if (!bit(0) && !(bit(1) && bit(2))) || (!bit(4) && !(bit(1) && bit(6))) || (!bit(5) && !(bit(2) && bit(6))) {
+                    if (!bit(0) && !(bit(1) && bit(2)))
+                        || (!bit(4) && !(bit(1) && bit(6)))
+                        || (!bit(5) && !(bit(2) && bit(6)))
+                    {
                         result.push(p.clone_ref(py));
                     }
                 } else {
-                    if (bit(0) && bit(1) && (bit(2) || bit(4))) || (bit(2) && bit(5) && (bit(0) || bit(6))) || (bit(4) && bit(6) && (bit(1) || bit(5))) {
+                    if (bit(0) && bit(1) && (bit(2) || bit(4)))
+                        || (bit(2) && bit(5) && (bit(0) || bit(6)))
+                        || (bit(4) && bit(6) && (bit(1) || bit(5)))
+                    {
                         result.push(p.clone_ref(py));
                     }
                 }
@@ -1516,7 +1656,7 @@ impl Piece {
 }
 
 /// NumPy conversions of Piece and lists of Pieces
-/// 
+///
 /// The full list is:
 /// - `to_numpy_{dtype}`,
 /// - `from_numpy_{dtype}`,
@@ -1544,6 +1684,7 @@ macro_rules! piece_numpy_methods {
             ///
             /// Arguments:
             #[doc = concat!("- arr (numpy.ndarray): A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values representing the block states.")]
+            ///
             /// Returns:
             #[doc = concat!(
                 "- Piece: A Piece instance corresponding to the given block states", dtype_doc!(truth, $kind), ".",
@@ -1559,6 +1700,7 @@ macro_rules! piece_numpy_methods {
             ///
             /// Arguments:
             /// - pieces (list[Piece]): A list of Piece instances to convert.
+            ///
             /// Returns:
             #[doc = concat!(
                 "- numpy.ndarray: A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values representing the block states of all pieces.",
@@ -1574,6 +1716,7 @@ macro_rules! piece_numpy_methods {
             ///
             /// Arguments:
             /// - pieces (list[Piece]): A list of Piece instances to convert.
+            ///
             /// Returns:
             #[doc = concat!("- numpy.ndarray: A 2D NumPy array of ", dtype_doc!(label, $kind, $name), " values with shape (num_pieces, 7)")]
             #[doc = concat!(
@@ -1590,6 +1733,7 @@ macro_rules! piece_numpy_methods {
             ///
             /// Arguments:
             #[doc = concat!("- arr (numpy.ndarray): A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values representing the block states.")]
+            ///
             /// Returns:
             #[doc = concat!(
                 "- list[Piece]: A list of Piece instances corresponding to the given block states.",
@@ -1606,6 +1750,7 @@ macro_rules! piece_numpy_methods {
             /// Arguments:
             #[doc = concat!("- arr (numpy.ndarray): A 2D NumPy array of ", dtype_doc!(label, $kind, $name), " values with shape (num_pieces, 7)")]
             ///   representing the block states.
+            ///
             /// Returns:
             #[doc = concat!(
                 "- list[Piece]: A list of Piece instances corresponding to the given block states.",
@@ -1625,16 +1770,21 @@ with_numpy_dtypes!(piece_numpy_methods; [bool int8 uint8 int16 uint16 int32 uint
 
 fn piece_neighbors_of(p: Piece, target_i: i32, target_k: i32) -> usize {
     let mut count = 0;
-    let idx = Piece::positions.iter().position(|h| h.i == target_i && h.k == target_k);
-    if let Some(idx) = idx {
-        if (p.state & (1 << (6 - idx))) != 0 {
-            for (__i, pos) in Piece::positions.iter().enumerate() {
-                let neighbor = Hex { i: pos.i + target_i, k: pos.k + target_k };
-                if let Some(nidx) = Piece::positions.iter().position(|h| h == &neighbor) {
-                    if (p.state & (1 << (6 - nidx))) != 0 {
-                        count += 1;
-                    }
-                }
+    let idx = Piece::positions
+        .iter()
+        .position(|h| h.i == target_i && h.k == target_k);
+    if let Some(idx) = idx
+        && (p.state & (1 << (6 - idx))) != 0
+    {
+        for pos in Piece::positions.iter() {
+            let neighbor = Hex {
+                i: pos.i + target_i,
+                k: pos.k + target_k,
+            };
+            if let Some(nidx) = Piece::positions.iter().position(|h| h == &neighbor)
+                && (p.state & (1 << (6 - nidx))) != 0
+            {
+                count += 1;
             }
         }
     }
@@ -1693,14 +1843,14 @@ impl PieceIterator {
 /// Attributes:
 /// - radius (int): The radius of the hexagonal grid, defining the size of the grid.
 /// - states (list[bool]): A list of booleans representing the occupancy state of each block in the grid.
-/// 
+///
 /// Hpyhex-rs Serialization:
 /// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
 /// - hpyhex_rs_serialize(): Serialize the Piece to a byte vector in the format used by the Rust hpyhex-rs crate.
 /// - hpyhex_rs_deserialize(data): Deserialize a Piece from a byte vector in the format used by the Rust hpyhex-rs crate.
-/// 
+///
 /// Numpy Support (Requires "numpy" feature):
-/// 
+///
 /// Offer methods to convert the Piece's block states to NumPy ndarray representations and vice versa.
 /// These include safe conversion to and from, unchecked conversion, and even zero-copy views where applicable.
 ///
@@ -1717,22 +1867,22 @@ impl PieceIterator {
 /// - half (f16) [Requires "half" feature, experimental]
 /// - float32
 /// - float64
-/// 
+///
 /// The from_numpy_* methods will validate the input array shape and types, and raise a ValueError if the
 /// input is invalid. The from_numpy_*_unchecked methods will skip validation for performance, but may lead to
 /// undefined behavior if the input length does not correspond to a valid hexagonal grid size. The to_numpy_*
 /// methods will return a new NumPy ndarray representing the block states of the HexEngine.
-/// 
+///
 /// to_numpy() defaults to bool representation, but there are no from_numpy that can take in different types,
 /// because numpy ndarrays cannot be easily casted into each other.
-/// 
+///
 /// The from_numpy_raw_view and to_numpy_raw_view methods, which are *extremely unsafe*, provide zero-copy views
 /// into the internal state vector as a NumPy ndarray of the specified type. These methods should
 /// be used with caution, as they can lead to undefined behavior if the internal state vector is modified
 /// while the view is still in use, or if the type does not match the expected representation. They may not work
 /// correctly on all platforms due to differences in memory alignment and representation, but should work correctly
 /// on most common platforms with correct installation of Python and NumPy and carefully managed memory usage.
-/// 
+///
 /// In addition to states, placement positions can also be converted to NumPy ndarrays
 /// using the to_numpy_positions_mask methods, which support all the same types as the state conversions.
 /// These methods return a NumPy ndarray where each element corresponds to a block in the hexagonal grid,
@@ -1781,13 +1931,14 @@ impl TryFrom<Vec<bool>> for HexEngine {
 
     fn try_from(value: Vec<bool>) -> Result<Self, Self::Error> {
         let radius = HexEngine::calc_radius(value.len()).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Invalid state length: {}", value.len())
-            )
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "Invalid state length: {}",
+                value.len()
+            ))
         })?;
         Ok(HexEngine {
             radius,
-            states: value
+            states: value,
         })
     }
 }
@@ -1803,7 +1954,7 @@ impl TryFrom<usize> for HexEngine {
         };
         Ok(HexEngine {
             radius,
-            states: vec![false; value]
+            states: vec![false; value],
         })
     }
 }
@@ -1811,19 +1962,27 @@ impl TryFrom<usize> for HexEngine {
 // This is the backend scope, nothing is exposed to Python here
 impl HexEngine {
     /// Render the hexagonal grid as a string.
-    /// 
+    ///
     /// This method generates a visual representation of the hexagonal grid using the specified
     /// prefix, suffix, space, fill, and empty strings.
-    /// 
+    ///
     /// Arguments:
     /// - prefix: A string to prepend to each line.
     /// - suffix: A string to append to each line.
     /// - space: A string representing empty space between blocks.
     /// - fill: A string representing filled blocks.
     /// - empty: A string representing empty blocks.
+    ///
     /// Returns:
     /// - A string representing the rendered hexagonal grid.
-    pub fn render(&self, prefix: &str, suffix: &str, space: &str, fill: &str, empty: &str) -> String {
+    pub fn render(
+        &self,
+        prefix: &str,
+        suffix: &str,
+        space: &str,
+        fill: &str,
+        empty: &str,
+    ) -> String {
         let r = self.radius;
         let mut idx = 0;
         let mut s = String::new();
@@ -1873,24 +2032,34 @@ impl HexEngine {
     }
 
     /// Render a static hexagonal grid from a list of values as a string.
-    /// 
+    ///
     /// This method generates a visual representation of a hexagonal grid using the specified
     /// prefix and suffix strings. The values are converted to strings and padded to ensure
     /// uniform width for proper alignment.
-    /// 
+    ///
     /// Arguments:
     /// - values: A PyList of values to be displayed in the hexagonal grid.
     /// - prefix: A string to prepend to each line.
     /// - suffix: A string to append to each line.
     /// - extra: A boolean indicating whether to add extra lines for better alignment.
+    ///
     /// Returns:
     /// - A string representing the rendered hexagonal grid.
-    pub fn render_static(_py: Python, values: Bound<'_, PyList>, prefix: &str, suffix: &str, extra: bool) -> PyResult<String> {
+    pub fn render_static(
+        _py: Python,
+        values: Bound<'_, PyList>,
+        prefix: &str,
+        suffix: &str,
+        extra: bool,
+    ) -> PyResult<String> {
         let len = values.len();
-        let r = match Self::calc_radius(len){
+        let r = match Self::calc_radius(len) {
             Some(radius) => radius,
             None => {
-                return Ok(format!("Length {} does not correspond to a valid hexagonal grid size.", len));
+                return Ok(format!(
+                    "Length {} does not correspond to a valid hexagonal grid size.",
+                    len
+                ));
             }
         };
 
@@ -2023,15 +2192,16 @@ impl HexEngine {
     }
 
     /// Create a HexEngine instance from a raw state vector without validation.
-    /// 
+    ///
     /// This unsafe method assumes that the provided state vector length corresponds to a valid hexagonal grid
     /// size and does not perform any checks. It calculates the radius based on the length of the state vector.
-    /// 
+    ///
     /// If the length of the state vector does not correspond to a valid hexagonal grid size or is zero,
     /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
+    ///
     /// Arguments:
     /// - value: A vector of booleans representing the occupancy state of each block in the hexagonal grid.
+    ///
     /// Returns:
     /// - HexEngine: A HexEngine instance initialized with the given state vector.
     pub unsafe fn from_raw_state(value: Vec<bool>) -> Self {
@@ -2039,16 +2209,17 @@ impl HexEngine {
         let radius = (((t * 4 + 1) as f64).sqrt() as usize + 1) >> 1;
         HexEngine {
             radius,
-            states: value
+            states: value,
         }
     }
     /// Calculate the radius of the hexagonal grid from the length of the state vector.
-    /// 
+    ///
     /// This method derives the radius based on the formula for the total number of blocks
     /// in a hexagonal grid of radius r: A_r = 1 + 3*r*(r-1).
-    /// 
+    ///
     /// Arguments:
     /// - length: The length of the state vector
+    ///
     /// Returns:
     /// - An Option containing the radius if valid, or None if the length does not correspond
     ///   to a valid hexagonal grid size.
@@ -2059,11 +2230,11 @@ impl HexEngine {
         if length % 3 != 1 {
             return None;
         }
-        
+
         let target = (length - 1) / 3;
         let u = target * 4 + 1;
-        let r = ((u as f64).sqrt() as usize + 1) / 2;
-        
+        let r = ((u as f64).sqrt() as usize).div_ceil(2);
+
         if r > 0 && r * (r - 1) == target {
             Some(r)
         } else {
@@ -2071,27 +2242,35 @@ impl HexEngine {
         }
     }
     /// Converts linear index to coordinate
-    /// 
+    ///
     /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate.
-    /// 
+    ///
     /// Arguments:
     /// - `index`: The linear index to convert
+    ///
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
     fn hex_coordinate_of(&self, index: usize) -> PyResult<Hex> {
         if index >= self.states.len() {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "Index out of bounds",
+            ));
         }
-        Ok(Self::closed_form_coordinate_of(self.radius, self.states.len(), index))
+        Ok(Self::closed_form_coordinate_of(
+            self.radius,
+            self.states.len(),
+            index,
+        ))
     }
     /// Converts linear index to coordinate for a static radius.
-    /// 
+    ///
     /// This method provides efficient conversion from a linear index in the internal state vector to a `Hex` coordinate,
     /// assuming a static radius is provided.
-    /// 
+    ///
     /// Arguments:
     /// - `radius`: The radius of the hexagonal grid.
     /// - `index`: The linear index to convert
+    ///
     /// Returns:
     /// - A result containing the corresponding `Hex` coordinate, or an IndexError if the index is out of bounds.
     fn static_hex_coordinate_of(radius: usize, index: usize) -> PyResult<Hex> {
@@ -2101,22 +2280,25 @@ impl HexEngine {
             1 + 3 * radius * (radius - 1)
         };
         if index >= total_blocks {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "Index out of bounds",
+            ));
         }
         Ok(Self::closed_form_coordinate_of(radius, total_blocks, index))
     }
     /// Converts an in-bounds linear index to coordinate in O(1).
-    /// 
+    ///
     /// Rows i < radius each hold one more block than the last, so row i starts at
     /// i * r + i * (i - 1) / 2 with k = 0, and the row of an index in that first half is the
     /// largest i with i^2 + (2r - 1) i <= 2 index, which the quadratic formula gives exactly
     /// through isqrt. The grid is symmetric under (i, k) -> (2r - 2 - i, 2r - 2 - k), which
     /// reverses the block order, so an index in the second half is counted from the end.
-    /// 
+    ///
     /// Arguments:
     /// - `radius`: The radius of the hexagonal grid, at least 1.
     /// - `total_blocks`: The number of blocks in the grid.
     /// - `index`: The linear index to convert, less than `total_blocks`.
+    ///
     /// Returns:
     /// - The corresponding `Hex` coordinate.
     fn closed_form_coordinate_of(radius: usize, total_blocks: usize, index: usize) -> Hex {
@@ -2131,15 +2313,19 @@ impl HexEngine {
             let (i, k) = first_half(total_blocks - 1 - index);
             (m - 1 - i, m - 1 - k)
         };
-        Hex { i: i as i32, k: k as i32 }
+        Hex {
+            i: i as i32,
+            k: k as i32,
+        }
     }
     /// Converts coordinate to linear index
-    /// 
+    ///
     /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector.
-    /// 
+    ///
     /// Arguments:
     /// - `i`: The I-line coordinate
     /// - `k`: The K-line coordinate
+    ///
     /// Returns:
     /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
     fn linear_index_of(&self, i: i32, k: i32) -> PyResult<isize> {
@@ -2155,14 +2341,15 @@ impl HexEngine {
         }
     }
     /// Converts coordinate to linear index for a static radius.
-    /// 
+    ///
     /// This method provides efficient conversion from a `Hex` coordinate to a linear index in the internal state vector,
     /// assuming a static radius is provided.
-    /// 
+    ///
     /// Arguments:
     /// - `radius`: The radius of the hexagonal grid.
     /// - `i`: The I-line coordinate
     /// - `k`: The K-line coordinate
+    ///
     /// Returns:
     /// - A result containing the corresponding linear index, or -1 if the coordinate is out of range.
     fn linear_index_of_static(radius: usize, i: i32, k: i32) -> PyResult<isize> {
@@ -2178,11 +2365,12 @@ impl HexEngine {
         }
     }
     /// Generate the adjacency list for blocks in a hexagonal grid of the specified radius.
-    /// 
+    ///
     /// Each block is connected to its six neighboring blocks, if they exist within the grid.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
+    ///
     /// Returns:
     /// - A vector of vectors, where each inner vector contains the indices of neighboring blocks for
     ///   the corresponding block.
@@ -2193,15 +2381,18 @@ impl HexEngine {
             1 + 3 * radius * (radius - 1)
         };
         let mut adjacency_list: Vec<Vec<usize>> = vec![Vec::new(); total_blocks];
+        #[allow(clippy::needless_range_loop)]
         for index in 0..total_blocks {
             if let Ok(hex) = Self::static_hex_coordinate_of(radius, index) {
                 for pos in &Piece::positions {
                     let neighbor_i = hex.i + pos.i;
                     let neighbor_k = hex.k + pos.k;
-                    if let Ok(neighbor_index) = Self::linear_index_of_static(radius, neighbor_i, neighbor_k) {
-                        if neighbor_index != -1 && neighbor_index as usize != index {
-                            adjacency_list[index].push(neighbor_index as usize);
-                        }
+                    if let Ok(neighbor_index) =
+                        Self::linear_index_of_static(radius, neighbor_i, neighbor_k)
+                        && neighbor_index != -1
+                        && neighbor_index as usize != index
+                    {
+                        adjacency_list[index].push(neighbor_index as usize);
                     }
                 }
             }
@@ -2214,26 +2405,33 @@ impl HexEngine {
     /// - i: I-line coordinate.
     /// - k: K-line coordinate.
     /// - radius: Radius of the hexagonal grid.
+    ///
     /// Returns:
     /// - bool: True if the coordinate is within range, False otherwise.
     #[inline]
     fn check_range_coords(i: i32, k: i32, radius: usize) -> PyResult<bool> {
         let j = k - i;
-        Ok(0 <= i && i < (radius as i32) * 2 - 1 &&
-           -((radius as i32)) < j && j < (radius as i32) &&
-           0 <= k && k < (radius as i32) * 2 - 1)
+        Ok(0 <= i
+            && i < (radius as i32) * 2 - 1
+            && -(radius as i32) < j
+            && j < (radius as i32)
+            && 0 <= k
+            && k < (radius as i32) * 2 - 1)
     }
 
     /// Get the occupancy state of a block at the given linear index.
     ///
     /// Arguments:
     /// - index: Linear index of the block to get.
+    ///
     /// Returns:
     /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
     #[allow(unused)]
     fn get_state_from_index(&self, index: usize) -> PyResult<bool> {
         if index >= self.states.len() {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "Index out of bounds",
+            ));
         }
         Ok(self.states[index])
     }
@@ -2245,7 +2443,9 @@ impl HexEngine {
     /// - state: The occupancy state to set (True for occupied, False for unoccupied
     fn set_state_from_index(&mut self, index: usize, state: bool) -> PyResult<()> {
         if index >= self.states.len() {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Index out of bounds"));
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "Index out of bounds",
+            ));
         }
         self.states[index] = state;
         Ok(())
@@ -2256,12 +2456,15 @@ impl HexEngine {
     /// Arguments:
     /// - i: I-line coordinate of the block to get.
     /// - k: K-line coordinate of the block to get.
+    ///
     /// Returns:
     /// - bool: The occupancy state of the block (True for occupied, False for unoccupied).
     fn state_of(&self, i: i32, k: i32) -> PyResult<bool> {
         let index = self.linear_index_of(i, k)?;
         if index == -1 {
-            return Err(pyo3::exceptions::PyIndexError::new_err("Coordinate out of bounds"));
+            return Err(pyo3::exceptions::PyIndexError::new_err(
+                "Coordinate out of bounds",
+            ));
         }
         Ok(self.states[index as usize])
     }
@@ -2274,8 +2477,10 @@ impl HexEngine {
     /// Parameters:
     /// - i: I-line coordinate of the block to check for neighbors.
     /// - k: K-line coordinate of the block to check for neighbors.
+    ///
     /// Returns:
     /// - int: The count of occupied neighboring Blocks.
+    ///
     /// Raises:
     /// - TypeError: If coo is not a Hex.
     fn count_neighbors_coordinate(&self, i: i32, k: i32) -> PyResult<usize> {
@@ -2294,13 +2499,14 @@ impl HexEngine {
         Ok(count)
     }
     /// Get a byte representation of the blocks around the given Hex position.
-    /// 
+    ///
     /// Each bit in the byte represents the occupancy state of a block in the Piece,
     /// with the most significant bit corresponding to the first block in the Piece's positions.
-    /// 
+    ///
     /// Parameters:
     /// - i: I-line coordinate of the block to check.
     /// - k: K-line coordinate of the block to check.
+    ///
     /// Returns:
     /// - int: A byte representation of the blocks around the given Hex position.
     fn pattern_of(&self, i: i32, k: i32) -> PyResult<u8> {
@@ -2308,10 +2514,10 @@ impl HexEngine {
         for (idx, pos) in Piece::positions.iter().enumerate() {
             let target_i = pos.i + i;
             let target_k = pos.k + k;
-            if Self::check_range_coords(target_i, target_k, self.radius).unwrap_or(false) {
-                if self.state_of(target_i, target_k).unwrap_or(false) {
-                    pattern |= 1 << (6 - idx);
-                }
+            if Self::check_range_coords(target_i, target_k, self.radius).unwrap_or(false)
+                && self.state_of(target_i, target_k).unwrap_or(false)
+            {
+                pattern |= 1 << (6 - idx);
             }
         }
         Ok(pattern)
@@ -2440,7 +2646,7 @@ impl HexEngine {
     }
 
     /// Identify coordinates along K axis that can be eliminated and return them as Vec<Hex>
-    /// 
+    ///
     /// Arguments:
     /// - eliminate (list[Hex]): Mutable list to append eliminated coordinates
     fn eliminate_k(&self) -> Vec<Hex> {
@@ -2526,10 +2732,11 @@ impl HexEngine {
         eliminated
     }
     /// Check if a Piece can be added at the given Hex coordinate without overlapping existing occupied blocks.
-    /// 
+    ///
     /// Arguments:
     /// - coo: Hex coordinate where the Piece is to be added.
     /// - piece: The Piece to be added.
+    ///
     /// Returns:
     /// - bool: True if the Piece can be added without overlap, False otherwise.
     fn check_add_of(&self, coo: &Hex, piece: &Piece) -> PyResult<bool> {
@@ -2552,16 +2759,17 @@ impl HexEngine {
 
     /// Check if there exists at least one position in the HexEngine where the given Piece can be added without overlap
     /// or going out of bounds.
-    /// 
+    ///
     /// Arguments:
     /// - piece: The Piece to be checked for possible addition.
+    ///
     /// Returns:
     /// - bool: True if there is at least one valid position for the Piece, False otherwise.
     fn check_has_positions(&self, piece: &Piece) -> bool {
         for a in 0..(self.radius * 2) as i32 {
             for b in 0..(self.radius * 2) as i32 {
-                let hex = Hex{i: a, k: b};
-                if self.check_add_of(&hex, &piece).unwrap_or(false) {
+                let hex = Hex { i: a, k: b };
+                if self.check_add_of(&hex, piece).unwrap_or(false) {
                     return true;
                 }
             }
@@ -2571,13 +2779,15 @@ impl HexEngine {
 
     #[cfg(feature = "numpy")]
     #[inline(always)]
-    fn from_numpy_engine_impl<T>(array: Bound<'_, PyArray1<T>>)
-        -> PyResult<HexEngine>
+    fn from_numpy_engine_impl<T>(array: Bound<'_, PyArray1<T>>) -> PyResult<HexEngine>
     where
         T: BitScalar + Copy + numpy::Element,
     {
         let slice = unsafe { array.as_slice()? };
-        let vec: Vec<bool> = slice.iter().map(|&b| T::predicate(b)).collect::<Vec<bool>>();
+        let vec: Vec<bool> = slice
+            .iter()
+            .map(|&b| T::predicate(b))
+            .collect::<Vec<bool>>();
         Self::try_from(vec)
     }
 
@@ -2588,7 +2798,10 @@ impl HexEngine {
         T: BitScalar + Copy + numpy::Element,
     {
         let slice = unsafe { array.as_slice().unwrap() };
-        let vec: Vec<bool> = slice.iter().map(|&b| T::predicate(b)).collect::<Vec<bool>>();
+        let vec: Vec<bool> = slice
+            .iter()
+            .map(|&b| T::predicate(b))
+            .collect::<Vec<bool>>();
         unsafe { HexEngine::from_raw_state(vec) }
     }
 
@@ -2598,7 +2811,11 @@ impl HexEngine {
     where
         T: BitScalar + Copy + numpy::Element,
     {
-        let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
+        let int_states: Vec<T> = self
+            .states
+            .iter()
+            .map(|&b| if b { T::one() } else { T::zero() })
+            .collect();
         PyArray1::from_vec(py, int_states).into()
     }
 
@@ -2608,7 +2825,11 @@ impl HexEngine {
     where
         T: BitScalar + Copy + numpy::Element,
     {
-        let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
+        let int_states: Vec<T> = self
+            .states
+            .iter()
+            .map(|&b| if b { T::one() } else { T::zero() })
+            .collect();
         PyArray1::from_vec(py, int_states)
     }
 
@@ -2621,7 +2842,10 @@ impl HexEngine {
     where
         T: BitScalar + Copy + numpy::Element,
     {
-        let vec: Vec<bool> = slice.iter().map(|&b| T::predicate(b)).collect::<Vec<bool>>();
+        let vec: Vec<bool> = slice
+            .iter()
+            .map(|&b| T::predicate(b))
+            .collect::<Vec<bool>>();
         let expected_len = if radius == 0 {
             0
         } else {
@@ -2691,7 +2915,7 @@ impl HexEngine {
     where
         T: SizeScalar + Copy + numpy::Element,
     {
-        use ndarray::{Array2};
+        use ndarray::Array2;
         let n = if radius == 0 {
             0
         } else {
@@ -2708,7 +2932,9 @@ impl HexEngine {
                 for (i, pos) in positions_exclude_self.iter().enumerate() {
                     let neighbor_i = hex.i + pos.i;
                     let neighbor_k = hex.k + pos.k;
-                    if let Ok(neighbor_index) = Self::linear_index_of_static(radius, neighbor_i, neighbor_k) {
+                    if let Ok(neighbor_index) =
+                        Self::linear_index_of_static(radius, neighbor_i, neighbor_k)
+                    {
                         if neighbor_index != -1 && neighbor_index as usize != index {
                             vec[index * 6 + i] = T::from_usize(neighbor_index as usize);
                         }
@@ -2721,7 +2947,7 @@ impl HexEngine {
     }
 
     /// Generate a correspondence list mapping each block index to another index shifted by a given Hex offset.
-    /// 
+    ///
     /// The indexed mapping is called a correspondence list, where each entry corresponds to a block in the hexagonal grid.
     /// It has the following properties:
     /// - The inverse of a correspondence list can be obtained by applying the negative of the original shift, and applying
@@ -2729,7 +2955,7 @@ impl HexEngine {
     ///   S from the border of the grid.
     /// - The correspondence lists A and B obtained from shifts S_A and S_B respectively can be composed to form a new correspondence list C
     ///   that represents the combined shift S_C = S_A + S_B. This operation is commutative and associative.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// - shift: The Hex offset to apply to each block's coordinate.
@@ -2737,7 +2963,11 @@ impl HexEngine {
     /// - A NumPy array containing the shifted indices, with sentinel values for out-of-bounds shifts.
     #[cfg(feature = "numpy")]
     #[inline(always)]
-    fn to_numpy_correspondence_list_impl<T>(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<T>>
+    fn to_numpy_correspondence_list_impl<T>(
+        py: Python,
+        radius: usize,
+        shift: &Hex,
+    ) -> Py<PyArray1<T>>
     where
         T: SizeScalar + Copy + numpy::Element,
     {
@@ -2752,7 +2982,9 @@ impl HexEngine {
             if let Ok(hex) = Self::static_hex_coordinate_of(radius, index) {
                 let shifted_i = hex.i + shift.i;
                 let shifted_k = hex.k + shift.k;
-                if let Ok(shifted_index) = Self::linear_index_of_static(radius, shifted_i, shifted_k) {
+                if let Ok(shifted_index) =
+                    Self::linear_index_of_static(radius, shifted_i, shifted_k)
+                {
                     if shifted_index != -1 {
                         vec[index] = T::from_usize(shifted_index as usize);
                     }
@@ -2764,11 +2996,11 @@ impl HexEngine {
     }
 
     /// Convert an iterator of (value, Hex) pairs into a vector aligned with the hexagonal grid of the specified radius.
-    /// 
+    ///
     /// The resulting vector has a length corresponding to the total number of blocks in the grid,
     /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
     /// are filled with sentinel values.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// - coordinate_iterator: An iterator yielding (value, Hex) pairs.
@@ -2776,51 +3008,78 @@ impl HexEngine {
     /// - A vector of values aligned with the hexagonal grid, with sentinel values for unfilled positions.
     #[cfg(feature = "numpy")]
     #[inline(always)]
-    fn pair_vec_to_numpy_impl<'a, T>(py: Python<'a>, radius: usize, sentinel: T, values: Bound<'a, PyList>) -> PyResult<Py<PyArray1<T>>>
+    fn pair_vec_to_numpy_impl<'a, T>(
+        py: Python<'a>,
+        radius: usize,
+        sentinel: T,
+        values: Bound<'a, PyList>,
+    ) -> PyResult<Py<PyArray1<T>>>
     where
         T: numpy::Element + ExtractablePrimitive,
     {
         use ndarray::Array1;
-        let n = if radius == 0 { 0 } else { 1 + 3 * radius * (radius - 1) };
+        let n = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
         let mut vec: Vec<T> = vec![sentinel; n];
         for item in values.iter() {
             let tuple: &Bound<'a, PyTuple> = match item.cast::<PyTuple>() {
                 Ok(t) => t,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Items must be tuples of (value, Hex)")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Items must be tuples of (value, Hex)",
+                    ));
+                }
             };
             let value_item: Bound<'a, PyAny> = match tuple.get_item(0) {
                 Ok(v) => v,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Tuple must have at least two items",
+                    ));
+                }
             };
             let hex_item: Bound<'a, PyAny> = match tuple.get_item(1) {
                 Ok(h) => h,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Tuple must have at least two items",
+                    ));
+                }
             };
             let value: T = T::extract_from_any(&value_item)?;
             let hex: Hex = match hex_item.extract::<Hex>() {
                 Ok(h) => h,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Second item in tuple must be a Hex")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Second item in tuple must be a Hex",
+                    ));
+                }
             };
             match Self::linear_index_of_static(radius, hex.i, hex.k) {
-                Ok(index) => if index != -1 {
-                    vec[index as usize] = value;
+                Ok(index) => {
+                    if index != -1 {
+                        vec[index as usize] = value;
+                    }
                 }
-                _ => {},
+                _ => {}
             }
-        };
+        }
         let array = Array1::from_shape_vec(n, vec).unwrap();
         Ok(PyArray1::from_owned_array(py, array).unbind())
     }
 }
 
-impl Into<Vec<u8>> for &HexEngine {
-    fn into(self) -> Vec<u8> {
+impl From<&HexEngine> for Vec<u8> {
+    fn from(val: &HexEngine) -> Self {
         let mut bytes = Vec::new();
-        let radius_u16 = self.radius as u32;
+        let radius_u16 = val.radius as u32;
         bytes.extend_from_slice(&radius_u16.to_le_bytes());
-        
+
         let mut byte: u8 = 0;
-        for (i, &state) in self.states.iter().enumerate() {
+        for (i, &state) in val.states.iter().enumerate() {
             if state {
                 byte |= 1 << (i % 8);
             }
@@ -2829,10 +3088,10 @@ impl Into<Vec<u8>> for &HexEngine {
                 byte = 0;
             }
         }
-        if self.states.len() % 8 != 0 {
+        if !val.states.len().is_multiple_of(8) {
             bytes.push(byte);
         }
-        
+
         bytes
     }
 }
@@ -2841,7 +3100,9 @@ impl TryFrom<&[u8]> for HexEngine {
     type Error = PyErr;
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         if bytes.len() < 4 {
-            return Err(pyo3::exceptions::PyValueError::new_err("Byte vector too short to contain radius"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Byte vector too short to contain radius",
+            ));
         }
         let radius = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize;
         let total_blocks = if radius == 0 {
@@ -2849,7 +3110,7 @@ impl TryFrom<&[u8]> for HexEngine {
         } else {
             1 + 3 * radius * (radius - 1)
         };
-        
+
         let mut states = Vec::with_capacity(total_blocks);
         for i in 0..total_blocks {
             let byte_index = 4 + (i / 8);
@@ -2861,11 +3122,8 @@ impl TryFrom<&[u8]> for HexEngine {
                 states.push(false);
             }
         }
-        
-        Ok(HexEngine {
-            radius,
-            states,
-        })
+
+        Ok(HexEngine { radius, states })
     }
 }
 
@@ -2874,34 +3132,34 @@ impl HexEngine {
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
 
     /// Serialize the HexEngine state into a byte vector according the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The serialization format is as follows:
     /// - The first four bytes represent the radius of the hexagonal grid as a little-endian u16.
     /// - The subsequent bytes represent the occupancy states of the blocks in the grid, packed into bits.
     ///   Each byte contains the states of up to 8 blocks, with the least significant bit corresponding to the first block.
-    /// 
+    ///
     /// Returns:
     /// - bytes: A byte vector containing the serialized state of the HexEngine.
     pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
         let bytes: Vec<u8> = self.into();
-        
+
         pyo3::types::PyBytes::new(py, &bytes)
     }
 
     /// Deserialize a byte vector into a HexEngine instance according to the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The deserialization format is as follows:
     /// - The first four bytes represent the radius of the hexagonal grid as a little-endian u16.
     /// - The subsequent bytes represent the occupancy states of the blocks in the grid, packed into bits.
     ///   Each byte contains the states of up to 8 blocks, with the least significant bit corresponding to the first block.
-    /// 
+    ///
     /// Arguments:
     /// - data: A byte vector containing the serialized state of the HexEngine.
     /// Returns:
     /// - HexEngine: A HexEngine instance reconstructed from the byte vector.
     #[staticmethod]
     pub fn hpyhex_rs_deserialize(data: Bound<'_, PyAny>) -> PyResult<Self> {
-        use pyo3::types::{PyBytes, PyByteArray};
+        use pyo3::types::{PyByteArray, PyBytes};
         // Extract PyBytes, PyByteArray, or Vec<u8>
         let bytes: Vec<u8> = if let Ok(py_bytes) = data.cast::<PyBytes>() {
             py_bytes.as_bytes().to_vec()
@@ -2910,24 +3168,28 @@ impl HexEngine {
         } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
             vec_u8
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Input must be bytes, bytearray, or list of integers"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Input must be bytes, bytearray, or list of integers",
+            ));
         };
         if bytes.len() < 4 {
-            return Err(pyo3::exceptions::PyValueError::new_err("Byte vector too short to contain radius"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Byte vector too short to contain radius",
+            ));
         }
-        
+
         HexEngine::try_from(bytes.as_slice())
     }
 
     /// Get the index of the Block at the specified Hex coordinate for a static radius.
-    /// 
+    ///
     /// This static method allows for index retrieval without needing an instance of HexEngine.
     /// It calculates the index based on the provided radius and Hex coordinates.
-    /// 
+    ///
     /// This method exists because the original API does not expose the index calculation from radius directly,
     /// requiring an instance of HexEngine to be created solely to retrieve it. This static method simplifies
     /// that process and may improve performance by avoiding unnecessary instance creation.
-    /// 
+    ///
     /// Arguments:
     /// - radius (int): The radius of the hexagonal grid.
     /// - coo: The Hex coordinate.
@@ -2948,14 +3210,14 @@ impl HexEngine {
     }
 
     /// Get the Hex coordinate of the Block at the specified index for a static radius.
-    /// 
+    ///
     /// This static method allows for coordinate retrieval without needing an instance of HexEngine.
     /// It calculates the Hex coordinate based on the provided radius and index.
-    /// 
+    ///
     /// This method exists because the original API does not expose the coordinate calculation from radius directly,
     /// requiring an instance of HexEngine to be created solely to retrieve it. This static method simplifies
     /// that process and may improve performance by avoiding unnecessary instance creation.
-    /// 
+    ///
     /// Arguments:
     /// - radius (int): The radius of the hexagonal grid.
     /// - index (int): The linear index of the Block.
@@ -2967,12 +3229,12 @@ impl HexEngine {
     }
 
     /// Generate the adjacency list for blocks in a hexagonal grid of the specified radius.
-    /// 
+    ///
     /// Each block is connected to its six neighboring blocks, if they exist within the grid.
-    /// 
+    ///
     /// This static method allows for adjacency list generation without needing an instance of HexEngine.
     /// It calculates the adjacency list based on the provided radius.
-    /// 
+    ///
     /// This method exists because the original API does not expose the adjacency list directly.
     /// As a result, batch operations require creating a `HexEngine` instance and repeatedly
     /// querying neighbors for each block, which is both cumbersome and inefficient.
@@ -2985,7 +3247,7 @@ impl HexEngine {
     /// multiple `HexEngine` instances with the same radius, eliminating redundant
     /// calculations. In real applications, this can save thousands of hex-coordinate
     /// computations and index lookups.
-    /// 
+    ///
     /// Arguments:
     /// - radius (int): The radius of the hexagonal grid.
     /// Returns:
@@ -2997,7 +3259,7 @@ impl HexEngine {
     }
 
     /// Render the HexEngine state as a string representation.
-    /// 
+    ///
     /// Arguments:
     /// - prefix: String to prepend to each line (default: "").
     /// - suffix: String to append to each line (default: "").
@@ -3007,13 +3269,21 @@ impl HexEngine {
     /// Returns:
     /// - str: The string representation of the HexEngine.
     #[pyo3(signature = (prefix="".to_string(), suffix="".to_string(), space=" ".to_string(), fill="X".to_string(), empty="O".to_string()))]
-    pub fn hpyhex_rs_render<'py>(&self, py: Python<'py>, prefix: String, suffix: String, space: String, fill: String, empty: String) -> Bound<'py, PyString> {
+    pub fn hpyhex_rs_render<'py>(
+        &self,
+        py: Python<'py>,
+        prefix: String,
+        suffix: String,
+        space: String,
+        fill: String,
+        empty: String,
+    ) -> Bound<'py, PyString> {
         let s = self.render(&prefix, &suffix, &space, &fill, &empty);
         PyString::new(py, &s)
     }
 
     /// Render an external HexEngine state from a list of values as a string
-    /// 
+    ///
     /// Arguments:
     /// - values: A list of boolean values representing the HexEngine state.
     /// - prefix: String to prepend to each line (default: "").
@@ -3023,19 +3293,25 @@ impl HexEngine {
     /// - str: The string representation of the HexEngine.
     #[pyo3(signature = (values, prefix="".to_string(), suffix="".to_string(), extra=false))]
     #[staticmethod]
-    pub fn hpyhex_rs_render_external<'py>(py: Python<'py>, values: Bound<'py, PyList>, prefix: String, suffix: String, extra: bool) -> PyResult<Bound<'py, PyString>> {
+    pub fn hpyhex_rs_render_external<'py>(
+        py: Python<'py>,
+        values: Bound<'py, PyList>,
+        prefix: String,
+        suffix: String,
+        extra: bool,
+    ) -> PyResult<Bound<'py, PyString>> {
         let s = Self::render_static(py, values, &prefix, &suffix, extra)?;
         Ok(PyString::new(py, &s))
     }
 
     /// Convert a list of (value, Hex) pairs into a python list aligned with the hexagonal grid of the specified radius.
-    /// 
+    ///
     /// The resulting list has a length corresponding to the total number of blocks in the grid,
     /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
     /// are filled with sentinel values.
-    /// 
+    ///
     /// Any python object can be used as the value type, and it is not required that all values are of the same type.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// - sentinel: The sentinel value to use for unfilled positions.
@@ -3043,45 +3319,68 @@ impl HexEngine {
     /// Returns:
     /// - list: A list representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
     #[staticmethod]
-    pub fn hpyhex_rs_pair_vec_to_list_any<'a>(radius: usize, sentinel: Bound<'a, PyAny>, values: Bound<'a, PyList>) -> PyResult<Vec<Bound<'a, PyAny>>> {
-        let n = if radius == 0 { 0 } else { 1 + 3 * radius * (radius - 1) };
+    pub fn hpyhex_rs_pair_vec_to_list_any<'a>(
+        radius: usize,
+        sentinel: Bound<'a, PyAny>,
+        values: Bound<'a, PyList>,
+    ) -> PyResult<Vec<Bound<'a, PyAny>>> {
+        let n = if radius == 0 {
+            0
+        } else {
+            1 + 3 * radius * (radius - 1)
+        };
         let mut vec: Vec<Bound<'a, PyAny>> = vec![sentinel; n];
         for item in values.iter() {
             let tuple: &Bound<'a, PyTuple> = match item.cast::<PyTuple>() {
                 Ok(t) => t,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Items must be tuples of (value, Hex)")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Items must be tuples of (value, Hex)",
+                    ));
+                }
             };
             let value_item: Bound<'a, PyAny> = match tuple.get_item(0) {
                 Ok(v) => v,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Tuple must have at least two items",
+                    ));
+                }
             };
             let hex_item: Bound<'a, PyAny> = match tuple.get_item(1) {
                 Ok(h) => h,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Tuple must have at least two items")),
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Tuple must have at least two items",
+                    ));
+                }
             };
             let hex: Hex = match hex_item.extract::<Hex>() {
                 Ok(h) => h,
-                Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Second item in tuple must be a Hex")),
-            };
-            match Self::linear_index_of_static(radius, hex.i, hex.k) {
-                Ok(index) => if index != -1 {
-                    vec[index as usize] = value_item;
+                Err(_) => {
+                    return Err(pyo3::exceptions::PyTypeError::new_err(
+                        "Second item in tuple must be a Hex",
+                    ));
                 }
-                _ => {},
+            };
+            if let Ok(index) = Self::linear_index_of_static(radius, hex.i, hex.k)
+                && index != -1
+            {
+                vec[index as usize] = value_item;
             }
-        };
+        }
         Ok(vec)
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
     /// Convert a list of (value, Hex) pairs into a NumPy ndarray aligned with the hexagonal grid of the specified radius.
-    /// 
+    ///
     /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
     /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
     /// are filled with sentinel values.
-    /// 
+    ///
     /// The sentinel value used here is -1 for int64 representation.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// - values: A list of (value, Hex) pairs.
@@ -3089,17 +3388,21 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
     #[cfg(feature = "numpy")]
     #[staticmethod]
-    pub fn pair_vec_to_numpy(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i16>>> {
+    pub fn pair_vec_to_numpy(
+        py: Python,
+        radius: usize,
+        values: Bound<'_, PyList>,
+    ) -> PyResult<Py<PyArray1<i16>>> {
         Self::pair_vec_to_numpy_impl::<i16>(py, radius, -1, values)
     }
 
     /// Get a NumPy correspondence list as a 1D ndarray.
-    /// 
+    ///
     /// The correspondence list maps each block index to another index shifted by a given Hex offset.
     /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
+    ///
     /// The sentinel value used here is -1 for int64 representation.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// - shift: The Hex offset to apply to each block's coordinate.
@@ -3107,18 +3410,22 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
     #[cfg(feature = "numpy")]
     #[staticmethod]
-    pub fn to_numpy_correspondence_list(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i64>> {
+    pub fn to_numpy_correspondence_list(
+        py: Python,
+        radius: usize,
+        shift: &Hex,
+    ) -> Py<PyArray1<i64>> {
         Self::to_numpy_correspondence_list_int64(py, radius, shift)
     }
 
     /// Get a NumPy adjacency list as a 2D ndarray.
-    /// 
+    ///
     /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
     /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
     /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
+    ///
     /// The sentinel value used here is -1 for int64 representation.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// Returns:
@@ -3130,15 +3437,15 @@ impl HexEngine {
     }
 
     /// Get a NumPy adjacency matrix as a 2D ndarray.
-    /// 
+    ///
     /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
     /// Each entry (i, j) in the matrix is True if block i is adjacent to block j, and False otherwise.
-    /// 
+    ///
     /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
     /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is true if block i is adjacent to block j.
     /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
     /// over the grid structure.
-    /// 
+    ///
     /// Arguments:
     /// - radius: The radius of the hexagonal grid.
     /// Returns:
@@ -3150,7 +3457,7 @@ impl HexEngine {
     }
 
     /// Get a NumPy bool ndarray mask indicating valid positions for adding the given Piece.
-    /// 
+    ///
     /// Arguments:
     /// - piece: The Piece to check for valid positions.
     /// Returns:
@@ -3161,7 +3468,7 @@ impl HexEngine {
     }
 
     /// Get the default NumPy ndarray representation of the HexEngine's block states.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
     #[cfg(feature = "numpy")]
@@ -3170,7 +3477,7 @@ impl HexEngine {
     }
 
     /// Get the NumPy ndarray boolean representation of the HexEngine's block states.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
     #[cfg(feature = "numpy")]
@@ -3181,11 +3488,11 @@ impl HexEngine {
     /// Create a NumPy ndarray boolean representation of the HexEngine's block states
     /// without copying the underlying data. The method is extremely unsafe
     /// and should be used with caution.
-    /// 
+    ///
     /// The following conditions must be met for safe usage:
-    /// 
+    ///
     /// It is assumed that the HexEngine contains a valid hexagonal grid state and does not perform any checks.
-    /// 
+    ///
     /// The method also assumes that the memory of the HexEngine's states:
     /// - Is compatible with NumPy's memory layout. This means that NumPy must be able to interpret the HexEngine's internal
     ///   memory representation correctly as a NumPy array of the expected dtype and shape, and must not expect special padding
@@ -3195,19 +3502,19 @@ impl HexEngine {
     ///   or data corruption.
     /// - Is mutable and not shared. If the HexEngine's states are shared across multiple references or threads,
     ///   modifying it in NumPy could lead to data corruption or race conditions.
-    /// 
+    ///
     /// After conversion, the data is technically still held by Rust. So it is necessary to ensure that
     /// the lifetime of the NumPy array does not exceed that of the HexEngine in both Python and Rust memory management.
     /// If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing
     /// the NumPy array's data.
-    /// 
+    ///
     /// IMPORTANT: Under normal conditions, even if all the above conditions are met, this method will eventually
     /// lead to a double-free error when both Rust and Python attempt to free the same memory during their respective
     /// deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the
     /// HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is
     /// responsible for freeing the memory. If this is undesirable, consider holding references to both objects until the end
     /// of the program execution so that all double free errors occur only at program termination.
-    /// 
+    ///
     /// For these reasons, unless performance is absolutely critical and you are certain that all the above
     /// conditions are met, it is strongly recommended to use the safe alternative `to_numpy_bool` method instead,
     /// which copies the data and performs necessary operations safely.
@@ -3228,20 +3535,20 @@ impl HexEngine {
     /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states
     /// without validation and taking a view of the underlying data. The method is extremely unsafe
     /// and should be used with caution.
-    /// 
+    ///
     /// The following conditions must be met for safe usage:
-    /// 
+    ///
     /// It is assumed that when this method is used, the provided NumPy array length corresponds to a
     /// valid hexagonal grid size and does not perform any checks. It calculates the radius based on the
     /// length of the array.
-    /// 
+    ///
     /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
     /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
+    ///
     /// The method also assumes that the memory of the NumPy array:
     /// - Is allocated on the host (CPU) memory. If the array is allocated on a different device (e.g., GPU),
     ///   accessing its memory directly from Rust will lead to undefined behavior or mysterious crashes.
-    /// - Is allocated in a way that is compatible with Rust's Vec<bool> memory layout. This means that it 
+    /// - Is allocated in a way that is compatible with Rust's Vec<bool> memory layout. This means that it
     ///   it not padded or aligned in a way that would be incompatible with Rust's expectations for Vec<bool>.
     /// - Is contiguous. If it is not contiguous, the function will panic.
     /// - Is not used elsewhere after this function is called. Since the function takes a view of the data,
@@ -3249,19 +3556,19 @@ impl HexEngine {
     ///   or data corruption.
     /// - Is mutable and not shared. If the NumPy array is shared across multiple references or threads,
     ///   modifying it in Rust could lead to data corruption or race conditions.
-    /// 
+    ///
     /// After conversion, the data is technically still held by NumPy. So it is necessary to ensure that
     /// the lifetime of the HexEngine does not exceed that of the original NumPy array in both Python and NumPy memory management.
     /// If this is violated, it is highly likely that garbage data or segmentation faults will occur when accessing
     /// the HexEngine's states.
-    /// 
+    ///
     /// IMPORTANT: Under normaly conditions, even if all the above conditions are met, this method will eventually
     /// lead to a double-free error when both Rust and Python attempt to free the same memory during their respective
     /// deallocation processes. To prevent this, manually increment the reference count of either the NumPy array or the
     /// HexEngine instance in Python using methods like `ctypes.pythonapi.Py_IncRef` to ensure that only one of them is
     /// responsible for freeing the memory. If this is undesireable, consider hold reference to both objects until the end
     /// of the program execution so that all double free errors occur only at program termination.
-    /// 
+    ///
     /// For these reasons, unless performance is absolutely critical and you are certain that all the above
     /// conditions are met, it is strongly recommended to use the safe alternative `from_numpy_bool` method instead,
     /// which copies the data and performs necessary validations. Or if you are sure about the data validity,
@@ -3284,7 +3591,7 @@ impl HexEngine {
     }
 
     /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states.
-    /// 
+    ///
     /// Arguments:
     /// - array: A 1D NumPy array of boolean values representing the block states.
     /// Returns:
@@ -3297,13 +3604,13 @@ impl HexEngine {
     }
 
     /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states without validation.
-    /// 
+    ///
     /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
     /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
+    ///
     /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
     /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
+    ///
     /// Arguments:
     /// - array: A 1D NumPy array of boolean values representing the block states.
     /// Returns:
@@ -3344,7 +3651,7 @@ impl HexEngine {
     }
 
     /// Solves for the length of a HexEngine based on its radius.
-    /// 
+    ///
     /// Arguments:
     /// - radius (int): The radius of the hexagonal grid.
     /// Returns:
@@ -3359,7 +3666,7 @@ impl HexEngine {
     }
 
     /// Solves for the radius of a HexEngine based on its length.
-    /// 
+    ///
     /// Arguments:
     /// - radius (int): The radius of the hexagonal grid.
     /// Returns:
@@ -3374,7 +3681,7 @@ impl HexEngine {
         }
         let target = (length - 1) / 3;
         let u = target * 4 + 1;
-        let r = ((u as f64).sqrt() as usize + 1) / 2;
+        let r = ((u as f64).sqrt() as usize).div_ceil(2);
         if r > 0 && r * (r - 1) == target {
             r as isize
         } else {
@@ -3383,10 +3690,10 @@ impl HexEngine {
     }
 
     /// Construct a HexEngine with the specified radius, states, or string.
-    /// 
+    ///
     /// This method initializes the hexagonal grid with a given radius,
     /// creating an array of booleans to represent the grid.
-    /// 
+    ///
     /// Arguments:
     /// - arg (int | str | list[bool]):
     ///     - An integer representing the radius of the hexagonal grid.
@@ -3399,7 +3706,9 @@ impl HexEngine {
     pub fn new(arg: &pyo3::Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(radius) = arg.extract::<usize>() {
             if radius < 1 {
-                return Err(pyo3::exceptions::PyValueError::new_err("Radius must be greater than 0"));
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Radius must be greater than 0",
+                ));
             }
             Ok(HexEngine {
                 radius,
@@ -3407,28 +3716,42 @@ impl HexEngine {
             })
         } else if let Ok(s) = arg.extract::<String>() {
             let s = s.trim();
-            if !s.chars().all(|c| c == '0' || c == '1' || c == 'X' || c == 'O') {
-                return Err(pyo3::exceptions::PyValueError::new_err("String must contain only '0' or '1', or 'X' or 'O'"));
+            if !s
+                .chars()
+                .all(|c| c == '0' || c == '1' || c == 'X' || c == 'O')
+            {
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "String must contain only '0' or '1', or 'X' or 'O'",
+                ));
             }
             let radius = HexEngine::solve_radius(s.len()) as usize;
             if radius < 1 {
-                return Err(pyo3::exceptions::PyValueError::new_err("Invalid length for hexagonal grid"));
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Invalid length for hexagonal grid",
+                ));
             }
             let states = s.chars().map(|c| c == '1' || c == 'X').collect();
             Ok(HexEngine { radius, states })
         } else if let Ok(list) = arg.extract::<Vec<bool>>() {
             let radius = HexEngine::solve_radius(list.len()) as usize;
             if radius < 1 {
-                return Err(pyo3::exceptions::PyValueError::new_err("Invalid length for hexagonal grid"));
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Invalid length for hexagonal grid",
+                ));
             }
-            Ok(HexEngine { radius, states: list })
+            Ok(HexEngine {
+                radius,
+                states: list,
+            })
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for HexEngine initialization"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid type for HexEngine initialization",
+            ))
         }
     }
 
     /// Get the radius of the hexagonal grid.
-    /// 
+    ///
     /// Returns:
     /// - int: The radius of the hexagonal grid.
     #[getter]
@@ -3437,7 +3760,7 @@ impl HexEngine {
     }
 
     /// Get the occupancy states of the hexagonal grid blocks.
-    /// 
+    ///
     /// Returns:
     /// - list[bool]: The occupancy states of the hexagonal grid blocks.
     #[getter]
@@ -3447,7 +3770,7 @@ impl HexEngine {
 
     /// Check equality with another HexEngine or a list of booleans.
     /// Returns True if the states match, False otherwise.
-    /// 
+    ///
     /// Arguments:
     /// - value (HexEngine | list[bool]): The HexEngine or list of booleans to compare with.
     /// Returns:
@@ -3464,7 +3787,7 @@ impl HexEngine {
 
     /// Return a hash of the HexEngine's occupancy states.
     /// This method uses the tuple representation of the states for hashing.
-    /// 
+    ///
     /// Returns:
     /// - int: The hash value of the HexEngine.
     pub fn __hash__(&self) -> u64 {
@@ -3475,7 +3798,7 @@ impl HexEngine {
     }
 
     /// Get the number of blocks in the hexagonal grid.
-    /// 
+    ///
     /// Returns:
     /// - int: The number of blocks in the grid.
     pub fn __len__(&self) -> usize {
@@ -3483,7 +3806,7 @@ impl HexEngine {
     }
 
     /// Return an iterator over the occupancy states of the hexagonal grid blocks.
-    /// 
+    ///
     /// Yields:
     /// - bool: The occupancy state of each block in the grid.
     pub fn __iter__(slf: PyRef<'_, Self>) -> PyResult<HexEngineIterator> {
@@ -3496,17 +3819,20 @@ impl HexEngine {
     /// Return a string representation of the grid block states.
     /// This representation is useful for debugging and serialization.
     /// Format: "1" for occupied blocks, "0" for unoccupied blocks.
-    /// 
+    ///
     /// Returns:
     /// - str: A string representation of the grid block states.
     pub fn __repr__(&self) -> String {
-        self.states.iter().map(|&b| if b { '1' } else { '0' }).collect()
+        self.states
+            .iter()
+            .map(|&b| if b { '1' } else { '0' })
+            .collect()
     }
 
     /// Return a string representation of the grid block states.
     /// Format: "HexEngine[blocks = {block1, block2, ...}]",
     /// where each block is represented by its string representation.
-    /// 
+    ///
     /// Returns:
     /// - str: The string representation of the HexEngine.
     pub fn __str__(&self) -> String {
@@ -3524,11 +3850,14 @@ impl HexEngine {
     }
 
     /// Create a deep copy of the HexEngine.
-    /// 
+    ///
     /// Returns:
     /// HexEngine: A new HexEngine with the same radius and states.
     pub fn __copy__(&self) -> Self {
-        HexEngine { radius: self.radius, states: self.states.clone() }
+        HexEngine {
+            radius: self.radius,
+            states: self.states.clone(),
+        }
     }
 
     /// Create a deep copy of the HexEngine.
@@ -3539,12 +3868,11 @@ impl HexEngine {
     #[pyo3(signature = (memo=None))]
     pub fn __deepcopy__(&self, memo: Option<&pyo3::Bound<'_, PyAny>>) -> Self {
         // Check if already copied
-        if let Some(m) = memo {
-            if let Ok(existing) = m.get_item(self as *const _ as usize) {
-                if let Ok(hex_engine) = existing.extract::<PyRef<HexEngine>>() {
-                    return hex_engine.clone();
-                }
-            }
+        if let Some(m) = memo
+            && let Ok(existing) = m.get_item(self as *const _ as usize)
+            && let Ok(hex_engine) = existing.extract::<PyRef<HexEngine>>()
+        {
+            return hex_engine.clone();
         }
         // Create a new instance
         let new_instance = HexEngine {
@@ -3553,14 +3881,17 @@ impl HexEngine {
         };
         // Store in memo
         if let Some(m) = memo {
-            let _ = m.set_item(self as *const _ as usize, Python::attach(|py| Py::new(py, new_instance.clone()).unwrap()));
+            let _ = m.set_item(
+                self as *const _ as usize,
+                Python::attach(|py| Py::new(py, new_instance.clone()).unwrap()),
+            );
         }
         new_instance
     }
 
     /// Reset the HexEngine grid to its initial state, clearing all blocks.
     /// This method reinitializes the grid, setting all blocks to unoccupied.
-    /// 
+    ///
     /// Returns:
     /// - None
     pub fn reset(&mut self) {
@@ -3568,7 +3899,7 @@ impl HexEngine {
     }
 
     /// Check if a Hex coordinate is within the radius of the hexagonal grid.
-    /// 
+    ///
     /// Arguments:
     /// - coo: Hex coordinate to check.
     /// Returns:
@@ -3578,10 +3909,10 @@ impl HexEngine {
     }
 
     /// Get the index of the Block at the specified Hex coordinate.
-    /// 
+    ///
     /// This method is heavily optimized for performance and achieves O(1) complexity by using direct index formulas
     /// based on the hexagonal grid's structure. It calculates the index based on the I and K coordinates of the Hex.
-    /// 
+    ///
     /// Arguments:
     /// - coo: The Hex coordinate.
     /// Returns:
@@ -3600,10 +3931,10 @@ impl HexEngine {
     }
 
     /// Get the Hex coordinate of the Block at the specified index.
-    /// 
+    ///
     /// This method retrieves the Hex coordinate based on the index in the hexagonal grid.
     /// If the index is out of range, raise ValueError.
-    /// 
+    ///
     /// Arguments:
     /// - index (int): The index of the Block.
     /// Returns:
@@ -3617,15 +3948,17 @@ impl HexEngine {
             let hex = get_hex(hex.i, hex.k);
             Ok(hex)
         } else {
-            Err(pyo3::exceptions::PyValueError::new_err("Index out of range"))
+            Err(pyo3::exceptions::PyValueError::new_err(
+                "Index out of range",
+            ))
         }
     }
 
     /// Get the Block occupancy state at the specified Hex coordinate or index.
-    /// 
+    ///
     /// This method retrieves the Block state based on either a Hex coordinate or an index.
     /// If the coordinate or index is out of range, raise ValueError.
-    /// 
+    ///
     /// Arguments:
     /// - coo (Hex | tuple | int): The Hex coordinate or index of the Block.
     /// Returns:
@@ -3638,12 +3971,16 @@ impl HexEngine {
             if idx < self.states.len() {
                 Ok(self.states[idx])
             } else {
-                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+                Err(pyo3::exceptions::PyValueError::new_err(
+                    "Coordinate out of range",
+                ))
             }
         } else {
             let idx = self.index_block(coo);
             if idx == -1 {
-                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+                Err(pyo3::exceptions::PyValueError::new_err(
+                    "Coordinate out of range",
+                ))
             } else {
                 Ok(self.states[idx as usize])
             }
@@ -3651,10 +3988,10 @@ impl HexEngine {
     }
 
     /// Set the occupancy state of the Block at the specified Hex coordinate.
-    /// 
+    ///
     /// This method updates the state of a Block at the given coordinate.
     /// If the coordinate is out of range, raise ValueError.
-    /// 
+    ///
     /// Arguments:
     /// - coo (Hex | tuple | int): The Hex coordinate or index of the block to set.
     /// - state (bool): The new occupancy state to set for the Block.
@@ -3667,12 +4004,16 @@ impl HexEngine {
                 self.states[idx] = state;
                 Ok(())
             } else {
-                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+                Err(pyo3::exceptions::PyValueError::new_err(
+                    "Coordinate out of range",
+                ))
             }
         } else {
             let idx = self.index_block(coo);
             if idx == -1 {
-                Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"))
+                Err(pyo3::exceptions::PyValueError::new_err(
+                    "Coordinate out of range",
+                ))
             } else {
                 self.states[idx as usize] = state;
                 Ok(())
@@ -3681,11 +4022,11 @@ impl HexEngine {
     }
 
     /// Check if a Piece can be added to the hexagonal grid without overlaps.
-    /// 
+    ///
     /// This method checks if the Piece can be placed on the grid without overlapping
     /// any existing occupied blocks. It returns True if the Piece can be added,
     /// otherwise returns False.
-    /// 
+    ///
     /// Arguments:
     /// - coo (Hex | tuple): The Hex coordinate to check for addition.
     /// - piece (Piece | int): The Piece to check for addition.
@@ -3693,19 +4034,33 @@ impl HexEngine {
     /// - bool: True if the Piece can be added, False otherwise.
     /// Raises:
     /// - TypeError: If piece is not a Piece instance.
-    pub fn check_add(&self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn check_add(
+        &self,
+        coo: &pyo3::Bound<'_, PyAny>,
+        piece: &pyo3::Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
         if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
             for i in 0..7 {
                 if piece_ref.states()[i] {
                     let (hex_i, hex_k) = Python::attach(|_py| {
                         let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                        let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                        let base = if let Some(c) = coo_val {
+                            (c.i, c.k)
+                        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                            (tuple.0, tuple.1)
+                        } else {
+                            (0, 0)
+                        };
                         (pos.i + base.0, pos.k + base.1)
                     });
                     if let Ok(idx) = self.linear_index_of(hex_i, hex_k) {
-                        if idx == -1 { return Ok(false); }
-                        if self.states[idx as usize] { return Ok(false); }
+                        if idx == -1 {
+                            return Ok(false);
+                        }
+                        if self.states[idx as usize] {
+                            return Ok(false);
+                        }
                     } else {
                         return Ok(false);
                     }
@@ -3714,19 +4069,30 @@ impl HexEngine {
             Ok(true)
         } else if let Ok(state) = piece.extract::<u8>() {
             Python::attach(|py| {
-                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone_ref(py);
+                let piece_obj =
+                    PIECE_CACHE.get_or_init(initialize_piece_cache)[state as usize].clone_ref(py);
                 let piece_ref = piece_obj.borrow(py);
                 for i in 0..7 {
                     if piece_ref.states()[i] {
                         let (hex_i, hex_k) = {
                             let pos = &Piece::positions[i];
                             let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                            let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                            let base = if let Some(c) = coo_val {
+                                (c.i, c.k)
+                            } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                                (tuple.0, tuple.1)
+                            } else {
+                                (0, 0)
+                            };
                             (pos.i + base.0, pos.k + base.1)
                         };
                         if let Ok(idx) = self.linear_index_of(hex_i, hex_k) {
-                            if idx == -1 { return Ok(false); }
-                            if self.states[idx as usize] { return Ok(false); }
+                            if idx == -1 {
+                                return Ok(false);
+                            }
+                            if self.states[idx as usize] {
+                                return Ok(false);
+                            }
                         } else {
                             return Ok(false);
                         }
@@ -3735,25 +4101,33 @@ impl HexEngine {
                 Ok(true)
             })
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"));
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Piece must be an instance of Piece or an integer representing a Piece state",
+            ))
         }
     }
 
     /// Add a Piece to the hexagonal grid at the specified Hex coordinate.
-    /// 
+    ///
     /// This method places the Piece on the grid, updating the occupancy state of
     /// the blocks based on the Piece's states. If the Piece cannot be added due to
     /// overlaps or out-of-range coordinates, it raises a ValueError.
-    /// 
+    ///
     /// Arguments:
     /// - coo (Hex | tuple): The Hex coordinate to add the Piece.
     /// - piece (Piece | int): The Piece to add to the grid.
     /// Raises:
     /// - ValueError: If the Piece cannot be added due to overlaps or out-of-range coordinates.
     /// - TypeError: If piece is not a valid Piece instance.
-    pub fn add_piece(&mut self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<()> {
+    pub fn add_piece(
+        &mut self,
+        coo: &pyo3::Bound<'_, PyAny>,
+        piece: &pyo3::Bound<'_, PyAny>,
+    ) -> PyResult<()> {
         if !self.check_add(coo, piece)? {
-            return Err(pyo3::exceptions::PyValueError::new_err("Cannot add piece due to overlaps or out-of-range coordinates"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Cannot add piece due to overlaps or out-of-range coordinates",
+            ));
         }
         if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
             for i in 0..7 {
@@ -3761,12 +4135,20 @@ impl HexEngine {
                     let (placed_i, placed_k) = Python::attach(|_py| {
                         let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                        let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                        let base = if let Some(c) = coo_val {
+                            (c.i, c.k)
+                        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                            (tuple.0, tuple.1)
+                        } else {
+                            (0, 0)
+                        };
                         (pos.i + base.0, pos.k + base.1)
                     });
                     let idx = self.linear_index_of(placed_i, placed_k)?;
                     if idx == -1 {
-                        return Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"));
+                        return Err(pyo3::exceptions::PyValueError::new_err(
+                            "Coordinate out of range",
+                        ));
                     }
                     self.states[idx as usize] = true;
                 }
@@ -3774,19 +4156,28 @@ impl HexEngine {
             Ok(())
         } else if let Ok(state) = piece.extract::<u8>() {
             Python::attach(|py| {
-                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone_ref(py);
+                let piece_obj =
+                    PIECE_CACHE.get_or_init(initialize_piece_cache)[state as usize].clone_ref(py);
                 let piece_ref = piece_obj.borrow(py);
                 for i in 0..7 {
                     if piece_ref.states()[i] {
                         let (placed_i, placed_k) = {
                             let pos = &Piece::positions[i];
                             let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                            let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                            let base = if let Some(c) = coo_val {
+                                (c.i, c.k)
+                            } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                                (tuple.0, tuple.1)
+                            } else {
+                                (0, 0)
+                            };
                             (pos.i + base.0, pos.k + base.1)
                         };
                         let idx = self.linear_index_of(placed_i, placed_k)?;
                         if idx == -1 {
-                            return Err(pyo3::exceptions::PyValueError::new_err("Coordinate out of range"));
+                            return Err(pyo3::exceptions::PyValueError::new_err(
+                                "Coordinate out of range",
+                            ));
                         }
                         self.states[idx as usize] = true;
                     }
@@ -3794,12 +4185,14 @@ impl HexEngine {
                 Ok(())
             })
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Piece must be an instance of Piece or an integer representing a Piece state",
+            ))
         }
     }
 
     /// Return all valid positions where another grid can be added.
-    /// 
+    ///
     /// This method returns a list of Hex coordinate candidates where the Piece can be added
     /// without overlaps. It checks each position in the Piece and returns the Hex coordinates
     /// of the occupied blocks.
@@ -3816,7 +4209,7 @@ impl HexEngine {
             let mut positions = Vec::new();
             for a in 0..(self.radius * 2) as i32 {
                 for b in 0..(self.radius * 2) as i32 {
-                    let hex = Hex{i: a, k: b};
+                    let hex = Hex { i: a, k: b };
                     if self.check_add_of(&hex, &piece)? {
                         positions.push(get_hex(hex.i, hex.k));
                     }
@@ -3824,30 +4217,31 @@ impl HexEngine {
             }
             Ok(positions)
         } else if let Ok(state) = piece.extract::<u8>() {
-            Python::attach(|py|
-                {
-                    let piece = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py);
-                    let mut positions = Vec::new();
-                    for a in 0..(self.radius * 2) as i32 {
-                        for b in 0..(self.radius * 2) as i32 {
-                            let hex = Hex{i: a, k: b};
-                            if self.check_add_of(&hex, &piece)? {
-                                positions.push(get_hex(hex.i, hex.k));
-                            }
+            Python::attach(|py| {
+                let piece =
+                    PIECE_CACHE.get_or_init(initialize_piece_cache)[state as usize].borrow(py);
+                let mut positions = Vec::new();
+                for a in 0..(self.radius * 2) as i32 {
+                    for b in 0..(self.radius * 2) as i32 {
+                        let hex = Hex { i: a, k: b };
+                        if self.check_add_of(&hex, &piece)? {
+                            positions.push(get_hex(hex.i, hex.k));
                         }
                     }
-                    Ok(positions)
                 }
-            )
+                Ok(positions)
+            })
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Piece must be an instance of Piece or an integer representing a Piece state",
+            ))
         }
     }
 
     /// Eliminate fully occupied lines along I, J, or K axes and return eliminated coordinates.
-    /// 
+    ///
     /// Modifies the grid permanently.
-    /// 
+    ///
     /// Returns:
     /// - list[Hex]: A list of Hex coordinates that were eliminated.
     // REDESIGN: see note on redesign elimination in eliminate_i (line 1025)
@@ -3914,9 +4308,9 @@ impl HexEngine {
     }
 
     /// Count occupied neighboring Blocks around the given Hex position.
-    /// 
+    ///
     /// Checks up to six adjacent positions to the block at Hex coordinate.
-    /// A neighbor is occupied if the block is null or its state is True 
+    /// A neighbor is occupied if the block is null or its state is True
     ///
     /// Arguments:
     /// - coo (Hex | tuple): The Hex coordinate to check for neighbors.
@@ -3930,7 +4324,9 @@ impl HexEngine {
         } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
             (tuple.0, tuple.1)
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for Hex coordinates"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Invalid type for Hex coordinates",
+            ));
         };
         let mut count = 0;
         for pos in &Piece::positions {
@@ -3948,13 +4344,13 @@ impl HexEngine {
     }
 
     /// Determine the pattern of blocks around the given position in the hexagonal grid, including the block itself.
-    /// 
+    ///
     /// This method checks up to seven positions in a hexagonal box centered at coordinates (i, k).
     /// It returns a value representing the pattern of occupied/unoccupied blocks, ignoring block colors.
     /// The pattern is encoded as a 7-bit integer (0 to 127) based on the state of the central block
     /// and its six neighbors. If a neighboring position is out of range or contains a None block,
     /// it is treated as occupied or unoccupied based on the include_null flag.
-    /// 
+    ///
     /// Arguments:
     /// - coo (Hex | tuple): The hex coordinate of the block at the center of the box.
     /// Returns:
@@ -3974,26 +4370,30 @@ impl HexEngine {
                 };
                 (pos.i + base.0, pos.k + base.1)
             });
-            if let Ok(state) = self.state_of(coo_i, coo_k) {
-                if state {
-                    pattern |= 1;
-                }
+            if let Ok(state) = self.state_of(coo_i, coo_k)
+                && state
+            {
+                pattern |= 1;
             }
         }
         Ok(pattern)
     }
 
     /// Compute a density index score for hypothetically placing another piece.
-    /// 
+    ///
     /// Returns a value between 0 and 1 representing surrounding density.
     /// A score of 1 means all surrounding blocks would be filled, 0 means the grid would be alone.
-    /// 
+    ///
     /// Arguments:
     /// - coo (Hex): Position for hypothetical placement.
     /// - piece (Piece): The Piece to evaluate for placement.
     /// Returns:
     /// - float: Density index (0 to 1), or 0 if placement is invalid or no neighbors exist.
-    pub fn compute_dense_index(&self, coo: &pyo3::Bound<'_, PyAny>, piece: &pyo3::Bound<'_, PyAny>) -> PyResult<f64> {
+    pub fn compute_dense_index(
+        &self,
+        coo: &pyo3::Bound<'_, PyAny>,
+        piece: &pyo3::Bound<'_, PyAny>,
+    ) -> PyResult<f64> {
         if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
             let mut total_possible = 0;
             let mut total_populated = 0;
@@ -4003,20 +4403,37 @@ impl HexEngine {
                     let (placed_i, placed_k) = Python::attach(|_py| {
                         let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                        let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                        let base = if let Some(c) = coo_val {
+                            (c.i, c.k)
+                        } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                            (tuple.0, tuple.1)
+                        } else {
+                            (0, 0)
+                        };
                         (pos.i + base.0, pos.k + base.1)
                     });
-                    if !HexEngine::check_range_coords(placed_i, placed_k, self.radius).unwrap_or(false) || self.state_of(placed_i, placed_k).unwrap_or(false) {
+                    if !HexEngine::check_range_coords(placed_i, placed_k, self.radius)
+                        .unwrap_or(false)
+                        || self.state_of(placed_i, placed_k).unwrap_or(false)
+                    {
                         return Ok(0.0);
                     }
-                    total_possible += 6 - piece_neighbors_of(piece_piece.clone(), placed_i, placed_k);
-                    total_populated += self.count_neighbors_coordinate(placed_i, placed_k).unwrap_or(0);
+                    total_possible +=
+                        6 - piece_neighbors_of(piece_piece.clone(), placed_i, placed_k);
+                    total_populated += self
+                        .count_neighbors_coordinate(placed_i, placed_k)
+                        .unwrap_or(0);
                 }
             }
-            Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
+            Ok(if total_possible > 0 {
+                total_populated as f64 / total_possible as f64
+            } else {
+                0.0
+            })
         } else if let Ok(state) = piece.extract::<u8>() {
             Python::attach(|py| {
-                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone_ref(py);
+                let piece_obj =
+                    PIECE_CACHE.get_or_init(initialize_piece_cache)[state as usize].clone_ref(py);
                 let piece_ref = piece_obj.borrow(py);
                 // let piece = Piece {state: state};
                 let mut total_possible = 0;
@@ -4026,25 +4443,43 @@ impl HexEngine {
                         let (placed_i, placed_k) = {
                             let pos = &Piece::positions[i];
                             let coo_val = coo.extract::<PyRef<Hex>>().ok();
-                            let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
+                            let base = if let Some(c) = coo_val {
+                                (c.i, c.k)
+                            } else if let Ok(tuple) = coo.extract::<(i32, i32)>() {
+                                (tuple.0, tuple.1)
+                            } else {
+                                (0, 0)
+                            };
                             (pos.i + base.0, pos.k + base.1)
                         };
-                        if !HexEngine::check_range_coords(placed_i, placed_k, self.radius).unwrap_or(false) || self.state_of(placed_i, placed_k).unwrap_or(false) {
+                        if !HexEngine::check_range_coords(placed_i, placed_k, self.radius)
+                            .unwrap_or(false)
+                            || self.state_of(placed_i, placed_k).unwrap_or(false)
+                        {
                             return Ok(0.0);
                         }
-                        total_possible += 6 - piece_neighbors_of(Piece {state: state}, placed_i, placed_k);
-                        total_populated += self.count_neighbors_coordinate(placed_i, placed_k).unwrap_or(0);
+                        total_possible +=
+                            6 - piece_neighbors_of(Piece { state }, placed_i, placed_k);
+                        total_populated += self
+                            .count_neighbors_coordinate(placed_i, placed_k)
+                            .unwrap_or(0);
                     }
                 }
-                Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
+                Ok(if total_possible > 0 {
+                    total_populated as f64 / total_possible as f64
+                } else {
+                    0.0
+                })
             })
         } else {
-            Err(pyo3::exceptions::PyTypeError::new_err("Piece must be an instance of Piece or an integer representing a Piece state"))
+            Err(pyo3::exceptions::PyTypeError::new_err(
+                "Piece must be an instance of Piece or an integer representing a Piece state",
+            ))
         }
     }
 
     /// Compute the entropy of the hexagonal grid based on the distribution of 7-block patterns.
-    /// 
+    ///
     /// Entropy is calculated using the Shannon entropy formula, measuring the randomness of block
     /// arrangements in the grid. Each pattern consists of a central block and its six neighbors,
     /// forming a 7-block hexagonal box, as defined by the _get_pattern method. The entropy reflects
@@ -4093,10 +4528,10 @@ impl HexEngine {
 
     /// Generate all possible HexEngine instances representing valid occupancy states for a given radius.
     /// All generated HexEngines will have eliminations already applied, meaning they will not contain any fully occupied lines.
-    /// 
+    ///
     /// For large radius values, this method may take a long time and significant resource to compute due to the exponential growth of possible states.
     /// It is recommended to cache the results for specific radius values to avoid recomputation. HexEngine does not provide a dictionary for caching such data.
-    /// 
+    ///
     /// Arguments:
     /// - radius (int): The radius of the hexagonal grid for which to generate all possible HexEngines.
     /// Returns:
@@ -4106,7 +4541,9 @@ impl HexEngine {
     #[classmethod]
     pub fn all_engines(_cls: &pyo3::Bound<'_, PyType>, radius: usize) -> PyResult<Vec<HexEngine>> {
         if radius < 2 {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Radius must be an integer greater than 1"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Radius must be an integer greater than 1",
+            ));
         }
         let length = 1 + 3 * radius * (radius - 1);
         let mut result = Vec::new();
@@ -4127,7 +4564,7 @@ impl HexEngine {
 }
 
 /// NumPy conversions of HexEngine block states
-/// 
+///
 /// The full list is:
 /// - `to_numpy_{dtype}`
 /// - `from_numpy_{dtype}`
@@ -4277,8 +4714,8 @@ macro_rules! engine_adjacency_matrix_methods {
 with_numpy_dtypes!(engine_adjacency_matrix_methods; [bool int8 uint8 int16 uint16 int32 uint32 int64 uint64 float16 float32 float64]);
 
 /// Index-valued NumPy structures of HexEngine
-/// 
-/// This contains adjacency list and correspondence lists. 
+///
+/// This contains adjacency list and correspondence lists.
 #[cfg(feature = "numpy")]
 macro_rules! engine_index_list_methods {
     ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
@@ -4355,9 +4792,9 @@ use rand::RngExt;
 #[pyfunction]
 /// Generate a random HexEngine with a given radius. True randomness or random distribution is not guaranteed
 /// as elimination is applied to the engine, reducing some instances to other instances.
-/// 
+///
 /// This is superior than HexEngine.all_engines(radius) because it does not consume significant memory and time.
-/// 
+///
 /// Arguments:
 /// - radius (int): The radius of the hexagonal game board.
 /// Returns:
@@ -4366,7 +4803,9 @@ use rand::RngExt;
 /// - TypeError: If radius is not an integer or is less than 2.
 pub fn random_engine(radius: usize) -> PyResult<HexEngine> {
     if radius < 2 {
-        return Err(pyo3::exceptions::PyTypeError::new_err("Radius must be an integer greater than 1"));
+        return Err(pyo3::exceptions::PyTypeError::new_err(
+            "Radius must be an integer greater than 1",
+        ));
     }
     let length = 1 + 3 * radius * (radius - 1);
     let mut rng = rand::rng();
@@ -4379,8 +4818,8 @@ pub fn random_engine(radius: usize) -> PyResult<HexEngine> {
     Ok(engine)
 }
 
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 /// PieceFactory is a utility class that provides methods for creating and managing game pieces.
 /// It includes a predefined set of pieces, their corresponding byte values, and reverse mappings
@@ -4478,7 +4917,10 @@ impl PieceFactory {
         if let Some(&byte) = PIECE_MAP.get(name) {
             Ok(Piece { state: byte })
         } else {
-            Err(pyo3::exceptions::PyValueError::new_err(format!("Piece '{}' not found in factory.", name)))
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Piece '{}' not found in factory.",
+                name
+            )))
         }
     }
 
@@ -4492,11 +4934,14 @@ impl PieceFactory {
     /// - ValueError: If the piece byte value is not found in the factory.
     #[staticmethod]
     pub fn get_piece_name(p: &Piece) -> PyResult<String> {
-        let byte = p.state as u8;
+        let byte = p.state;
         if let Some(name) = REVERSE_PIECE_MAP.get(&byte) {
             Ok(name.to_string())
         } else {
-            Err(pyo3::exceptions::PyValueError::new_err(format!("Piece with byte value {} not found in factory.", byte)))
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Piece with byte value {} not found in factory.",
+                byte
+            )))
         }
     }
 
@@ -4543,90 +4988,90 @@ impl PieceFactory {
             }
             let j = rng.random_range(0..25);
             if j == 0 || j == 1 {
-                return Self::get_piece("fan_4_a");
+                Self::get_piece("fan_4_a")
             } else if j == 2 || j == 3 {
-                return Self::get_piece("fan_4_b");
+                Self::get_piece("fan_4_b")
             } else if j == 4 {
-                return Self::get_piece("corner_4_i_l");
+                Self::get_piece("corner_4_i_l")
             } else if j == 5 {
-                return Self::get_piece("corner_4_i_r");
+                Self::get_piece("corner_4_i_r")
             } else if j == 6 {
-                return Self::get_piece("corner_4_j_l");
+                Self::get_piece("corner_4_j_l")
             } else if j == 7 {
-                return Self::get_piece("corner_4_j_r");
+                Self::get_piece("corner_4_j_r")
             } else if j == 8 {
-                return Self::get_piece("corner_4_k_l");
+                Self::get_piece("corner_4_k_l")
             } else if j == 9 {
-                return Self::get_piece("corner_4_k_r");
+                Self::get_piece("corner_4_k_r")
             } else if j < 14 {
                 let c = (b'a' + (j - 10) as u8) as char;
-                return Self::get_piece(&format!("asym_4_i_{}", c));
+                Self::get_piece(&format!("asym_4_i_{}", c))
             } else if j < 18 {
                 let c = (b'a' + (j - 14) as u8) as char;
-                return Self::get_piece(&format!("asym_4_j_{}", c));
+                Self::get_piece(&format!("asym_4_j_{}", c))
             } else if j < 22 {
                 let c = (b'a' + (j - 18) as u8) as char;
-                return Self::get_piece(&format!("asym_4_k_{}", c));
+                Self::get_piece(&format!("asym_4_k_{}", c))
             } else {
-                return Self::get_piece("uno");
+                Self::get_piece("uno")
             }
         } else {
             let i = rng.random_range(0..86);
             if i < 6 {
-                return Self::get_piece("triangle_3_a");
+                Self::get_piece("triangle_3_a")
             } else if i < 12 {
-                return Self::get_piece("triangle_3_b");
+                Self::get_piece("triangle_3_b")
             } else if i < 16 {
-                return Self::get_piece("line_3_i");
+                Self::get_piece("line_3_i")
             } else if i < 20 {
-                return Self::get_piece("line_3_j");
+                Self::get_piece("line_3_j")
             } else if i < 24 {
-                return Self::get_piece("line_3_k");
+                Self::get_piece("line_3_k")
             } else if i < 26 {
-                return Self::get_piece("corner_3_i_r");
+                Self::get_piece("corner_3_i_r")
             } else if i < 28 {
-                return Self::get_piece("corner_3_j_r");
+                Self::get_piece("corner_3_j_r")
             } else if i < 30 {
-                return Self::get_piece("corner_3_k_r");
+                Self::get_piece("corner_3_k_r")
             } else if i < 32 {
-                return Self::get_piece("corner_3_i_l");
+                Self::get_piece("corner_3_i_l")
             } else if i < 34 {
-                return Self::get_piece("corner_3_j_l");
+                Self::get_piece("corner_3_j_l")
             } else if i < 36 {
-                return Self::get_piece("corner_3_k_l");
+                Self::get_piece("corner_3_k_l")
             } else if i < 40 {
-                return Self::get_piece("rhombus_4_i");
+                Self::get_piece("rhombus_4_i")
             } else if i < 44 {
-                return Self::get_piece("rhombus_4_j");
+                Self::get_piece("rhombus_4_j")
             } else if i < 48 {
-                return Self::get_piece("rhombus_4_k");
+                Self::get_piece("rhombus_4_k")
             } else if i < 54 {
-                return Self::get_piece("fan_4_a");
+                Self::get_piece("fan_4_a")
             } else if i < 60 {
-                return Self::get_piece("fan_4_b");
+                Self::get_piece("fan_4_b")
             } else if i < 62 {
-                return Self::get_piece("corner_4_i_l");
+                Self::get_piece("corner_4_i_l")
             } else if i < 64 {
-                return Self::get_piece("corner_4_i_r");
+                Self::get_piece("corner_4_i_r")
             } else if i < 66 {
-                return Self::get_piece("corner_4_j_l");
+                Self::get_piece("corner_4_j_l")
             } else if i < 68 {
-                return Self::get_piece("corner_4_j_r");
+                Self::get_piece("corner_4_j_r")
             } else if i < 70 {
-                return Self::get_piece("corner_4_k_l");
+                Self::get_piece("corner_4_k_l")
             } else if i < 72 {
-                return Self::get_piece("corner_4_k_r");
+                Self::get_piece("corner_4_k_r")
             } else if i < 76 {
                 let c = (b'a' + (i - 72) as u8) as char;
-                return Self::get_piece(&format!("asym_4_i_{}", c));
+                Self::get_piece(&format!("asym_4_i_{}", c))
             } else if i < 80 {
                 let c = (b'a' + (i - 76) as u8) as char;
-                return Self::get_piece(&format!("asym_4_j_{}", c));
+                Self::get_piece(&format!("asym_4_j_{}", c))
             } else if i < 84 {
                 let c = (b'a' + (i - 80) as u8) as char;
-                return Self::get_piece(&format!("asym_4_k_{}", c));
+                Self::get_piece(&format!("asym_4_k_{}", c))
             } else {
-                return Self::get_piece("full");
+                Self::get_piece("full")
             }
         }
     }
@@ -4639,11 +5084,13 @@ impl PieceFactory {
     /// - list[Piece]: A list of all Piece instances defined in the factory.
     #[staticmethod]
     pub fn all_pieces() -> Vec<Piece> {
-        PIECE_MAP.values().map(|&byte| Piece { state: byte }).collect()
+        PIECE_MAP
+            .values()
+            .map(|&byte| Piece { state: byte })
+            .collect()
     }
 }
 
-#[allow(non_snake_case)]
 // Note for underscoring and getter, setters in Game class:
 // The python implementation has those private attributes with double underscores
 // Although attributes in Game are never intended to be modified directly from outside,
@@ -4662,49 +5109,50 @@ impl PieceFactory {
 /// - score (int): The current score of the game.
 /// - turn (int): The current turn number in the game.
 /// - end (bool): Whether the game has ended.
-/// 
+///
 /// Special Methods:
 /// - hpyhex_rs_add_piece_with_index: Adds a piece to the queue at a specified index.
-/// 
+///
 /// NumPy Integration:
 /// If the 'numpy' feature is enabled, Game provides methods to convert the piece queue, the engine,
 /// and the whole game state into NumPy ndarray representations for efficient numerical processing.
-/// 
+///
 /// Queue Conversion Methods:
 /// - queue_to_numpy_flat: Converts the piece queue into a flat NumPy ndarray.
 /// - queue_to_numpy_stacked: Converts the piece queue into a stacked NumPy ndarray.
-/// 
+///
 /// For specific dtype, the methods are named queue_to_numpy_{dtype}_flat and queue_to_numpy_{dtype}_stacked,
 /// where {dtype} can be 'bool', 'int8', etc.
-/// 
+///
 /// Engine Conversion Methods:
-/// 
+///
 /// There are no special engine conversion methods in Game, but the engine attribute can be accessed
 /// directly to perform conversions using HexEngine's methods via game.engine.to_numpy. The converted
 /// ndarray will be an one-dimensional array representing the engine's state with the order of blocks according
 /// to the linear indexing of HexEngine, which can be found in HexEngine documentation.
-/// 
+///
 /// For specific dtype, the methods are named engine_to_numpy_{dtype}, where {dtype} can be 'bool', 'int8', etc.
-/// 
+///
 /// See the "NumPy Integration" of HexEngine for more details on engine conversion methods.
-/// 
+///
 /// Game Conversion Methods:
 /// - game_to_numpy: Converts the entire game state (engine and queue) into a NumPy ndarray.
 /// - game_from_numpy_with_radius: Creates a Game instance from a NumPy ndarray representation with explicit radius.
 /// - game_from_numpy_with_queue_length: Creates a Game instance from a NumPy ndarray representation with explicit queue length.
-/// 
+///
 /// There is no generic game_from_numpy method because the radius or queue length must be specified to
 /// correctly interpret the ndarray representation.
-/// 
+///
 /// For specific dtype, the methods are named game_to_numpy_{dtype}, game_from_numpy_with_radius_{dtype},
 /// and game_from_numpy_with_queue_length_{dtype}, where {dtype} can be 'bool', 'int8', etc.
-/// 
+///
 /// Accept a move as a NumPy ndarray mask or max tensor:
 /// - move_with_numpy_mask_*: Accepts a move represented as a NumPy ndarray mask.
 /// - move_with_numpy_max_*: Accepts a move represented as a NumPy ndarray max tensor.
-/// 
+///
 /// For specific dtype, the methods are named move_with_numpy_mask_{dtype} and move_with_numpy_max_{dtype},
 /// where {dtype} can be 'bool', 'int8', etc.
+#[allow(non_snake_case)]
 #[pyclass(from_py_object)]
 pub struct Game {
     #[pyo3(get, set)]
@@ -4732,17 +5180,18 @@ impl Clone for Game {
 }
 
 #[cfg(feature = "numpy")]
-fn queue_to_numpy_flat_impl<'py, T>(
-    py: Python<'py>,
-    pieces: &Vec<Piece>,
-) -> Py<PyArray1<T>>
+fn queue_to_numpy_flat_impl<'py, T>(py: Python<'py>, pieces: &Vec<Piece>) -> Py<PyArray1<T>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
     let mut arr = Vec::with_capacity(pieces.len() * 7);
     for piece in pieces.iter() {
         for i in 0..7 {
-            let b = if (piece.state & (1 << (6 - i))) != 0 { T::one() } else { T::zero() };
+            let b = if (piece.state & (1 << (6 - i))) != 0 {
+                T::one()
+            } else {
+                T::zero()
+            };
             arr.push(b);
         }
     }
@@ -4750,10 +5199,7 @@ where
 }
 
 #[cfg(feature = "numpy")]
-fn queue_to_numpy_stacked_impl<'py, T>(
-    py: Python<'py>,
-    pieces: &Vec<Piece>,
-) -> Py<PyArray2<T>>
+fn queue_to_numpy_stacked_impl<'py, T>(py: Python<'py>, pieces: &Vec<Piece>) -> Py<PyArray2<T>>
 where
     T: BitScalar + Copy + numpy::Element,
 {
@@ -4768,13 +5214,41 @@ where
         let s = piece.state;
 
         let v = [
-            if s & 0b1000000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0100000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0010000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0001000 != 0 { T::one() } else { T::zero() },
-            if s & 0b0000100 != 0 { T::one() } else { T::zero() },
-            if s & 0b0000010 != 0 { T::one() } else { T::zero() },
-            if s & 0b0000001 != 0 { T::one() } else { T::zero() },
+            if s & 0b1000000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0100000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0010000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0001000 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0000100 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0000010 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
+            if s & 0b0000001 != 0 {
+                T::one()
+            } else {
+                T::zero()
+            },
         ];
 
         vec.extend_from_slice(&v);
@@ -4791,15 +5265,12 @@ impl Game {
     /// Get the NumPy ndarray boolean representation of the entire Game state.
     /// Because there is no way for engine and queue to have the same shape,
     /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
     #[cfg(feature = "numpy")]
     #[allow(deprecated)]
-    fn game_to_numpy_impl<'py, T>(
-        &self,
-        py: Python<'py>,
-    ) -> Py<PyArray1<T>>
+    fn game_to_numpy_impl<'py, T>(&self, py: Python<'py>) -> Py<PyArray1<T>>
     where
         T: BitScalar + Copy + numpy::Element,
     {
@@ -4811,7 +5282,11 @@ impl Game {
         arr.extend_from_slice(engine_slice);
         for piece in self._Game__queue.iter() {
             for i in 0..7 {
-                let b = if (piece.state & (1 << (6 - i))) != 0 { T::one() } else { T::zero() };
+                let b = if (piece.state & (1 << (6 - i))) != 0 {
+                    T::one()
+                } else {
+                    T::zero()
+                };
                 arr.push(b);
             }
         }
@@ -4820,7 +5295,7 @@ impl Game {
 
     /// Create a Game instance from a NumPy ndarray representation with explicit radius.
     /// The input array should represent the engine followed by the queue.
-    /// 
+    ///
     /// Arguments:
     /// - radius (usize): The radius of the hexagonal grid.
     /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
@@ -4841,7 +5316,12 @@ impl Game {
         let engine_length = 1 + 3 * radius * (radius - 1);
         let expected_length = engine_length + (slice.len() - engine_length) / 7 * 7;
         if slice.len() != expected_length {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array length {} does not match expected length {} for radius {}", slice.len(), expected_length, radius)));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Input array length {} does not match expected length {} for radius {}",
+                slice.len(),
+                expected_length,
+                radius
+            )));
         }
         let engine_slice = &slice[0..engine_length];
         let queue_length = (slice.len() - engine_length) / 7;
@@ -4856,7 +5336,8 @@ impl Game {
             }
             queue.push(Piece { state });
         }
-        let engine = HexEngine::from_numpy_engine_unboxed_explicit_radius_impl::<T>(engine_slice, radius)?;
+        let engine =
+            HexEngine::from_numpy_engine_unboxed_explicit_radius_impl::<T>(engine_slice, radius)?;
         let game = Game {
             _Game__engine: Py::new(py, engine)?,
             _Game__queue: queue,
@@ -4869,7 +5350,7 @@ impl Game {
 
     /// Create a Game instance from a NumPy ndarray representation with explicit queue length.
     /// The input array should represent the engine followed by the queue.
-    /// 
+    ///
     /// Arguments:
     /// - length (usize): The length of the piece queue.
     /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
@@ -4892,7 +5373,10 @@ impl Game {
         let radius = match HexEngine::calc_radius(engine_length) {
             Some(r) => r,
             None => {
-                return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array length {} does not correspond to a valid engine length for any radius", slice.len())));
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Input array length {} does not correspond to a valid engine length for any radius",
+                    slice.len()
+                )));
             }
         };
         let engine_slice = &slice[0..engine_length];
@@ -4907,7 +5391,8 @@ impl Game {
             }
             queue.push(Piece { state });
         }
-        let engine = HexEngine::from_numpy_engine_unboxed_explicit_radius_impl::<T>(engine_slice, radius)?;
+        let engine =
+            HexEngine::from_numpy_engine_unboxed_explicit_radius_impl::<T>(engine_slice, radius)?;
         let game = Game {
             _Game__engine: Py::new(py, engine)?,
             _Game__queue: queue,
@@ -4922,11 +5407,11 @@ impl Game {
     /// The mask should be a 2D array where the first dimension corresponds to the piece index
     /// in the queue and the second dimension corresponds to the coordinate index on the engine.
     /// A value of true in the mask indicates the position where the piece should be placed.
-    /// 
+    ///
     /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
     /// and there MUST be exactly one true value in the entire mask. If there are multiple or no true values,
     /// an error will be raised.
-    /// 
+    ///
     /// Arguments:
     /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
     /// Returns:
@@ -4935,7 +5420,11 @@ impl Game {
     /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one true value,
     ///   or if the move is invalid due to collisions or out-of-bounds placement.
     #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask<T>(&mut self, py: Python, array: Bound<'_, PyArray2<T>>) -> PyResult<bool>
+    pub fn move_with_numpy_mask<T>(
+        &mut self,
+        py: Python,
+        array: Bound<'_, PyArray2<T>>,
+    ) -> PyResult<bool>
     where
         T: BitScalar + Copy + numpy::Element,
     {
@@ -4951,7 +5440,10 @@ impl Game {
             engine.__len__()
         };
         if shape[0] != expected_queue_length || shape[1] != expected_engine_length {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array shape {:?} does not match expected shape ({}, {})", shape, expected_queue_length, expected_engine_length)));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Input array shape {:?} does not match expected shape ({}, {})",
+                shape, expected_queue_length, expected_engine_length
+            )));
         }
         let mut piece_index: Option<usize> = None;
         let mut coord_index: Option<usize> = None;
@@ -4961,7 +5453,9 @@ impl Game {
                 let val = slice[i * shape[1] + j];
                 if T::predicate(val) {
                     if found {
-                        return Err(pyo3::exceptions::PyValueError::new_err("Mask contains multiple true values; exactly one is required"));
+                        return Err(pyo3::exceptions::PyValueError::new_err(
+                            "Mask contains multiple true values; exactly one is required",
+                        ));
                     }
                     found = true;
                     piece_index = Some(i);
@@ -4974,7 +5468,9 @@ impl Game {
             }
         }
         if piece_index.is_none() || coord_index.is_none() {
-            return Err(pyo3::exceptions::PyValueError::new_err("No valid move found in the mask"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "No valid move found in the mask",
+            ));
         }
         let piece_index = piece_index.unwrap();
         let coord_index = coord_index.unwrap();
@@ -4986,10 +5482,10 @@ impl Game {
     /// The array should be a 2D array where the first dimension corresponds to the piece index
     /// in the queue and the second dimension corresponds to the coordinate index on the engine.
     /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
+    ///
     /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
     /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
+    ///
     /// Arguments:
     /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
     /// Returns:
@@ -4997,7 +5493,11 @@ impl Game {
     /// Raises:
     /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
     #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max<T>(&mut self, py: Python, array: Bound<'_, PyArray2<T>>) -> PyResult<bool>
+    pub fn move_with_numpy_max<T>(
+        &mut self,
+        py: Python,
+        array: Bound<'_, PyArray2<T>>,
+    ) -> PyResult<bool>
     where
         T: BitScalar + Copy + numpy::Element + PartialOrd,
     {
@@ -5012,7 +5512,10 @@ impl Game {
             engine.__len__()
         };
         if shape[0] != expected_queue_length || shape[1] != expected_engine_length {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!("Input array shape {:?} does not match expected shape ({}, {})", shape, expected_queue_length, expected_engine_length)));
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Input array shape {:?} does not match expected shape ({}, {})",
+                shape, expected_queue_length, expected_engine_length
+            )));
         }
         let mut max_value: Option<T> = None;
         let mut piece_index: Option<usize> = None;
@@ -5028,7 +5531,9 @@ impl Game {
             }
         }
         if piece_index.is_none() || coord_index.is_none() {
-            return Err(pyo3::exceptions::PyValueError::new_err("Input array is empty"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Input array is empty",
+            ));
         }
         let piece_index = piece_index.unwrap();
         let coord_index = coord_index.unwrap();
@@ -5039,24 +5544,31 @@ impl Game {
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
 
     /// Add a piece from the queue to the game engine at the specified coordinates.
-    /// 
+    ///
     /// This method updates the game state, including the score and turn number,
     /// and checks for eliminations and game end conditions.
-    /// 
+    ///
     /// Arguments:
     /// - python (Python): The Python interpreter context.
     /// - piece_index (usize): The index of the piece in the queue to add.
     /// - coord (Bound[Hex]): The coordinates where the piece should be added.
+    ///
     /// Returns:
     /// - bool: True if the piece was successfully added, False otherwise.
-    pub fn add_piece_checked(&mut self, python: Python, piece_index: usize, coord: &Bound<'_,Hex>) -> PyResult<bool> {
+    pub fn add_piece_checked(
+        &mut self,
+        python: Python,
+        piece_index: usize,
+        coord: &Bound<'_, Hex>,
+    ) -> PyResult<bool> {
         // Check piece exists
         if piece_index >= self._Game__queue.len() {
             return Ok(false);
         }
         let piece = self._Game__queue[piece_index].clone();
         // Add piece to engine and increment score and turn
-        let add_result = { self._Game__engine.bind(python) }.call_method1("add_piece", (coord, piece.clone()));
+        let add_result =
+            { self._Game__engine.bind(python) }.call_method1("add_piece", (coord, piece.clone()));
         if let Err(ref e) = add_result {
             if e.is_instance_of::<pyo3::exceptions::PyValueError>(python) {
                 return Ok(false);
@@ -5094,14 +5606,14 @@ impl Game {
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
 
     /// Serialize the Game instance into a byte vector according to the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The serialization format is as follows:
     /// - First 4 bytes: Little-endian u32 representing the score.
     /// - Next 4 bytes: Little-endian u32 representing the turn number.
     /// - Next 4 bytes: Little-endian u32 representing the length of the piece queue.
     /// - Next 'length' bytes: Each byte represents a Piece in the queue. See `hpyhex_rs_serialize` method of Piece for details.
     /// - Remaining bytes: Binary representation of the HexEngine. See `hpyhex_rs_serialize` method of HexEngine for details.
-    /// 
+    ///
     /// Returns:
     /// - bytes: A byte vector containing the serialized state of the Game.
     pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
@@ -5113,20 +5625,20 @@ impl Game {
             vec.push(piece.state);
         }
         // Add engine binary representation
-        let engine_vec: Vec<u8> = {(&*self._Game__engine.borrow(py)).into()};
+        let engine_vec: Vec<u8> = { (&*self._Game__engine.borrow(py)).into() };
         vec.extend_from_slice(&engine_vec);
         pyo3::types::PyBytes::new(py, &vec)
     }
 
     /// Deserialize a byte vector into a Game instance according to the format used by the Rust hpyhex-rs crate.
-    /// 
+    ///
     /// The deserialization format is as follows:
     /// - First 4 bytes: Little-endian u32 representing the score.
     /// - Next 4 bytes: Little-endian u32 representing the turn number.
     /// - Next 4 bytes: Little-endian u32 representing the length of the piece queue.
     /// - Next 'length' bytes: Each byte represents a Piece in the queue. See `hpyhex_rs_deserialize` method of Piece for details.
     /// - Remaining bytes: Binary representation of the HexEngine. See `hpyhex_rs_deserialize` method of HexEngine for details.
-    /// 
+    ///
     /// Arguments:
     /// - data: A byte vector containing the serialized state of the Game.
     /// Returns:
@@ -5136,14 +5648,18 @@ impl Game {
         let bytes = data.cast::<pyo3::types::PyBytes>()?;
         let slice = bytes.as_bytes();
         if slice.len() < 12 {
-            return Err(pyo3::exceptions::PyValueError::new_err("Data too short to deserialize Game"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Data too short to deserialize Game",
+            ));
         }
         let score = u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]) as u64;
         let turn = u32::from_le_bytes([slice[4], slice[5], slice[6], slice[7]]) as u64;
         let queue_length = u32::from_le_bytes([slice[8], slice[9], slice[10], slice[11]]) as usize;
         let expected_length = 12 + queue_length + slice.len() - 12 - queue_length;
         if slice.len() < expected_length {
-            return Err(pyo3::exceptions::PyValueError::new_err("Data too short to deserialize Game with given queue length"));
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Data too short to deserialize Game with given queue length",
+            ));
         }
         let mut queue = Vec::with_capacity(queue_length);
         for i in 0..queue_length {
@@ -5163,11 +5679,11 @@ impl Game {
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
-    
+
     /// Get the NumPy ndarray boolean representation of the entire Game state.
     /// Because there is no way for engine and queue to have the same shape,
     /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
     #[cfg(feature = "numpy")]
@@ -5176,7 +5692,7 @@ impl Game {
     }
 
     /// Get the flat NumPy ndarray boolean representation of the Game queue.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
     #[cfg(feature = "numpy")]
@@ -5185,7 +5701,7 @@ impl Game {
     }
 
     /// Get the stacked NumPy ndarray boolean representation of the Game queue.
-    /// 
+    ///
     /// Returns:
     /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
     #[cfg(feature = "numpy")]
@@ -5203,7 +5719,12 @@ impl Game {
     /// - position_index (int): The index of the position in the engine where the piece should be placed.
     /// Returns:
     /// - bool: True if the piece was successfully added, False otherwise.
-    pub fn hpyhex_rs_add_piece_with_index(&mut self, python: Python, piece_index: usize, position_index: usize) -> PyResult<bool> {
+    pub fn hpyhex_rs_add_piece_with_index(
+        &mut self,
+        python: Python,
+        piece_index: usize,
+        position_index: usize,
+    ) -> PyResult<bool> {
         let engine_bound = self._Game__engine.bind(python);
         let mut engine = engine_bound.extract::<HexEngine>()?;
         // Check piece and position exists
@@ -5248,7 +5769,7 @@ impl Game {
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
-    
+
     /// Initialize the game with a game engine of radius r and game queue of length q.
     ///
     /// Parameters:
@@ -5275,12 +5796,16 @@ impl Game {
             engine_ref
         } else if let Ok(radius) = engine.extract::<usize>() {
             if radius < 2 {
-                return Err(pyo3::exceptions::PyValueError::new_err("Radius must be greater than or equals two"));
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Radius must be greater than or equals two",
+                ));
             }
             let engine_raw = HexEngine::try_from(radius)?;
             Py::new(engine.py(), engine_raw)?
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Engine must be a HexEngine instance or an integer representing the radius"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Engine must be a HexEngine instance or an integer representing the radius",
+            ));
         };
 
         // Queue: list[Piece] or int (queue size)
@@ -5288,7 +5813,9 @@ impl Game {
             list
         } else if let Ok(qsize) = queue.extract::<usize>() {
             if qsize < 1 {
-                return Err(pyo3::exceptions::PyValueError::new_err("Queue size must be greater than or equals one"));
+                return Err(pyo3::exceptions::PyValueError::new_err(
+                    "Queue size must be greater than or equals one",
+                ));
             }
             let mut pieces = Vec::with_capacity(qsize);
             for _ in 0..qsize {
@@ -5296,29 +5823,29 @@ impl Game {
             }
             pieces
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Queue must be a list of Piece instances or an integer representing the size of the queue"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Queue must be a list of Piece instances or an integer representing the size of the queue",
+            ));
         };
 
         // initial_turn: Option<u32> (default 0)
-        let _Game__turn = match initial_turn {
-            Some(t) => t,
-            None => 0,
-        };
+        let _Game__turn = initial_turn.unwrap_or_default();
 
         // initial_score: Option<u64> (default 0)
-        let _Game__score = match initial_score {
-            Some(s) => s,
-            None => 0,
-        };
+        let _Game__score = initial_score.unwrap_or_default();
 
         // Validate initial_turn and initial_score
         let _Game__turn = if _Game__turn < 0 {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Initial turn must be a non-negative integer"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Initial turn must be a non-negative integer",
+            ));
         } else {
             _Game__turn as u64
         };
         let _Game__score = if _Game__score < 0 {
-            return Err(pyo3::exceptions::PyTypeError::new_err("Initial score must be a non-negative integer"));
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "Initial score must be a non-negative integer",
+            ));
         } else {
             _Game__score as u64
         };
@@ -5339,7 +5866,12 @@ impl Game {
     /// - coord (Hex): The coordinates where the piece should be placed.
     /// Returns:
     /// - bool: True if the piece was successfully added, False otherwise.
-    pub fn add_piece(&mut self, python: Python, piece_index: &Bound<'_, PyAny>, coord: &Bound<'_, PyAny>) -> PyResult<bool> {
+    pub fn add_piece(
+        &mut self,
+        python: Python,
+        piece_index: &Bound<'_, PyAny>,
+        coord: &Bound<'_, PyAny>,
+    ) -> PyResult<bool> {
         // Extract piece_index
         let piece_index: usize = match piece_index.extract() {
             Ok(idx) => idx,
@@ -5361,7 +5893,9 @@ impl Game {
     /// Returns:
     /// - bool: True if the move was successfully made, False otherwise.
     pub fn make_move(&mut self, python: Python, algorithm: &Bound<'_, PyAny>) -> PyResult<bool> {
-        if self._Game__end { return Ok(false); }
+        if self._Game__end {
+            return Ok(false);
+        }
         let engine_bound = self._Game__engine.bind(python);
         let queue_py = self.queue(python)?;
         let result = algorithm.call1((engine_bound, queue_py));
@@ -5373,12 +5907,12 @@ impl Game {
                     Err(_) => usize::MAX,
                 };
                 let item1 = tuple.get_item(1);
-                let coord: Bound<'_, Hex>;
-                match &item1 {
+
+                let coord: Bound<'_, Hex> = match &item1 {
                     Ok(val) => {
                         let py_hex = val.extract::<Py<Hex>>()?;
-                        coord = py_hex.bind(python).clone();
-                    },
+                        py_hex.bind(python).clone()
+                    }
                     Err(_) => return Ok(false),
                 };
                 (index, coord)
@@ -5392,7 +5926,7 @@ impl Game {
     }
 
     /// Return a string representation of the game state.
-    /// 
+    ///
     /// Returns:
     /// - str: A string representation of the game state, including engine, queue, score, turn, and whether the game has ended.
     fn __str__(&self, py: Python) -> String {
@@ -5407,20 +5941,28 @@ impl Game {
         queue_str.push(']');
         format!(
             "Game(engine={:?}, queue={}, score={}, turn={}, end={})",
-            (&*self._Game__engine.borrow(py)).__str__(), queue_str, self._Game__score, self._Game__turn, self._Game__end
+            self._Game__engine.borrow(py).__str__(),
+            queue_str,
+            self._Game__score,
+            self._Game__turn,
+            self._Game__end
         )
     }
 
     /// Return a string representation of the game state.
-    /// 
+    ///
     /// Returns:
     /// - str: A string representation of the game state.
     fn __repr__(&self, py: Python) -> String {
-        format!("({}, {:?})", (&*self._Game__engine.borrow(py)).__repr__(), self._Game__queue)
+        format!(
+            "({}, {:?})",
+            self._Game__engine.borrow(py).__repr__(),
+            self._Game__queue
+        )
     }
 
     /// Check equality between this game and another game.
-    /// 
+    ///
     /// Parameters:
     /// - other (Game): The other game to compare with.
     /// Returns:
@@ -5429,17 +5971,15 @@ impl Game {
         let other_game: Game = other.extract::<Game>()?;
         let self_engine = &*self._Game__engine.borrow(py);
         let other_engine = &*other_game._Game__engine.borrow(py);
-        Ok(
-            self_engine == other_engine &&
-            self._Game__queue == other_game._Game__queue &&
-            self._Game__score == other_game._Game__score &&
-            self._Game__turn == other_game._Game__turn &&
-            self._Game__end == other_game._Game__end
-        )
+        Ok(self_engine == other_engine
+            && self._Game__queue == other_game._Game__queue
+            && self._Game__score == other_game._Game__score
+            && self._Game__turn == other_game._Game__turn
+            && self._Game__end == other_game._Game__end)
     }
 
     /// Returns whether this game has ended.
-    /// 
+    ///
     /// Returns:
     /// - is_end (bool): True if the game has ended, False otherwise.
     #[getter]
@@ -5448,7 +5988,7 @@ impl Game {
     }
 
     /// Returns the current result of this game.
-    /// 
+    ///
     /// Returns:
     /// - result (tuple[int, int]): A tuple containing the current turn number and score, in the order (turn, score).
     #[getter]
@@ -5457,7 +5997,7 @@ impl Game {
     }
 
     /// Returns the current turn number of this game.
-    /// 
+    ///
     /// Returns:
     /// - turn (int): The current turn number in the game.
     #[getter]
@@ -5466,7 +6006,7 @@ impl Game {
     }
 
     /// Returns the current score of this game.
-    /// 
+    ///
     /// Returns:
     /// - score (int): The current score in the game.
     #[getter]
@@ -5484,20 +6024,16 @@ impl Game {
     }
 
     /// Returns the reference to the queue of pieces available in this game.
-    /// 
+    ///
     /// Returns:
     /// - queue (list[Piece]): The list of pieces currently in the queue.
     #[getter]
     fn queue<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         let list = PyList::empty(py);
         for piece in &self._Game__queue {
-            match Py::new(py, piece.clone()) {
-                Ok(obj) => {
-                    if let Err(e) = list.append(obj.bind(py)) {
-                        return Err(e);
-                    }
-                }
-                Err(e) => return Err(e),
+            {
+                let obj = Py::new(py, piece.clone())?;
+                list.append(obj.bind(py))?;
             }
         }
         Ok(list)
@@ -5505,7 +6041,7 @@ impl Game {
 }
 
 /// NumPy conversions of Game state
-/// 
+///
 /// The methods are:
 /// - `to_numpy_{dtype}`
 /// - `queue_to_numpy_{dtype}_{flat,stacked}`
