@@ -79,3 +79,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `HexEngine` index-to-coordinate conversion (`coordinate_block` and every internal use) is now a constant-time closed form instead of a row-by-row scan.
+- Upgraded PyO3 and rust-numpy from 0.21 to 0.30.
+- Remove support for Python 3.8, as a consequence of the PyO3 upgrade.
+- Generate the dtype-specific NumPy methods (`to_numpy_{dtype}`, `from_numpy_{dtype}`, `move_with_numpy_mask_{dtype}`, etc.) from one template per method family instead of writing each dtype out by hand. The available methods and their signatures are unchanged.
+- Unified the docstrings of the dtype-specific NumPy methods with same descriptions and messages.
+
+### Fixed
+- Fixed every float16 (`*_float16`) NumPy method hanging or crashing due to a recursive float16 dtype lookup that overflowed the stack.
+- Fixed `Piece.vec_from_numpy_{dtype}_stacked` raising "Failed to access row in input array" for every dtype wider than one byte, and rejecting non-contiguous arrays, including the arrays returned by `Piece.vec_to_numpy_{dtype}_stacked`.
+- Fixed compilation errors when building with the `half` feature but without `numpy`.

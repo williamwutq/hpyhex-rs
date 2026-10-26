@@ -7,7 +7,7 @@ use numpy::ndarray::array;
 #[cfg(feature = "numpy")]
 use numpy::ndarray;
 #[cfg(all(feature = "numpy", feature = "half"))]
-use numpy::{PyArrayDescr, dtype_bound};
+use numpy::{PyArrayDescr, dtype};
 
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyAny, PyType, PyTuple, PyString};
@@ -47,8 +47,11 @@ impl PartialOrd for F16 {
 #[cfg(all(feature = "numpy", feature = "half"))]
 unsafe impl numpy::Element for F16 {
     const IS_COPY: bool = true;
-    fn get_dtype_bound(py: pyo3::Python<'_>) -> pyo3::Bound<'_, PyArrayDescr> {
-        dtype_bound::<F16>(py)
+    fn get_dtype(py: pyo3::Python<'_>) -> pyo3::Bound<'_, PyArrayDescr> {
+        dtype::<half::f16>(py)
+    }
+    fn clone_ref(&self, _py: pyo3::Python<'_>) -> Self {
+        *self
     }
 }
 
@@ -190,19 +193,142 @@ impl BitScalar for bool {
     #[inline] fn predicate(self) -> bool { self }
 }
 
-#[cfg(feature = "half")]
+#[cfg(all(feature = "numpy", feature = "half"))]
 impl BitScalar for F16 {
     #[inline] fn zero() -> Self { F16(half::f16::from_f32(0.0)) }
     #[inline] fn one() -> Self { F16(half::f16::from_f32(1.0)) }
     #[inline] fn predicate(self) -> bool { self.0.to_f32() > 0.0 }
 }
 
-#[cfg(feature = "half")]
+#[cfg(all(feature = "numpy", feature = "half"))]
 impl ExtractablePrimitive for F16 {
     fn extract_from_any(value: &pyo3::Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
         let f: f32 = value.extract()?;
         Ok(F16(half::f16::from_f32(f)))
     }
+}
+
+/* ---------------------------------- NUMPY DTYPE METHODS ---------------------------------- */
+
+/// Expands a dtype-generic method family once per listed NumPy dtype.
+///
+/// `with_numpy_dtypes!(family; [int8 float32 ...])` calls `family!` with one row per dtype:
+/// `(python name, rust element type, kind, cfg predicate)`. The kind is one of
+/// `bool`, `signed`, `unsigned`, `float` and `half`, which is used to selects the doc wording in
+/// [`dtype_doc!`]. Each family macro emits its own `#[pymethods]` block (this needs pyo3's `multiple-pymethods`).
+#[cfg(feature = "numpy")]
+macro_rules! with_numpy_dtypes {
+    ($family:ident; [$($dtype:ident)*]) => {
+        with_numpy_dtypes!(@rows $family; []; $($dtype)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*];) => {
+        $family! { $($rows)* }
+    };
+    (@rows $family:ident; [$($rows:tt)*]; bool $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (bool, bool, bool, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; int8 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (int8, i8, signed, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; uint8 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (uint8, u8, unsigned, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; int16 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (int16, i16, signed, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; uint16 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (uint16, u16, unsigned, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; int32 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (int32, i32, signed, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; uint32 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (uint32, u32, unsigned, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; int64 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (int64, i64, signed, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; uint64 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (uint64, u64, unsigned, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; float16 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (float16, F16, half, all(feature = "numpy", feature = "half"))]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; float32 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (float32, f32, float, feature = "numpy")]; $($rest)*);
+    };
+    (@rows $family:ident; [$($rows:tt)*]; float64 $($rest:ident)*) => {
+        with_numpy_dtypes!(@rows $family; [$($rows)* (float64, f64, float, feature = "numpy")]; $($rest)*);
+    };
+}
+
+/// Dtype-specific wording for the docs of generated NumPy methods as a string literal.
+#[cfg(feature = "numpy")]
+macro_rules! dtype_doc {
+    // Name and description of the dtype
+    (label, bool, $name:ident) => { "boolean" };
+    (label, $kind:ident, $name:ident) => { stringify!($name) };
+    // Values
+    (values, bool) => { "" };
+    (values, signed) => { " (0 or 1)" };
+    (values, unsigned) => { " (0 or 1)" };
+    (values, $kind:ident) => { " (0.0 or 1.0)" };
+    (one, bool) => { "True" };
+    (one, signed) => { "1" };
+    (one, unsigned) => { "1" };
+    (one, $kind:ident) => { "1.0" };
+    (zero, bool) => { "False" };
+    (zero, signed) => { "0" };
+    (zero, unsigned) => { "0" };
+    (zero, $kind:ident) => { "0.0" };
+    // How input values are read as occupancy.
+    (truth, bool) => { "" };
+    (truth, signed) => { " (values > 0 are true, else false)" };
+    (truth, unsigned) => { " (0 is false, all others true)" };
+    (truth, $kind:ident) => { " (values > 0.0 are true, else false)" };
+    // Move mask values
+    (selected, bool) => { "true" };
+    (selected, $kind:ident) => { "non-zero" };
+    (sentinel, signed, $name:ident, $ty:ident) => {
+        concat!("The sentinel value used here is -1 for ", stringify!($name), " representation.")
+    };
+    (sentinel, unsigned, $name:ident, $ty:ident) => {
+        concat!(
+            "The sentinel value used here is ", stringify!($ty), "::MAX for ", stringify!($name), " representation.\n",
+            "- Python: numpy.iinfo(numpy.", stringify!($name), ").max.\n",
+            "- C: ", dtype_doc!(c_max, $ty), " of <stdint.h>.\n",
+            "- C++: std::numeric_limits<", stringify!($name), "_t>::max().\n",
+            "- Rust: std::", stringify!($ty), "::MAX.",
+        )
+    };
+    (sentinel, $kind:ident, $name:ident, $ty:ident) => {
+        concat!("The sentinel value used here is NAN for ", stringify!($name), " representation.")
+    };
+    (c_max, u8) => { "UINT8_MAX" };
+    (c_max, u16) => { "UINT16_MAX" };
+    (c_max, u32) => { "UINT32_MAX" };
+    (c_max, u64) => { "UINT64_MAX" };
+    // The 'half' experimental warning
+    (warning, half) => {
+        concat!(
+            "\nWarning:\n",
+            "- The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does\n",
+            "not support float16 or installed with a version of numpy that does not support float16, this function may lead to\n",
+            "undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues\n",
+            "causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.\n",
+            "Use with caution.",
+        )
+    };
+    (warning, $kind:ident) => { "" };
+}
+
+/// The sentinel used for grid positions without a value in `pair_vec_to_numpy_*`.
+#[cfg(feature = "numpy")]
+macro_rules! dtype_sentinel {
+    (signed, $ty:ident) => { -1 };
+    (unsigned, $ty:ident) => { $ty::MAX };
+    (float, $ty:ident) => { $ty::NAN };
+    (half, $ty:ident) => { F16::from_f32(f32::NAN) };
 }
 
 use std::sync::OnceLock;
@@ -243,7 +369,7 @@ use std::hash::{Hash, Hasher};
 /// The class is inter-operable with the Rust hpyhex-rs crate through the following methods:
 /// - hpyhex_rs_serialize(): Serialize the Hex to a byte vector in the format used by the Rust hpyhex-rs crate.
 /// - hpyhex_rs_deserialize(data): Deserialize a Hex from a byte vector in the format used by the Rust hpyhex-rs crate.
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Eq, Clone)]
 pub struct Hex {
     i: i32,
@@ -277,7 +403,7 @@ fn initialize_hex_cache(py: Python) -> [[Option<Py<Hex>>; (CACHE_MAX - CACHE_MIN
 
 fn get_hex(i: i32, k: i32) -> Py<Hex> {
     if (CACHE_MIN..=CACHE_MAX).contains(&i) && (CACHE_MIN..=CACHE_MAX).contains(&k) {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let cache = HEX_CACHE.get_or_init(|| initialize_hex_cache(py));
             let idx_i = (i - CACHE_MIN) as usize;
             let idx_k = (k - CACHE_MIN) as usize;
@@ -288,7 +414,7 @@ fn get_hex(i: i32, k: i32) -> Py<Hex> {
             Py::new(py, Hex { i, k }).unwrap()
         })
     } else {
-        Python::with_gil(|py| Py::new(py, Hex { i, k }).unwrap())
+        Python::attach(|py| Py::new(py, Hex { i, k }).unwrap())
     }
 }
 
@@ -371,7 +497,7 @@ impl Hex {
         let mut bytes = Vec::with_capacity(8);
         bytes.extend_from_slice(&self.i.to_le_bytes());
         bytes.extend_from_slice(&self.k.to_le_bytes());
-        pyo3::types::PyBytes::new_bound(py, &bytes)
+        pyo3::types::PyBytes::new(py, &bytes)
     }
 
     /// Deserialize a Hex from a byte vector according the format used by the Rust hpyhex-rs crate.
@@ -386,10 +512,10 @@ impl Hex {
     pub fn hpyhex_rs_deserialize(data: &Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
         use pyo3::types::{PyBytes, PyByteArray};
         // Extract PyBytes, PyByteArray, or Vec<u8>
-        let value: Vec<u8> = if let Ok(py_bytes) = data.extract::<&PyBytes>() {
+        let value: Vec<u8> = if let Ok(py_bytes) = data.cast::<PyBytes>() {
             py_bytes.as_bytes().to_vec()
-        } else if let Ok(py_bytearray) = data.extract::<&PyByteArray>() {
-            unsafe { py_bytearray.as_bytes() }.to_vec()
+        } else if let Ok(py_bytearray) = data.cast::<PyByteArray>() {
+            py_bytearray.to_vec()
         } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
             vec_u8
         } else {
@@ -417,6 +543,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If i or k is not an integer.
     #[new]
+    #[pyo3(signature = (i=None, k=None))]
     pub fn new(
         i: Option<&pyo3::Bound<'_, PyAny>>,
         k: Option<&pyo3::Bound<'_, PyAny>>,
@@ -571,7 +698,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __add__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
-        Python::with_gil(|_py| {
+        Python::attach(|_py| {
             if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
                 Ok(get_hex(self.i + other_hex.i, self.k + other_hex.k))
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
@@ -591,7 +718,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __radd__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
-        Python::with_gil(|_py| {
+        Python::attach(|_py| {
             if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
                 Ok(get_hex(other_hex.i + self.i, other_hex.k + self.k))
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
@@ -611,7 +738,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __sub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
-        Python::with_gil(|_py| {
+        Python::attach(|_py| {
             if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
                 Ok(get_hex(self.i - other_hex.i, self.k - other_hex.k))
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
@@ -631,7 +758,7 @@ impl Hex {
     /// Raises:
     /// - TypeError: If the other operand is not a Hex or a tuple of coordinates.
     pub fn __rsub__(&self, other: &pyo3::Bound<'_, PyAny>) -> PyResult<Py<Hex>> {
-        Python::with_gil(|_py| {
+        Python::attach(|_py| {
             if let Ok(other_hex) = other.extract::<PyRef<Hex>>() {
                 Ok(get_hex(other_hex.i - self.i, other_hex.k - self.k))
             } else if let Ok(tuple) = other.extract::<(i32, i32)>() {
@@ -658,6 +785,7 @@ impl Hex {
     /// Returns:
     /// - Hex: A new Hex with the same coordinates.
     #[inline]
+    #[pyo3(signature = (_memo=None))]
     pub fn __deepcopy__(&self, _memo: Option<&pyo3::Bound<'_, PyAny>>) -> Py<Hex> {
         get_hex(self.i, self.k)
     }
@@ -738,7 +866,7 @@ impl HexIterator {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, from_py_object)]
 #[derive(Eq, Clone)]
 /// Represents a shape or unit made up of 7 Block instances,
 /// typically forming a logical structure such as a game piece.
@@ -799,7 +927,7 @@ pub struct Piece {
 static PIECE_CACHE: OnceLock<[Py<Piece>; 128]> = OnceLock::new();
 
 fn initialize_piece_cache() -> [Py<Piece>; 128] {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         use std::mem::MaybeUninit;
         // Create an uninitialized array of MaybeUninit<Py<Piece>>
         let mut cache: [MaybeUninit<Py<Piece>>; 128] = unsafe { MaybeUninit::uninit().assume_init() };
@@ -870,7 +998,7 @@ impl Piece {
     pub fn get_cached(state: u8) -> Py<Piece> {
         let truncated = state & 0b0111_1111; // Only 7 bits used
         let cache = PIECE_CACHE.get_or_init(|| initialize_piece_cache());
-        cache[truncated as usize].clone()
+        Python::attach(|py| cache[truncated as usize].clone_ref(py))
     }
 }
 
@@ -890,7 +1018,7 @@ where
             arr.push(b);
         }
     }
-    PyArray1::from_vec_bound(py, arr).unbind()
+    PyArray1::from_vec(py, arr).unbind()
 }
 
 #[cfg(feature = "numpy")]
@@ -927,7 +1055,7 @@ where
     }
 
     let array = Array2::from_shape_vec(shape, vec).unwrap();
-    PyArray2::from_owned_array_bound(py, array).unbind()
+    PyArray2::from_owned_array(py, array).unbind()
 }
 
 #[cfg(feature = "numpy")]
@@ -972,15 +1100,10 @@ where
             "Input array must have shape (n, 7)",
         ));
     }
-    let n = shape[0];
-    let c = array.strides()[0] as usize;
-    let mut pieces = Vec::with_capacity(n);
-    for i in 0..n {
-        let row = unsafe { array.as_slice()?.get(
-            i * c..(i * c + 7)
-        ).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>("Failed to access row in input array")
-        })? };
+    let readonly = array.readonly();
+    let view = readonly.as_array();
+    let mut pieces = Vec::with_capacity(shape[0]);
+    for row in view.rows() {
         let mut state: u8 = 0;
         for (j, &value) in row.iter().enumerate() {
             if T::predicate(value) {
@@ -1009,7 +1132,7 @@ where
         if (piece.state & 0b0000010) != 0 { T::one() } else { T::zero() },
         if (piece.state & 0b0000001) != 0 { T::one() } else { T::zero() },
     ];
-    PyArray1::from_array_bound(py, &arr).unbind()
+    PyArray1::from_array(py, &arr).unbind()
 }
 
 #[cfg(feature = "numpy")]
@@ -1046,7 +1169,7 @@ impl Piece {
     /// Returns:
     /// - bytes: A byte vector containing the serialized Piece data.
     pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
-        pyo3::types::PyBytes::new_bound(py, &[self.state])
+        pyo3::types::PyBytes::new(py, &[self.state])
     }
 
     /// Deserialize a Piece from a byte vector according the format used by the Rust hpyhex-rs crate.
@@ -1064,9 +1187,9 @@ impl Piece {
     pub fn hpyhex_rs_deserialize(data: &Bound<'_, PyAny>) -> PyResult<Py<Piece>> {
         use pyo3::types::{PyBytes, PyByteArray};
         // Extract PyBytes, PyByteArray, or Vec<u8>
-        let value: Vec<u8> = if let Ok(py_bytes) = data.downcast::<PyBytes>() {
+        let value: Vec<u8> = if let Ok(py_bytes) = data.cast::<PyBytes>() {
             py_bytes.as_bytes().to_vec()
-        } else if let Ok(py_bytearray) = data.downcast::<PyByteArray>() {
+        } else if let Ok(py_bytearray) = data.cast::<PyByteArray>() {
             unsafe { py_bytearray.as_bytes() }.to_vec()
         } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
             vec_u8
@@ -1089,120 +1212,6 @@ impl Piece {
     #[cfg(feature = "numpy")]
     pub fn to_numpy(&self, py: Python) -> Py<PyArray1<bool>> {
         self.to_numpy_bool(py)
-    }
-
-    /// Get the NumPy ndarray boolean representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_bool(&self, py: Python) -> Py<PyArray1<bool>> {
-        to_numpy_piece_impl::<bool>(py, self)
-    }
-
-    /// Get the NumPy ndarray int8 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int8 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<i8>> {
-        to_numpy_piece_impl::<i8>(py, self)
-    }
-
-    /// Get the NumPy ndarray uint8 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint8 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint8(&self, py: Python) -> Py<PyArray1<u8>> {
-        to_numpy_piece_impl::<u8>(py, self)
-    }
-
-    /// Get the NumPy ndarray int16 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int16 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int16(&self, py: Python) -> Py<PyArray1<i16>> {
-        to_numpy_piece_impl::<i16>(py, self)
-    }
-
-    /// Get the NumPy ndarray uint16 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint16 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint16(&self, py: Python) -> Py<PyArray1<u16>> {
-        to_numpy_piece_impl::<u16>(py, self)
-    }
-
-    /// Get the NumPy ndarray int32 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int32 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int32(&self, py: Python) -> Py<PyArray1<i32>> {
-        to_numpy_piece_impl::<i32>(py, self)
-    }
-
-    /// Get the NumPy ndarray uint32 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint32 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint32(&self, py: Python) -> Py<PyArray1<u32>> {
-        to_numpy_piece_impl::<u32>(py, self)
-    }
-
-    /// Get the NumPy ndarray int64 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int64 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int64(&self, py: Python) -> Py<PyArray1<i64>> {
-        to_numpy_piece_impl::<i64>(py, self)
-    }
-
-    /// Get the NumPy ndarray uint64 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint64 values (1 for occupied, 0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint64(&self, py: Python) -> Py<PyArray1<u64>> {
-        to_numpy_piece_impl::<u64>(py, self)
-    }
-
-    /// Get the NumPy ndarray float16 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float16 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
-        to_numpy_piece_impl::<F16>(py, self)
-    }
-
-    /// Get the NumPy ndarray float32 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float32 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_float32(&self, py: Python) -> Py<PyArray1<f32>> {
-        to_numpy_piece_impl::<f32>(py, self)
-    }
-
-    /// Get the NumPy ndarray float64 representation of the Piece's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float64 values (1.0 for occupied, 0.0 for unoccupied) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_float64(&self, py: Python) -> Py<PyArray1<f64>> {
-        to_numpy_piece_impl::<f64>(py, self)
     }
 
     /// Convert a vector of Piece instances to a flat NumPy ndarray of boolean values.
@@ -1232,830 +1241,6 @@ impl Piece {
         Self::vec_to_numpy_bool_stacked(py, pieces)
     }
 
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of boolean values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_bool_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<bool>> {
-        vec_to_numpy_flat_impl::<bool>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of boolean values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of boolean values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_bool_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<bool>> {
-        vec_to_numpy_stacked_impl::<bool>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of int8 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int8 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int8_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i8>> {
-        vec_to_numpy_flat_impl::<i8>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of int8 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of int8 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int8_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i8>> {
-        vec_to_numpy_stacked_impl::<i8>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of uint8 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint8 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint8_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u8>> {
-        vec_to_numpy_flat_impl::<u8>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of uint8 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of uint8 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint8_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u8>> {
-        vec_to_numpy_stacked_impl::<u8>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of int16 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int16 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int16_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i16>> {
-        vec_to_numpy_flat_impl::<i16>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of int16 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of int16 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i16>> {
-        vec_to_numpy_stacked_impl::<i16>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of uint16 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint16 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint16_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u16>> {
-        vec_to_numpy_flat_impl::<u16>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of uint16 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of uint16 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u16>> {
-        vec_to_numpy_stacked_impl::<u16>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of int32 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int32 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int32_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i32>> {
-        vec_to_numpy_flat_impl::<i32>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of int32 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of int32 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int32_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i32>> {
-        vec_to_numpy_stacked_impl::<i32>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a flat NumPy ndarray of uint32 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint32 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint32_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u32>> {
-        vec_to_numpy_flat_impl::<u32>(py, pieces)
-    }
-
-    /// Convert a vector of Piece instances to a stacked NumPy ndarray of uint32 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of uint32 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint32_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u32>> {
-        vec_to_numpy_stacked_impl::<u32>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a flat NumPy ndarray of int64 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int64 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int64_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<i64>> {
-        vec_to_numpy_flat_impl::<i64>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a stacked NumPy ndarray of int64 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of int64 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_int64_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<i64>> {
-        vec_to_numpy_stacked_impl::<i64>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a flat NumPy ndarray of uint64 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint64 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint64_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<u64>> {
-        vec_to_numpy_flat_impl::<u64>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a stacked NumPy ndarray of uint64 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of uint64 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_uint64_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<u64>> {
-        vec_to_numpy_stacked_impl::<u64>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a flat NumPy ndarray of float32 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float32 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_float32_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<f32>> {
-        vec_to_numpy_flat_impl::<f32>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a stacked NumPy ndarray of float32 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of float32 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_float32_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<f32>> {
-        vec_to_numpy_stacked_impl::<f32>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a flat NumPy ndarray of float64 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float64 values representing the block states of all pieces.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_float64_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<f64>> {
-        vec_to_numpy_flat_impl::<f64>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a stacked NumPy ndarray of float64 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of float64 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_to_numpy_float64_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<f64>> {
-        vec_to_numpy_stacked_impl::<f64>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a flat NumPy ndarray of float16 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float16 values representing the block states of all pieces.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn vec_to_numpy_float16_flat<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<F16>> {
-        vec_to_numpy_flat_impl::<F16>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances to a stacked NumPy ndarray of float16 values.
-    /// 
-    /// Arguments:
-    /// - pieces (list[Piece]): A list of Piece instances to convert.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of float16 values with shape (num_pieces, 7)
-    ///   representing the block states of all pieces. The array uses a stride of 8 for memory alignment.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn vec_to_numpy_float16_stacked<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<F16>> {
-        vec_to_numpy_stacked_impl::<F16>(py, pieces)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of boolean values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of boolean values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_bool_flat<'py>(
-        arr: Bound<'_, PyArray1<bool>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<bool>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of boolean values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of boolean values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_bool_stacked<'py>(
-        arr: Bound<'_, PyArray2<bool>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<bool>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of int8 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int8 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int8_flat<'py>(
-        arr: Bound<'_, PyArray1<i8>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<i8>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of int8 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of int8 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int8_stacked<'py>(
-        arr: Bound<'_, PyArray2<i8>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<i8>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of uint8 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint8 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint8_flat<'py>(
-        arr: Bound<'_, PyArray1<u8>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<u8>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint8 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of uint8 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint8_stacked<'py>(
-        arr: Bound<'_, PyArray2<u8>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<u8>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of int16 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int16 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int16_flat<'py>(
-        arr: Bound<'_, PyArray1<i16>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<i16>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of int16 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of int16 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int16_stacked<'py>(
-        arr: Bound<'_, PyArray2<i16>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<i16>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of uint16 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint16 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint16_flat<'py>(
-        arr: Bound<'_, PyArray1<u16>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<u16>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint16 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of uint16 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint16_stacked<'py>(
-        arr: Bound<'_, PyArray2<u16>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<u16>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of int32 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int32 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int32_flat<'py>(
-        arr: Bound<'_, PyArray1<i32>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<i32>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of int32 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of int32 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int32_stacked<'py>(
-        arr: Bound<'_, PyArray2<i32>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<i32>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of uint32 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint32 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint32_flat<'py>(
-        arr: Bound<'_, PyArray1<u32>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<u32>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint32 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of uint32 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint32_stacked<'py>(
-        arr: Bound<'_, PyArray2<u32>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<u32>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of int64 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int64 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int64_flat<'py>(
-        arr: Bound<'_, PyArray1<i64>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<i64>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of int64 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of int64 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_int64_stacked<'py>(
-        arr: Bound<'_, PyArray2<i64>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<i64>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of uint64 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint64 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint64_flat<'py>(
-        arr: Bound<'_, PyArray1<u64>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<u64>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of uint64 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of uint64 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_uint64_stacked<'py>(
-        arr: Bound<'_, PyArray2<u64>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<u64>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of float32 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of float32 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_float32_flat<'py>(
-        arr: Bound<'_, PyArray1<f32>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<f32>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of float32 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of float32 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_float32_stacked<'py>(
-        arr: Bound<'_, PyArray2<f32>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<f32>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of float64 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of float64 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_float64_flat<'py>(
-        arr: Bound<'_, PyArray1<f64>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<f64>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of float64 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of float64 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn vec_from_numpy_float64_stacked<'py>(
-        arr: Bound<'_, PyArray2<f64>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<f64>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a flat NumPy ndarray of float16 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of float16 values representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn vec_from_numpy_float16_flat<'py>(
-        arr: Bound<'_, PyArray1<F16>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_flat_impl::<F16>(&arr)
-    }
-
-    /// Create a vector of Piece instances from a stacked NumPy ndarray of float16 values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 2D NumPy array of float16 values with shape (num_pieces, 7)
-    ///   representing the block states.
-    /// Returns:
-    /// - list[Piece]: A list of Piece instances corresponding to the given block states.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn vec_from_numpy_float16_stacked<'py>(
-        arr: Bound<'_, PyArray2<F16>>,
-    ) -> PyResult<Vec<Py<Piece>>> {
-        vec_from_numpy_stacked_impl::<F16>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of boolean values.
-    /// 
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of boolean values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_bool(arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<bool>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of int8 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int8 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int8(arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<i8>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of uint8 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint8 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint8(arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<u8>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of int16 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int16 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int16(arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<i16>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of uint16 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint16 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint16(arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<u16>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of int32 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int32 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int32(arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<i32>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of uint32 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint32 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint32(arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<u32>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of int64 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of int64 values representing the block states.
-    ///
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 and negative are false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int64(arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<i64>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of uint64 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of uint64 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint64(arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<u64>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of float16 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of float16 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (values > 0.0 are true, else false).
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause a segmentation fault.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn from_numpy_float16(arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<F16>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of float32 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of float32 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (values > 0.0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_float32(arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<f32>(&arr)
-    }
-
-    /// Create a Piece instance from a NumPy ndarray of float64 values.
-    ///
-    /// Arguments:
-    /// - arr (numpy.ndarray): A 1D NumPy array of float64 values representing the block states.
-    /// Returns:
-    /// - Piece: A Piece instance corresponding to the given block states (values > 0.0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_float64(arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Piece>> {
-        from_numpy_piece_impl::<f64>(&arr)
-    }
-
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
 
     /// The fixed positions of the 7 blocks in a standard Piece.
@@ -2080,6 +1265,7 @@ impl Piece {
     ///   - If an integer is provided, it is treated as a byte representation of the states.
     ///   - If a list of booleans is provided, it should have exactly 7 elements, each representing
     #[new]
+    #[pyo3(signature = (states=None))]
     fn new(py: Python, states: Option<&Bound<'_, PyAny>>) -> PyResult<Py<Piece>> {
         let key: u8 = if let Some(s) = states {
             if let Ok(int_val) = s.extract::<u8>() {
@@ -2267,23 +1453,23 @@ impl Piece {
     /// - list[Piece]: A list of all possible Piece instances.
     #[staticmethod]
     pub fn all_pieces() -> PyResult<Py<PyAny>> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let cache = PIECE_CACHE.get_or_init(initialize_piece_cache);
-            let pylist = pyo3::types::PyList::new_bound(
+            let pylist = pyo3::types::PyList::new(
                 py,
                 cache
                     .iter()
                     .filter_map(|p| {
                         let piece = p.borrow(py);
                         if piece.__bool__() {
-                            Some(p.clone_ref(py).into_py(py))
+                            Some(p.clone_ref(py))
                         } else {
                             None
                         }
                     })
                     .collect::<Vec<_>>(),
             );
-            Ok(pylist.into_py(py))
+            Ok(pylist?.into_any().unbind())
         })
     }
 
@@ -2295,7 +1481,7 @@ impl Piece {
     /// - slist[Piece]: A list of all possible contigous Piece instances.
     #[staticmethod]
     pub fn contigous_pieces() -> PyResult<Py<PyAny>> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let cache = PIECE_CACHE.get_or_init(initialize_piece_cache);
             let mut result = Vec::new();
             for p in cache.iter() {
@@ -2306,29 +1492,136 @@ impl Piece {
                     continue;
                 }
                 if bit(3) {
-                    result.push(p.clone_ref(py).into_py(py));
+                    result.push(p.clone_ref(py));
                 } else if piece.__len__() == 1 || piece.__len__() == 5 || piece.__len__() == 6 {
-                    result.push(p.clone_ref(py).into_py(py));
+                    result.push(p.clone_ref(py));
                 } else if piece.__len__() == 2 {
                     if (bit(0) && (bit(1) || bit(2))) || (bit(4) && (bit(1) || bit(6))) || (bit(5) && (bit(2) || bit(6))) {
-                        result.push(p.clone_ref(py).into_py(py));
+                        result.push(p.clone_ref(py));
                     }
                 } else if piece.__len__() == 4 {
                     if (!bit(0) && !(bit(1) && bit(2))) || (!bit(4) && !(bit(1) && bit(6))) || (!bit(5) && !(bit(2) && bit(6))) {
-                        result.push(p.clone_ref(py).into_py(py));
+                        result.push(p.clone_ref(py));
                     }
                 } else {
                     if (bit(0) && bit(1) && (bit(2) || bit(4))) || (bit(2) && bit(5) && (bit(0) || bit(6))) || (bit(4) && bit(6) && (bit(1) || bit(5))) {
-                        result.push(p.clone_ref(py).into_py(py));
+                        result.push(p.clone_ref(py));
                     }
                 }
             }
-            let pylist = pyo3::types::PyList::new_bound(py, result);
-            Ok(pylist.into_py(py))
+            let pylist = pyo3::types::PyList::new(py, result);
+            Ok(pylist?.into_any().unbind())
         })
     }
-    
 }
+
+/// NumPy conversions of Piece and lists of Pieces
+/// 
+/// The full list is:
+/// - `to_numpy_{dtype}`,
+/// - `from_numpy_{dtype}`,
+/// - `vec_to_numpy_{dtype}_{flat,stacked}`
+/// - `vec_from_numpy_{dtype}_{flat,stacked}`
+#[cfg(feature = "numpy")]
+macro_rules! piece_numpy_methods {
+    ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
+        #[pymethods]
+        impl Piece { $(
+            #[doc = concat!("Get the NumPy ndarray ", dtype_doc!(label, $kind, $name), " representation of the Piece's block states.")]
+            ///
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values (",
+                dtype_doc!(one, $kind), " for occupied, ", dtype_doc!(zero, $kind), " for unoccupied) representing the block states.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<to_numpy_ $name>](&self, py: Python) -> Py<PyArray1<$ty>> {
+                to_numpy_piece_impl::<$ty>(py, self)
+            }
+
+            #[doc = concat!("Create a Piece instance from a NumPy ndarray of ", dtype_doc!(label, $kind, $name), " values.")]
+            ///
+            /// Arguments:
+            #[doc = concat!("- arr (numpy.ndarray): A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values representing the block states.")]
+            /// Returns:
+            #[doc = concat!(
+                "- Piece: A Piece instance corresponding to the given block states", dtype_doc!(truth, $kind), ".",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<from_numpy_ $name>](arr: Bound<'_, PyArray1<$ty>>) -> PyResult<Py<Piece>> {
+                from_numpy_piece_impl::<$ty>(&arr)
+            }
+
+            #[doc = concat!("Convert a vector of Piece instances to a flat NumPy ndarray of ", dtype_doc!(label, $kind, $name), " values.")]
+            ///
+            /// Arguments:
+            /// - pieces (list[Piece]): A list of Piece instances to convert.
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values representing the block states of all pieces.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<vec_to_numpy_ $name _flat>]<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray1<$ty>> {
+                vec_to_numpy_flat_impl::<$ty>(py, pieces)
+            }
+
+            #[doc = concat!("Convert a vector of Piece instances to a stacked NumPy ndarray of ", dtype_doc!(label, $kind, $name), " values.")]
+            ///
+            /// Arguments:
+            /// - pieces (list[Piece]): A list of Piece instances to convert.
+            /// Returns:
+            #[doc = concat!("- numpy.ndarray: A 2D NumPy array of ", dtype_doc!(label, $kind, $name), " values with shape (num_pieces, 7)")]
+            #[doc = concat!(
+                "  representing the block states of all pieces. The array uses a stride of 8 for memory alignment.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<vec_to_numpy_ $name _stacked>]<'py>(py: Python<'py>, pieces: Vec<Py<Piece>>) -> Py<PyArray2<$ty>> {
+                vec_to_numpy_stacked_impl::<$ty>(py, pieces)
+            }
+
+            #[doc = concat!("Create a vector of Piece instances from a flat NumPy ndarray of ", dtype_doc!(label, $kind, $name), " values.")]
+            ///
+            /// Arguments:
+            #[doc = concat!("- arr (numpy.ndarray): A 1D NumPy array of ", dtype_doc!(label, $kind, $name), " values representing the block states.")]
+            /// Returns:
+            #[doc = concat!(
+                "- list[Piece]: A list of Piece instances corresponding to the given block states.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<vec_from_numpy_ $name _flat>](arr: Bound<'_, PyArray1<$ty>>) -> PyResult<Vec<Py<Piece>>> {
+                vec_from_numpy_flat_impl::<$ty>(&arr)
+            }
+
+            #[doc = concat!("Create a vector of Piece instances from a stacked NumPy ndarray of ", dtype_doc!(label, $kind, $name), " values.")]
+            ///
+            /// Arguments:
+            #[doc = concat!("- arr (numpy.ndarray): A 2D NumPy array of ", dtype_doc!(label, $kind, $name), " values with shape (num_pieces, 7)")]
+            ///   representing the block states.
+            /// Returns:
+            #[doc = concat!(
+                "- list[Piece]: A list of Piece instances corresponding to the given block states.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<vec_from_numpy_ $name _stacked>](arr: Bound<'_, PyArray2<$ty>>) -> PyResult<Vec<Py<Piece>>> {
+                vec_from_numpy_stacked_impl::<$ty>(&arr)
+            }
+        )* }
+    }};
+}
+
+#[cfg(feature = "numpy")]
+with_numpy_dtypes!(piece_numpy_methods; [bool int8 uint8 int16 uint16 int32 uint32 int64 uint64 float16 float32 float64]);
 
 fn piece_neighbors_of(p: Piece, target_i: i32, target_k: i32) -> usize {
     let mut count = 0;
@@ -2372,7 +1665,7 @@ impl PieceIterator {
     }
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Eq, Clone)]
 /// The HexEngine class provides a complete engine for managing a two-dimensional hexagonal
 /// block grid used for constructing and interacting with hex-based shapes in the game.
@@ -3306,18 +2599,17 @@ impl HexEngine {
         T: BitScalar + Copy + numpy::Element,
     {
         let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
-        PyArray1::from_vec_bound(py, int_states).into()
+        PyArray1::from_vec(py, int_states).into()
     }
 
-    #[allow(deprecated)]
     #[cfg(feature = "numpy")]
     #[inline(always)]
-    fn to_numpy_engine_unboxed_impl<'py, T>(&self, py: Python<'py>) -> &'py PyArray1<T>
+    fn to_numpy_engine_unboxed_impl<'py, T>(&self, py: Python<'py>) -> Bound<'py, PyArray1<T>>
     where
         T: BitScalar + Copy + numpy::Element,
     {
         let int_states: Vec<T> = self.states.iter().map(|&b| if b { T::one() } else { T::zero() }).collect();
-        &PyArray1::from_vec(py, int_states)
+        PyArray1::from_vec(py, int_states)
     }
 
     #[cfg(feature = "numpy")]
@@ -3366,7 +2658,7 @@ impl HexEngine {
                 mask.push(T::zero());
             }
         }
-        PyArray1::from_vec_bound(py, mask).into()
+        PyArray1::from_vec(py, mask).into()
     }
 
     #[cfg(feature = "numpy")]
@@ -3390,7 +2682,7 @@ impl HexEngine {
             }
         }
         let array = Array2::from_shape_vec(shape, vec).unwrap();
-        PyArray2::from_owned_array_bound(py, array).unbind()
+        PyArray2::from_owned_array(py, array).unbind()
     }
 
     #[cfg(feature = "numpy")]
@@ -3425,7 +2717,7 @@ impl HexEngine {
             }
         }
         let array = Array2::from_shape_vec(shape, vec).unwrap();
-        PyArray2::from_owned_array_bound(py, array).unbind()
+        PyArray2::from_owned_array(py, array).unbind()
     }
 
     /// Generate a correspondence list mapping each block index to another index shifted by a given Hex offset.
@@ -3468,7 +2760,7 @@ impl HexEngine {
             }
         }
         let array = Array1::from_shape_vec(n, vec).unwrap();
-        PyArray1::from_owned_array_bound(py, array).unbind()
+        PyArray1::from_owned_array(py, array).unbind()
     }
 
     /// Convert an iterator of (value, Hex) pairs into a vector aligned with the hexagonal grid of the specified radius.
@@ -3492,7 +2784,7 @@ impl HexEngine {
         let n = if radius == 0 { 0 } else { 1 + 3 * radius * (radius - 1) };
         let mut vec: Vec<T> = vec![sentinel; n];
         for item in values.iter() {
-            let tuple: &Bound<'a, PyTuple> = match item.downcast::<PyTuple>() {
+            let tuple: &Bound<'a, PyTuple> = match item.cast::<PyTuple>() {
                 Ok(t) => t,
                 Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Items must be tuples of (value, Hex)")),
             };
@@ -3517,7 +2809,7 @@ impl HexEngine {
             }
         };
         let array = Array1::from_shape_vec(n, vec).unwrap();
-        Ok(PyArray1::from_owned_array_bound(py, array).unbind())
+        Ok(PyArray1::from_owned_array(py, array).unbind())
     }
 }
 
@@ -3593,7 +2885,7 @@ impl HexEngine {
     pub fn hpyhex_rs_serialize<'py>(&self, py: Python<'py>) -> Bound<'py, pyo3::types::PyBytes> {
         let bytes: Vec<u8> = self.into();
         
-        pyo3::types::PyBytes::new_bound(py, &bytes)
+        pyo3::types::PyBytes::new(py, &bytes)
     }
 
     /// Deserialize a byte vector into a HexEngine instance according to the format used by the Rust hpyhex-rs crate.
@@ -3611,9 +2903,9 @@ impl HexEngine {
     pub fn hpyhex_rs_deserialize(data: Bound<'_, PyAny>) -> PyResult<Self> {
         use pyo3::types::{PyBytes, PyByteArray};
         // Extract PyBytes, PyByteArray, or Vec<u8>
-        let bytes: Vec<u8> = if let Ok(py_bytes) = data.downcast::<PyBytes>() {
+        let bytes: Vec<u8> = if let Ok(py_bytes) = data.cast::<PyBytes>() {
             py_bytes.as_bytes().to_vec()
-        } else if let Ok(py_bytearray) = data.downcast::<PyByteArray>() {
+        } else if let Ok(py_bytearray) = data.cast::<PyByteArray>() {
             unsafe { py_bytearray.as_bytes() }.to_vec()
         } else if let Ok(vec_u8) = data.extract::<Vec<u8>>() {
             vec_u8
@@ -3717,7 +3009,7 @@ impl HexEngine {
     #[pyo3(signature = (prefix="".to_string(), suffix="".to_string(), space=" ".to_string(), fill="X".to_string(), empty="O".to_string()))]
     pub fn hpyhex_rs_render<'py>(&self, py: Python<'py>, prefix: String, suffix: String, space: String, fill: String, empty: String) -> Bound<'py, PyString> {
         let s = self.render(&prefix, &suffix, &space, &fill, &empty);
-        PyString::new_bound(py, &s)
+        PyString::new(py, &s)
     }
 
     /// Render an external HexEngine state from a list of values as a string
@@ -3733,7 +3025,7 @@ impl HexEngine {
     #[staticmethod]
     pub fn hpyhex_rs_render_external<'py>(py: Python<'py>, values: Bound<'py, PyList>, prefix: String, suffix: String, extra: bool) -> PyResult<Bound<'py, PyString>> {
         let s = Self::render_static(py, values, &prefix, &suffix, extra)?;
-        Ok(PyString::new_bound(py, &s))
+        Ok(PyString::new(py, &s))
     }
 
     /// Convert a list of (value, Hex) pairs into a python list aligned with the hexagonal grid of the specified radius.
@@ -3755,7 +3047,7 @@ impl HexEngine {
         let n = if radius == 0 { 0 } else { 1 + 3 * radius * (radius - 1) };
         let mut vec: Vec<Bound<'a, PyAny>> = vec![sentinel; n];
         for item in values.iter() {
-            let tuple: &Bound<'a, PyTuple> = match item.downcast::<PyTuple>() {
+            let tuple: &Bound<'a, PyTuple> = match item.cast::<PyTuple>() {
                 Ok(t) => t,
                 Err(_) => return Err(pyo3::exceptions::PyTypeError::new_err("Items must be tuples of (value, Hex)")),
             };
@@ -3801,238 +3093,6 @@ impl HexEngine {
         Self::pair_vec_to_numpy_impl::<i16>(py, radius, -1, values)
     }
 
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of int16 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is -1 for int16 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - cvalues: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_int16(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i16>>> {
-        Self::pair_vec_to_numpy_impl::<i16>(py, radius, -1, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint16 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is u16::MAX for uint16 representation.
-    /// - Python: numpy.iinfo(numpy.uint16).max.
-    /// - C: UINT16_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint16_t>::max().
-    /// - Rust: std::u16::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_uint16(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<u16>>> {
-        Self::pair_vec_to_numpy_impl::<u16>(py, radius, u16::MAX, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of int8 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is -1 for int8 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_int8(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i8>>> {
-        Self::pair_vec_to_numpy_impl::<i8>(py, radius, -1, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint8 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is u8::MAX for uint8 representation.
-    /// - Python: numpy.iinfo(numpy.uint8).max.
-    /// - C: UINT8_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint8_t>::max().
-    /// - Rust: std::u8::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_uint8(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<u8>>> {
-        Self::pair_vec_to_numpy_impl::<u8>(py, radius, u8::MAX, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of int32 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is -1 for int32 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_int32(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i32>>> {
-        Self::pair_vec_to_numpy_impl::<i32>(py, radius, -1, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint32 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is u32::MAX for uint32 representation.
-    /// - Python: numpy.iinfo(numpy.uint32).max.
-    /// - C: UINT32_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint32_t>::max().
-    /// - Rust: std::u32::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_uint32(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<u32>>> {
-        Self::pair_vec_to_numpy_impl::<u32>(py, radius, u32::MAX, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of int64 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is -1 for int64 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_int64(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<i64>>> {
-        Self::pair_vec_to_numpy_impl::<i64>(py, radius, -1, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of uint64 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is u64::MAX for uint64 representation.
-    /// - Python: numpy.iinfo(numpy.uint64).max.
-    /// - C: UINT64_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint64_t>::max().
-    /// - Rust: std::u64::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_uint64(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<u64>>> {
-        Self::pair_vec_to_numpy_impl::<u64>(py, radius, u64::MAX, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of float32 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is NAN for float32 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_float32(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<f32>>> {
-        Self::pair_vec_to_numpy_impl::<f32>(py, radius, f32::NAN, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of float64 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is NAN for float64 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_float64(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<f64>>> {
-        Self::pair_vec_to_numpy_impl::<f64>(py, radius, f64::NAN, values)
-    }
-
-    /// Convert a list of (value, Hex) pairs into a NumPy ndarray of float16 aligned with the hexagonal grid of the specified radius.
-    /// 
-    /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
-    /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
-    /// are filled with sentinel values.
-    /// 
-    /// The sentinel value used here is NAN for float16 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - values: A list of (value, Hex) pairs.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn pair_vec_to_numpy_float16(py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<F16>>> {
-        let nan = F16::from_f32(f32::NAN);
-        Self::pair_vec_to_numpy_impl::<F16>(py, radius, nan, values)
-    }
-
     /// Get a NumPy correspondence list as a 1D ndarray.
     /// 
     /// The correspondence list maps each block index to another index shifted by a given Hex offset.
@@ -4051,126 +3111,6 @@ impl HexEngine {
         Self::to_numpy_correspondence_list_int64(py, radius, shift)
     }
 
-    /// Get a NumPy correspondence list as a 1D ndarray of uint16.
-    /// 
-    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
-    /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
-    /// The sentinel value used here is u16::MAX for uint16 representation.
-    /// - Python: numpy.iinfo(numpy.uint16).max.
-    /// - C: UINT16_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint16_t>::max().
-    /// - Rust: std::u16::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - shift: The Hex offset to apply to each block's coordinate.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_correspondence_list_uint16(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<u16>> {
-        Self::to_numpy_correspondence_list_impl::<u16>(py, radius, shift)
-    }
-
-    /// Get a NumPy correspondence list as a 1D ndarray of uint32.
-    /// 
-    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
-    /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
-    /// The sentinel value used here is u32::MAX for uint32 representation.
-    /// - Python: numpy.iinfo(numpy.uint32).max.
-    /// - C: UINT32_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint32_t>::max().
-    /// - Rust: std::u32::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - shift: The Hex offset to apply to each block's coordinate.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_correspondence_list_uint32(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<u32>> {
-        Self::to_numpy_correspondence_list_impl::<u32>(py, radius, shift)
-    }
-
-    /// Get a NumPy correspondence list as a 1D ndarray of uint64.
-    /// 
-    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
-    /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
-    /// The sentinel value used here is u64::MAX for uint64 representation.
-    /// - Python: numpy.iinfo(numpy.uint64).max.
-    /// - C: UINT64_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint64_t>::max().
-    /// - Rust: std::u64::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - shift: The Hex offset to apply to each block's coordinate.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_correspondence_list_uint64(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<u64>> {
-        Self::to_numpy_correspondence_list_impl::<u64>(py, radius, shift)
-    }
-
-    /// Get a NumPy correspondence list as a 1D ndarray of int16.
-    /// 
-    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
-    /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
-    /// The sentinel value used here is -1 for int16 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - shift: The Hex offset to apply to each block's coordinate.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_correspondence_list_int16(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i16>> {
-        Self::to_numpy_correspondence_list_impl::<i16>(py, radius, shift)
-    }
-
-    /// Get a NumPy correspondence list as a 1D ndarray of int32.
-    /// 
-    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
-    /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
-    /// The sentinel value used here is -1 for int32 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - shift: The Hex offset to apply to each block's coordinate.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_correspondence_list_int32(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i32>> {
-        Self::to_numpy_correspondence_list_impl::<i32>(py, radius, shift)
-    }
-
-    /// Get a NumPy correspondence list as a 1D ndarray of int64.
-    /// 
-    /// The correspondence list maps each block index to another index shifted by a given Hex offset.
-    /// If the shifted index is out of bounds, a sentinel value is used.
-    /// 
-    /// The sentinel value used here is -1 for int64 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// - shift: The Hex offset to apply to each block's coordinate.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_correspondence_list_int64(py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<i64>> {
-        Self::to_numpy_correspondence_list_impl::<i64>(py, radius, shift)
-    }
-
     /// Get a NumPy adjacency list as a 2D ndarray.
     /// 
     /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
@@ -4187,126 +3127,6 @@ impl HexEngine {
     #[staticmethod]
     pub fn to_numpy_adjacency_list(py: Python, radius: usize) -> Py<PyArray2<i64>> {
         Self::to_numpy_adjacency_list_int64(py, radius)
-    }
-
-    /// Get a NumPy adjacency list as a 2D ndarray of uint16.
-    /// 
-    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
-    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
-    /// The sentinel value used here is u16::MAX for uint16 representation.
-    /// - Python: numpy.iinfo(numpy.uint16).max.
-    /// - C: UINT16_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint16_t>::max().
-    /// - Rust: std::u16::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_list_uint16(py: Python, radius: usize) -> Py<PyArray2<u16>> {
-        Self::to_numpy_adjacency_list_impl::<u16>(py, radius)
-    }
-
-    /// Get a NumPy adjacency list as a 2D ndarray of uint32.
-    /// 
-    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
-    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
-    /// The sentinel value used here is u32::MAX for uint32 representation.
-    /// - Python: numpy.iinfo(numpy.uint32).max.
-    /// - C: UINT32_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint32_t>::max().
-    /// - Rust: std::u32::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_list_uint32(py: Python, radius: usize) -> Py<PyArray2<u32>> {
-        Self::to_numpy_adjacency_list_impl::<u32>(py, radius)
-    }
-
-    /// Get a NumPy adjacency list as a 2D ndarray of uint64.
-    /// 
-    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
-    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
-    /// The sentinel value used here is u64::MAX for uint64 representation.
-    /// - Python: numpy.iinfo(numpy.uint64).max.
-    /// - C: UINT64_MAX of <stdint.h>.
-    /// - C++: std::numeric_limits<uint64_t>::max().
-    /// - Rust: std::u64::MAX.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_list_uint64(py: Python, radius: usize) -> Py<PyArray2<u64>> {
-        Self::to_numpy_adjacency_list_impl::<u64>(py, radius)
-    }
-
-    /// Get a NumPy adjacency list as a 2D ndarray of int16.
-    /// 
-    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
-    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
-    /// The sentinel value used here is -1 for int16 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_list_int16(py: Python, radius: usize) -> Py<PyArray2<i16>> {
-        Self::to_numpy_adjacency_list_impl::<i16>(py, radius)
-    }
-
-    /// Get a NumPy adjacency list as a 2D ndarray of int32.
-    /// 
-    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
-    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
-    /// The sentinel value used here is -1 for int32 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_list_int32(py: Python, radius: usize) -> Py<PyArray2<i32>> {
-        Self::to_numpy_adjacency_list_impl::<i32>(py, radius)
-    }
-
-    /// Get a NumPy adjacency list as a 2D ndarray of int64.
-    /// 
-    /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
-    /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
-    /// 
-    /// The sentinel value used here is -1 for int64 representation.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_list_int64(py: Python, radius: usize) -> Py<PyArray2<i64>> {
-        Self::to_numpy_adjacency_list_impl::<i64>(py, radius)
     }
 
     /// Get a NumPy adjacency matrix as a 2D ndarray.
@@ -4329,252 +3149,6 @@ impl HexEngine {
         Self::to_numpy_adjacency_matrix_impl::<bool>(py, radius)
     }
 
-    /// Get a NumPy adjacency matrix as a 2D ndarray of bools.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is True if block i is adjacent to block j, and False otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is true if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_bool(py: Python, radius: usize) -> Py<PyArray2<bool>> {
-        Self::to_numpy_adjacency_matrix_impl::<bool>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of int8.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_int8(py: Python, radius: usize) -> Py<PyArray2<i8>> {
-        Self::to_numpy_adjacency_matrix_impl::<i8>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of uint8.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_uint8(py: Python, radius: usize) -> Py<PyArray2<u8>> {
-        Self::to_numpy_adjacency_matrix_impl::<u8>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of int16.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_int16(py: Python, radius: usize) -> Py<PyArray2<i16>> {
-        Self::to_numpy_adjacency_matrix_impl::<i16>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of uint16.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_uint16(py: Python, radius: usize) -> Py<PyArray2<u16>> {
-        Self::to_numpy_adjacency_matrix_impl::<u16>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of int32.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_int32(py: Python, radius: usize) -> Py<PyArray2<i32>> {
-        Self::to_numpy_adjacency_matrix_impl::<i32>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of uint32.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_uint32(py: Python, radius: usize) -> Py<PyArray2<u32>> {
-        Self::to_numpy_adjacency_matrix_impl::<u32>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of int64.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_int64(py: Python, radius: usize) -> Py<PyArray2<i64>> {
-        Self::to_numpy_adjacency_matrix_impl::<i64>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of uint64.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1 if block i is adjacent to block j, and 0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_uint64(py: Python, radius: usize) -> Py<PyArray2<u64>> {
-        Self::to_numpy_adjacency_matrix_impl::<u64>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of float32.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1.0 if block i is adjacent to block j, and 0.0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1.0 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_float32(py: Python, radius: usize) -> Py<PyArray2<f32>> {
-        Self::to_numpy_adjacency_matrix_impl::<f32>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of float64.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1.0 if block i is adjacent to block j, and 0.0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1.0 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_float64(py: Python, radius: usize) -> Py<PyArray2<f64>> {
-        Self::to_numpy_adjacency_matrix_impl::<f64>(py, radius)
-    }
-
-    /// Get a NumPy adjacency matrix as a 2D ndarray of float16.
-    /// 
-    /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
-    /// Each entry (i, j) in the matrix is 1.0 if block i is adjacent to block j, and 0.0 otherwise.
-    /// 
-    /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
-    /// In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is 1.0 if block i is adjacent to block j.
-    /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
-    /// over the grid structure.
-    /// 
-    /// Arguments:
-    /// - radius: The radius of the hexagonal grid.
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn to_numpy_adjacency_matrix_float16(py: Python, radius: usize) -> Py<PyArray2<F16>> {
-        Self::to_numpy_adjacency_matrix_impl::<F16>(py, radius)
-    }
-
     /// Get a NumPy bool ndarray mask indicating valid positions for adding the given Piece.
     /// 
     /// Arguments:
@@ -4584,133 +3158,6 @@ impl HexEngine {
     #[cfg(feature = "numpy")]
     pub fn to_numpy_positions_mask(&self, py: Python, piece: Piece) -> Py<PyArray1<bool>> {
         self.to_numpy_positions_mask_impl::<bool>(py, piece)
-    }
-
-    /// Get a NumPy int8 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int8 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_int8(&self, py: Python, piece: Piece) -> Py<PyArray1<i8>> {
-        self.to_numpy_positions_mask_impl::<i8>(py, piece)
-    }
-
-    /// Get a NumPy uint8 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint8 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_uint8(&self, py: Python, piece: Piece) -> Py<PyArray1<u8>> {
-        self.to_numpy_positions_mask_impl::<u8>(py, piece)
-    }
-
-    /// Get a NumPy int16 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int16 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_int16(&self, py: Python, piece: Piece) -> Py<PyArray1<i16>> {
-        self.to_numpy_positions_mask_impl::<i16>(py, piece)
-    }
-
-    /// Get a NumPy uint16 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint16 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_uint16(&self, py: Python, piece: Piece) -> Py<PyArray1<u16>> {
-        self.to_numpy_positions_mask_impl::<u16>(py, piece)
-    }
-
-    /// Get a NumPy int32 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int32 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_int32(&self, py: Python, piece: Piece) -> Py<PyArray1<i32>> {
-        self.to_numpy_positions_mask_impl::<i32>(py, piece)
-    }
-
-    /// Get a NumPy uint32 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint32 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_uint32(&self, py: Python, piece: Piece) -> Py<PyArray1<u32>> {
-        self.to_numpy_positions_mask_impl::<u32>(py, piece)
-    }
-
-    /// Get a NumPy int64 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int64 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_int64(&self, py: Python, piece: Piece) -> Py<PyArray1<i64>> {
-        self.to_numpy_positions_mask_impl::<i64>(py, piece)
-    }
-
-    /// Get a NumPy uint64 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint64 values (0 or 1) where 1 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_uint64(&self, py: Python, piece: Piece) -> Py<PyArray1<u64>> {
-        self.to_numpy_positions_mask_impl::<u64>(py, piece)
-    }
-
-    /// Get a NumPy float32 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float32 values (0.0 or 1.0) where 1.0 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_float32(&self, py: Python, piece: Piece) -> Py<PyArray1<f32>> {
-        self.to_numpy_positions_mask_impl::<f32>(py, piece)
-    }
-
-    /// Get a NumPy float64 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float64 values (0.0 or 1.0) where 1.0 indicates a valid position for adding the Piece.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_positions_mask_float64(&self, py: Python, piece: Piece) -> Py<PyArray1<f64>> {
-        self.to_numpy_positions_mask_impl::<f64>(py, piece)
-    }
-
-    /// Get a NumPy float16 ndarray mask indicating valid positions for adding the given Piece.
-    /// 
-    /// Arguments:
-    /// - piece: The Piece to check for valid positions.
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float16 values (0.0 or 1.0) where 1.0 indicates a valid position for adding the Piece.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn to_numpy_positions_mask_float16(&self, py: Python, piece: Piece) -> Py<PyArray1<F16>> {
-        self.to_numpy_positions_mask_impl::<F16>(py, piece)
     }
 
     /// Get the default NumPy ndarray representation of the HexEngine's block states.
@@ -4728,112 +3175,7 @@ impl HexEngine {
     /// - numpy.ndarray: A 1D NumPy array of boolean values representing the block states.
     #[cfg(feature = "numpy")]
     pub fn to_numpy_bool(&self, py: Python) -> Py<PyArray1<bool>> {
-        PyArray1::from_vec_bound(py, self.states.clone()).into()
-    }
-
-    /// Get the NumPy ndarray int8 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int8 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int8(&self, py: Python) -> Py<PyArray1<i8>> {
-        Self::to_numpy_engine_impl::<i8>(self, py)
-    }
-
-    /// Get the NumPy ndarray uint8 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint8(&self, py: Python) -> Py<PyArray1<u8>> {
-        Self::to_numpy_engine_impl::<u8>(self, py)
-    }
-
-    /// Get the NumPy ndarray int16 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int16 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int16(&self, py: Python) -> Py<PyArray1<i16>> {
-        Self::to_numpy_engine_impl::<i16>(self, py)
-    }
-
-    /// Get the NumPy ndarray uint16 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint16(&self, py: Python) -> Py<PyArray1<u16>> {
-        Self::to_numpy_engine_impl::<u16>(self, py)
-    }
-
-    /// Get the NumPy ndarray int32 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int32 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int32(&self, py: Python) -> Py<PyArray1<i32>> {
-        Self::to_numpy_engine_impl::<i32>(self, py)
-    }
-
-    /// Get the NumPy ndarray uint32 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint32(&self, py: Python) -> Py<PyArray1<u32>> {
-        Self::to_numpy_engine_impl::<u32>(self, py)
-    }
-
-    /// Get the NumPy ndarray int64 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of int64 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int64(&self, py: Python) -> Py<PyArray1<i64>> {
-        Self::to_numpy_engine_impl::<i64>(self, py)
-    }
-
-    /// Get the NumPy ndarray uint64 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint64(&self, py: Python) -> Py<PyArray1<u64>> {
-        Self::to_numpy_engine_impl::<u64>(self, py)
-    }
-
-    /// Get the NumPy ndarray float32 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_float32(&self, py: Python) -> Py<PyArray1<f32>> {
-        Self::to_numpy_engine_impl::<f32>(self, py)
-    }
-
-    /// Get the NumPy ndarray float64 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_float64(&self, py: Python) -> Py<PyArray1<f64>> {
-        Self::to_numpy_engine_impl::<f64>(self, py)
-    }
-
-    /// Get the NumPy ndarray float16 representation of the HexEngine's block states.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of float16 values (0.0 or 1.0) representing the block states.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn to_numpy_float16(&self, py: Python) -> Py<PyArray1<F16>> {
-        Self::to_numpy_engine_impl::<F16>(self, py)
+        PyArray1::from_vec(py, self.states.clone()).into()
     }
 
     /// Create a NumPy ndarray boolean representation of the HexEngine's block states
@@ -4880,7 +3222,7 @@ impl HexEngine {
         let ptr = self.states.as_ptr();
         let len = self.states.len();
         let vec = unsafe { Vec::from_raw_parts(ptr as *mut bool, len, len) };
-        PyArray1::from_vec_bound(py, vec).into()
+        PyArray1::from_vec(py, vec).into()
     }
 
     /// Construct a HexEngine from a NumPy ndarray boolean representation of the block states
@@ -4972,349 +3314,6 @@ impl HexEngine {
         let slice = unsafe { array.as_slice().unwrap() };
         let vec: Vec<bool> = slice.to_vec();
         unsafe { HexEngine::from_raw_state(vec) }
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int8 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int8 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int8(array: Bound<'_, PyArray1<i8>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<i8>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int8 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int8 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_int8_unchecked(array: Bound<'_, PyArray1<i8>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<i8>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint8 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint8(array: Bound<'_, PyArray1<u8>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<u8>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint8 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint8 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_uint8_unchecked(array: Bound<'_, PyArray1<u8>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<u8>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int16 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int16 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int16(array: Bound<'_, PyArray1<i16>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<i16>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int16 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int16 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_int16_unchecked(array: Bound<'_, PyArray1<i16>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<i16>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint16 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint16(array: Bound<'_, PyArray1<u16>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<u16>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint16 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint16 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_uint16_unchecked(array: Bound<'_, PyArray1<u16>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<u16>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int32 representation of the block states.
-    ///
-    /// Arguments:
-    /// - array: A 1D NumPy array of int32 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int32(array: Bound<'_, PyArray1<i32>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<i32>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int32 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int32 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_int32_unchecked(array: Bound<'_, PyArray1<i32>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<i32>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint32 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint32(array: Bound<'_, PyArray1<u32>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<u32>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint32 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint32 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_uint32_unchecked(array: Bound<'_, PyArray1<u32>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<u32>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int64 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int64 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_int64(array: Bound<'_, PyArray1<i64>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<i64>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray int64 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of int64 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_int64_unchecked(array: Bound<'_, PyArray1<i64>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<i64>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint64 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (0 is false, all others true).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_uint64(array: Bound<'_, PyArray1<u64>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<u64>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray uint64 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of uint64 values (0 or 1) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_uint64_unchecked(array: Bound<'_, PyArray1<u64>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<u64>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray float32 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0.0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_float32(array: Bound<'_, PyArray1<f32>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<f32>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray float32 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of float32 values (0.0 or 1.0) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_float32_unchecked(array: Bound<'_, PyArray1<f32>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<f32>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray float64 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0.0 are true, else false).
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_float64(array: Bound<'_, PyArray1<f64>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<f64>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray float64 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of float64 values (0.0 or 1.0) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub unsafe fn from_numpy_float64_unchecked(array: Bound<'_, PyArray1<f64>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<f64>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray float16 representation of the block states.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of float16 values (0.0 or 1.0) representing the block states.
-    /// Returns:
-    /// - HexEngine: A new HexEngine instance initialized with the provided block states (values > 0.0 are true, else false).
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it may cause a segmentation fault.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn from_numpy_float16(array: Bound<'_, PyArray1<F16>>) -> PyResult<Self> {
-        Self::from_numpy_engine_impl::<F16>(array)
-    }
-
-    /// Construct a HexEngine from a NumPy ndarray float16 representation of the block states without validation.
-    /// 
-    /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
-    /// size and does not perform any checks. It calculates the radius based on the length of the array.
-    /// 
-    /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
-    /// the behavior is undefined and may cause runtime errors or panics down the line.
-    /// 
-    /// Arguments:
-    /// - array: A 1D NumPy array of float16 values (0.0 or 1.0) representing the block states.
-    /// Returns:
-    /// - HexEngine: A HexEngine instance initialized with the given state vector.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it may cause a segmentation fault. Those unintended behaviors
-    /// may still occur even when the arguments to the function are valid.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub unsafe fn from_numpy_float16_unchecked(array: Bound<'_, PyArray1<F16>>) -> Self {
-        Self::from_numpy_engine_unchecked_impl::<F16>(array)
     }
 
     /* ---------------------------------------- HPYHEX PYTHON API ---------------------------------------- */
@@ -5537,6 +3536,7 @@ impl HexEngine {
     /// - memo (dict): A dictionary to keep track of copied objects.
     /// Returns:
     /// - HexEngine: A new HexEngine instance with the same radius and blocks.
+    #[pyo3(signature = (memo=None))]
     pub fn __deepcopy__(&self, memo: Option<&pyo3::Bound<'_, PyAny>>) -> Self {
         // Check if already copied
         if let Some(m) = memo {
@@ -5553,7 +3553,7 @@ impl HexEngine {
         };
         // Store in memo
         if let Some(m) = memo {
-            let _ = m.set_item(self as *const _ as usize, Python::with_gil(|py| Py::new(py, new_instance.clone()).unwrap()));
+            let _ = m.set_item(self as *const _ as usize, Python::attach(|py| Py::new(py, new_instance.clone()).unwrap()));
         }
         new_instance
     }
@@ -5697,7 +3697,7 @@ impl HexEngine {
         if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
             for i in 0..7 {
                 if piece_ref.states()[i] {
-                    let (hex_i, hex_k) = Python::with_gil(|_py| {
+                    let (hex_i, hex_k) = Python::attach(|_py| {
                         let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
                         let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
@@ -5713,8 +3713,8 @@ impl HexEngine {
             }
             Ok(true)
         } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py| {
-                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
+            Python::attach(|py| {
+                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone_ref(py);
                 let piece_ref = piece_obj.borrow(py);
                 for i in 0..7 {
                     if piece_ref.states()[i] {
@@ -5758,7 +3758,7 @@ impl HexEngine {
         if let Ok(piece_ref) = piece.extract::<PyRef<Piece>>() {
             for i in 0..7 {
                 if piece_ref.states()[i] {
-                    let (placed_i, placed_k) = Python::with_gil(|_py| {
+                    let (placed_i, placed_k) = Python::attach(|_py| {
                         let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
                         let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
@@ -5773,8 +3773,8 @@ impl HexEngine {
             }
             Ok(())
         } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py| {
-                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
+            Python::attach(|py| {
+                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone_ref(py);
                 let piece_ref = piece_obj.borrow(py);
                 for i in 0..7 {
                     if piece_ref.states()[i] {
@@ -5824,7 +3824,7 @@ impl HexEngine {
             }
             Ok(positions)
         } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py|
+            Python::attach(|py|
                 {
                     let piece = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].borrow(py);
                     let mut positions = Vec::new();
@@ -5963,7 +3963,7 @@ impl HexEngine {
         let mut pattern = 0u8;
         for i in 0..7 {
             pattern <<= 1;
-            let (coo_i, coo_k) = Python::with_gil(|_py| {
+            let (coo_i, coo_k) = Python::attach(|_py| {
                 let pos = &Piece::positions[i];
                 let base = if let Ok(h) = coo.extract::<PyRef<Hex>>() {
                     (h.i, h.k)
@@ -6000,7 +4000,7 @@ impl HexEngine {
             let piece_piece = piece.extract::<Piece>()?;
             for i in 0..7 {
                 if piece_ref.states()[i] {
-                    let (placed_i, placed_k) = Python::with_gil(|_py| {
+                    let (placed_i, placed_k) = Python::attach(|_py| {
                         let pos = &Piece::positions[i];
                         let coo_val = coo.extract::<PyRef<Hex>>().ok();
                         let base = if let Some(c) = coo_val { (c.i, c.k) } else if let Ok(tuple) = coo.extract::<(i32, i32)>() { (tuple.0, tuple.1) } else { (0, 0) };
@@ -6015,8 +4015,8 @@ impl HexEngine {
             }
             Ok(if total_possible > 0 { total_populated as f64 / total_possible as f64 } else { 0.0 })
         } else if let Ok(state) = piece.extract::<u8>() {
-            Python::with_gil(|py| {
-                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone();
+            Python::attach(|py| {
+                let piece_obj = PIECE_CACHE.get_or_init(|| initialize_piece_cache())[state as usize].clone_ref(py);
                 let piece_ref = piece_obj.borrow(py);
                 // let piece = Piece {state: state};
                 let mut total_possible = 0;
@@ -6125,6 +4125,206 @@ impl HexEngine {
         Ok(result)
     }
 }
+
+/// NumPy conversions of HexEngine block states
+/// 
+/// The full list is:
+/// - `to_numpy_{dtype}`
+/// - `from_numpy_{dtype}`
+/// - `from_numpy_{dtype}_unchecked`
+/// - `to_numpy_positions_mask_{dtype}`
+/// - `pair_vec_to_numpy_{dtype}`
+///
+/// The boolean conversions are written out in the main `#[pymethods]` block because they copy states directly.
+#[cfg(feature = "numpy")]
+macro_rules! engine_numpy_methods {
+    ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
+        #[pymethods]
+        impl HexEngine { $(
+            #[doc = concat!("Get the NumPy ndarray ", stringify!($name), " representation of the HexEngine's block states.")]
+            ///
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array of ", stringify!($name), " values", dtype_doc!(values, $kind), " representing the block states.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<to_numpy_ $name>](&self, py: Python) -> Py<PyArray1<$ty>> {
+                Self::to_numpy_engine_impl::<$ty>(self, py)
+            }
+
+            #[doc = concat!("Construct a HexEngine from a NumPy ndarray ", stringify!($name), " representation of the block states.")]
+            ///
+            /// Arguments:
+            #[doc = concat!("- array: A 1D NumPy array of ", stringify!($name), " values", dtype_doc!(values, $kind), " representing the block states.")]
+            /// Returns:
+            #[doc = concat!(
+                "- HexEngine: A new HexEngine instance initialized with the provided block states", dtype_doc!(truth, $kind), ".",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<from_numpy_ $name>](array: Bound<'_, PyArray1<$ty>>) -> PyResult<Self> {
+                Self::from_numpy_engine_impl::<$ty>(array)
+            }
+
+            #[doc = concat!("Construct a HexEngine from a NumPy ndarray ", stringify!($name), " representation of the block states without validation.")]
+            ///
+            /// This unsafe method assumes that the provided NumPy array length corresponds to a valid hexagonal grid
+            /// size and does not perform any checks. It calculates the radius based on the length of the array.
+            ///
+            /// If the length of the array does not correspond to a valid hexagonal grid size or is zero,
+            /// the behavior is undefined and may cause runtime errors or panics down the line.
+            ///
+            /// Arguments:
+            #[doc = concat!("- array: A 1D NumPy array of ", stringify!($name), " values", dtype_doc!(values, $kind), " representing the block states.")]
+            /// Returns:
+            #[doc = concat!(
+                "- HexEngine: A HexEngine instance initialized with the given state vector.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub unsafe fn [<from_numpy_ $name _unchecked>](array: Bound<'_, PyArray1<$ty>>) -> Self {
+                Self::from_numpy_engine_unchecked_impl::<$ty>(array)
+            }
+
+            #[doc = concat!("Get a NumPy ", stringify!($name), " ndarray mask indicating valid positions for adding the given Piece.")]
+            ///
+            /// Arguments:
+            /// - piece: The Piece to check for valid positions.
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array of ", stringify!($name), " values", dtype_doc!(values, $kind),
+                " where ", dtype_doc!(one, $kind), " indicates a valid position for adding the Piece.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<to_numpy_positions_mask_ $name>](&self, py: Python, piece: Piece) -> Py<PyArray1<$ty>> {
+                self.to_numpy_positions_mask_impl::<$ty>(py, piece)
+            }
+
+            #[doc = concat!(
+                "Convert a list of (value, Hex) pairs into a NumPy ndarray of ", stringify!($name),
+                " aligned with the hexagonal grid of the specified radius.",
+            )]
+            ///
+            /// The resulting ndarray has a length corresponding to the total number of blocks in the grid,
+            /// with values placed at indices determined by the Hex coordinates. Positions without corresponding values
+            /// are filled with sentinel values.
+            ///
+            #[doc = dtype_doc!(sentinel, $kind, $name, $ty)]
+            ///
+            /// Arguments:
+            /// - radius: The radius of the hexagonal grid.
+            /// - values: A list of (value, Hex) pairs.
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array representing the values aligned with the hexagonal grid, with sentinel values for unfilled positions.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<pair_vec_to_numpy_ $name>](py: Python, radius: usize, values: Bound<'_, PyList>) -> PyResult<Py<PyArray1<$ty>>> {
+                Self::pair_vec_to_numpy_impl::<$ty>(py, radius, dtype_sentinel!($kind, $ty), values)
+            }
+        )* }
+    }};
+}
+
+#[cfg(feature = "numpy")]
+with_numpy_dtypes!(engine_numpy_methods; [int8 uint8 int16 uint16 int32 uint32 int64 uint64 float16 float32 float64]);
+
+/// `HexEngine.to_numpy_adjacency_matrix_{dtype}` for all dtypes.
+#[cfg(feature = "numpy")]
+macro_rules! engine_adjacency_matrix_methods {
+    ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
+        #[pymethods]
+        impl HexEngine { $(
+            #[doc = concat!("Get a NumPy adjacency matrix as a 2D ndarray of ", dtype_doc!(label, $kind, $name), " values.")]
+            ///
+            /// The adjacency matrix represents the connections between blocks in a hexagonal grid of the specified radius.
+            #[doc = concat!(
+                "Each entry (i, j) in the matrix is ", dtype_doc!(one, $kind), " if block i is adjacent to block j, and ",
+                dtype_doc!(zero, $kind), " otherwise.",
+            )]
+            ///
+            /// The adjacency matrix is a 2D array representation of the connections (edges) between nodes (blocks) in a graph.
+            #[doc = concat!(
+                "In the context of a hexagonal grid, each block is a node, and an entry at (i, j) is ", dtype_doc!(one, $kind),
+                " if block i is adjacent to block j.",
+            )]
+            /// This representation is useful for applying graph algorithms for postprocessing, or applying convolution-like operations
+            /// over the grid structure.
+            ///
+            /// Arguments:
+            /// - radius: The radius of the hexagonal grid.
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 2D NumPy array representing the adjacency matrix of the hexagonal grid of the given radius.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<to_numpy_adjacency_matrix_ $name>](py: Python, radius: usize) -> Py<PyArray2<$ty>> {
+                Self::to_numpy_adjacency_matrix_impl::<$ty>(py, radius)
+            }
+        )* }
+    }};
+}
+
+#[cfg(feature = "numpy")]
+with_numpy_dtypes!(engine_adjacency_matrix_methods; [bool int8 uint8 int16 uint16 int32 uint32 int64 uint64 float16 float32 float64]);
+
+/// Index-valued NumPy structures of HexEngine
+/// 
+/// This contains adjacency list and correspondence lists. 
+#[cfg(feature = "numpy")]
+macro_rules! engine_index_list_methods {
+    ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
+        #[pymethods]
+        impl HexEngine { $(
+            #[doc = concat!("Get a NumPy adjacency list as a 2D ndarray of ", stringify!($name), ".")]
+            ///
+            /// The adjacency list represents the connections between blocks in a hexagonal grid of the specified radius.
+            /// Each row corresponds to a block, and contains up to six indices of adjacent blocks.
+            /// If a block has fewer than six neighbors (e.g., edge blocks), the remaining entries are filled with a sentinel value.
+            ///
+            #[doc = dtype_doc!(sentinel, $kind, $name, $ty)]
+            ///
+            /// Arguments:
+            /// - radius: The radius of the hexagonal grid.
+            /// Returns:
+            /// - numpy.ndarray: A 2D NumPy array representing the adjacency list of the hexagonal grid of the given radius.
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<to_numpy_adjacency_list_ $name>](py: Python, radius: usize) -> Py<PyArray2<$ty>> {
+                Self::to_numpy_adjacency_list_impl::<$ty>(py, radius)
+            }
+
+            #[doc = concat!("Get a NumPy correspondence list as a 1D ndarray of ", stringify!($name), ".")]
+            ///
+            /// The correspondence list maps each block index to another index shifted by a given Hex offset.
+            /// If the shifted index is out of bounds, a sentinel value is used.
+            ///
+            #[doc = dtype_doc!(sentinel, $kind, $name, $ty)]
+            ///
+            /// Arguments:
+            /// - radius: The radius of the hexagonal grid.
+            /// - shift: The Hex offset to apply to each block's coordinate.
+            /// Returns:
+            /// - numpy.ndarray: A 1D NumPy array representing the correspondence list of the hexagonal grid of the given radius and shift.
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<to_numpy_correspondence_list_ $name>](py: Python, radius: usize, shift: &Hex) -> Py<PyArray1<$ty>> {
+                Self::to_numpy_correspondence_list_impl::<$ty>(py, radius, shift)
+            }
+        )* }
+    }};
+}
+
+#[cfg(feature = "numpy")]
+with_numpy_dtypes!(engine_index_list_methods; [uint16 uint32 uint64 int16 int32 int64]);
 
 #[pyclass]
 /// An iterator over HexEngine, returning states as booleans.
@@ -6247,8 +4447,8 @@ static REVERSE_PIECE_MAP: Lazy<HashMap<u8, &'static str>> = Lazy::new(|| {
 impl PieceFactory {
     #[classattr]
     /// Mapping from piece name to byte value
-    fn pieces(py: pyo3::Python<'_>) -> pyo3::PyObject {
-        let dict = pyo3::types::PyDict::new_bound(py);
+    fn pieces(py: pyo3::Python<'_>) -> pyo3::Py<pyo3::PyAny> {
+        let dict = pyo3::types::PyDict::new(py);
         for (&k, &v) in PIECE_MAP.iter() {
             dict.set_item(k, v).unwrap();
         }
@@ -6257,8 +4457,8 @@ impl PieceFactory {
 
     #[classattr]
     /// Reverse mapping from byte value to piece name
-    fn reverse_pieces(py: pyo3::Python<'_>) -> pyo3::PyObject {
-        let dict = pyo3::types::PyDict::new_bound(py);
+    fn reverse_pieces(py: pyo3::Python<'_>) -> pyo3::Py<pyo3::PyAny> {
+        let dict = pyo3::types::PyDict::new(py);
         for (&k, &v) in REVERSE_PIECE_MAP.iter() {
             dict.set_item(k, v).unwrap();
         }
@@ -6505,8 +4705,7 @@ impl PieceFactory {
 /// 
 /// For specific dtype, the methods are named move_with_numpy_mask_{dtype} and move_with_numpy_max_{dtype},
 /// where {dtype} can be 'bool', 'int8', etc.
-#[pyclass]
-#[derive(Clone)]
+#[pyclass(from_py_object)]
 pub struct Game {
     #[pyo3(get, set)]
     _Game__engine: Py<HexEngine>,
@@ -6518,6 +4717,18 @@ pub struct Game {
     _Game__turn: u64,
     #[pyo3(get, set)]
     _Game__end: bool,
+}
+
+impl Clone for Game {
+    fn clone(&self) -> Self {
+        Python::attach(|py| Game {
+            _Game__engine: self._Game__engine.clone_ref(py),
+            _Game__queue: self._Game__queue.clone(),
+            _Game__score: self._Game__score,
+            _Game__turn: self._Game__turn,
+            _Game__end: self._Game__end,
+        })
+    }
 }
 
 #[cfg(feature = "numpy")]
@@ -6535,7 +4746,7 @@ where
             arr.push(b);
         }
     }
-    PyArray1::from_vec_bound(py, arr).unbind()
+    PyArray1::from_vec(py, arr).unbind()
 }
 
 #[cfg(feature = "numpy")]
@@ -6571,7 +4782,7 @@ where
     }
 
     let array = Array2::from_shape_vec(shape, vec).unwrap();
-    PyArray2::from_owned_array_bound(py, array).unbind()
+    PyArray2::from_owned_array(py, array).unbind()
 }
 
 #[allow(non_snake_case)]
@@ -6593,7 +4804,7 @@ impl Game {
         T: BitScalar + Copy + numpy::Element,
     {
         let engine = self._Game__engine.borrow(py);
-        let engine_array: &PyArray1<T> = engine.to_numpy_engine_unboxed_impl::<T>(py);
+        let engine_array = engine.to_numpy_engine_unboxed_impl::<T>(py);
         let engine_slice = unsafe { engine_array.as_slice().unwrap() };
 
         let mut arr = Vec::with_capacity(engine_slice.len() + self._Game__queue.len() * 7);
@@ -6604,7 +4815,7 @@ impl Game {
                 arr.push(b);
             }
         }
-        PyArray1::from_vec_bound(py, arr).unbind()
+        PyArray1::from_vec(py, arr).unbind()
     }
 
     /// Create a Game instance from a NumPy ndarray representation with explicit radius.
@@ -6653,7 +4864,7 @@ impl Game {
             _Game__turn: 0,
             _Game__end: false,
         };
-        Ok(Py::new(py, game)?.to_owned())
+        Py::new(py, game)
     }
 
     /// Create a Game instance from a NumPy ndarray representation with explicit queue length.
@@ -6704,7 +4915,7 @@ impl Game {
             _Game__turn: 0,
             _Game__end: false,
         };
-        Ok(Py::new(py, game)?.to_owned())
+        Py::new(py, game)
     }
 
     /// Make a move in the game using a NumPy ndarray mask.
@@ -6904,7 +5115,7 @@ impl Game {
         // Add engine binary representation
         let engine_vec: Vec<u8> = {(&*self._Game__engine.borrow(py)).into()};
         vec.extend_from_slice(&engine_vec);
-        pyo3::types::PyBytes::new_bound(py, &vec)
+        pyo3::types::PyBytes::new(py, &vec)
     }
 
     /// Deserialize a byte vector into a Game instance according to the format used by the Rust hpyhex-rs crate.
@@ -6922,7 +5133,7 @@ impl Game {
     /// - Game: A Game instance reconstructed from the byte vector.
     #[staticmethod]
     pub fn hpyhex_rs_deserialize<'py>(py: Python<'py>, data: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let bytes: &pyo3::types::PyBytes = data.extract()?;
+        let bytes = data.cast::<pyo3::types::PyBytes>()?;
         let slice = bytes.as_bytes();
         if slice.len() < 12 {
             return Err(pyo3::exceptions::PyValueError::new_err("Data too short to deserialize Game"));
@@ -6952,418 +5163,6 @@ impl Game {
     }
 
     /* ---------------------------------------- NUMPY ---------------------------------------- */
-    /// Make a move in the game using a NumPy ndarray boolean mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A value of true in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one true value in the entire mask. If there are multiple or no true values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one true value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_bool(&mut self, py: Python, array: Bound<'_, PyArray2<bool>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<bool>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy bool ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_bool(&mut self, py: Python, array: Bound<'_, PyArray2<bool>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<bool>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray int8 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_int8(&mut self, py: Python, array: Bound<'_, PyArray2<i8>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<i8>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy int8 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_int8(&mut self, py: Python, array: Bound<'_, PyArray2<i8>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<i8>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray uint8 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_uint8(&mut self, py: Python, array: Bound<'_, PyArray2<u8>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<u8>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy uint8 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_uint8(&mut self, py: Python, array: Bound<'_, PyArray2<u8>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<u8>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray int16 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_int16(&mut self, py: Python, array: Bound<'_, PyArray2<i16>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<i16>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy int16 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_int16(&mut self, py: Python, array: Bound<'_, PyArray2<i16>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<i16>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray uint16 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_uint16(&mut self, py: Python, array: Bound<'_, PyArray2<u16>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<u16>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy uint16 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_uint16(&mut self, py: Python, array: Bound<'_, PyArray2<u16>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<u16>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray int32 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_int32(&mut self, py: Python, array: Bound<'_, PyArray2<i32>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<i32>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy int32 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_int32(&mut self, py: Python, array: Bound<'_, PyArray2<i32>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<i32>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray uint32 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_uint32(&mut self, py: Python, array: Bound<'_, PyArray2<u32>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<u32>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy uint32 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_uint32(&mut self, py: Python, array: Bound<'_, PyArray2<u32>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<u32>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray float16 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn move_with_numpy_mask_float16(&mut self, py: Python, array: Bound<'_, PyArray2<F16>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<F16>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy float16 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn move_with_numpy_max_float16(&mut self, py: Python, array: Bound<'_, PyArray2<F16>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<F16>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray float32 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_float32(&mut self, py: Python, array: Bound<'_, PyArray2<f32>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<f32>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy float32 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_float32(&mut self, py: Python, array: Bound<'_, PyArray2<f32>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<f32>(py, array)
-    }
-
-    /// Make a move in the game using a NumPy ndarray float64 mask.
-    /// The mask should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// A non-zero value in the mask indicates the position where the piece should be placed.
-    /// 
-    /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
-    /// and there MUST be exactly one non-zero value in the entire mask. If there are multiple or no non-zero values,
-    /// an error will be raised.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one non-zero value,
-    ///   or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_mask_float64(&mut self, py: Python, array: Bound<'_, PyArray2<f64>>) -> PyResult<bool> {
-        self.move_with_numpy_mask::<f64>(py, array)
-    }
-
-    /// Make a move in the game by selecting the maximum value in a NumPy float64 ndarray.
-    /// The array should be a 2D array where the first dimension corresponds to the piece index
-    /// in the queue and the second dimension corresponds to the coordinate index on the engine.
-    /// The position of the maximum value in the array indicates where the piece should be placed.
-    /// 
-    /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
-    /// If there are multiple maximum values, the first occurrence will be used.
-    /// 
-    /// Arguments:
-    /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
-    /// Returns:
-    /// - bool: True if the move was successfully made, False otherwise.
-    /// Raises:
-    /// - ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.
-    #[cfg(feature = "numpy")]
-    pub fn move_with_numpy_max_float64(&mut self, py: Python, array: Bound<'_, PyArray2<f64>>) -> PyResult<bool> {
-        self.move_with_numpy_max::<f64>(py, array)
-    }
-
     
     /// Get the NumPy ndarray boolean representation of the entire Game state.
     /// Because there is no way for engine and queue to have the same shape,
@@ -7374,493 +5173,6 @@ impl Game {
     #[cfg(feature = "numpy")]
     pub fn to_numpy<'py>(&self, py: Python<'py>) -> Py<PyArray1<bool>> {
         self.game_to_numpy_impl::<bool>(py)
-    }
-
-    /// Get the NumPy ndarray boolean representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_bool<'py>(&self, py: Python<'py>) -> Py<PyArray1<bool>> {
-        self.game_to_numpy_impl::<bool>(py)
-    }
-
-    /// Get the NumPy ndarray int8 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int8<'py>(&self, py: Python<'py>) -> Py<PyArray1<i8>> {
-        self.game_to_numpy_impl::<i8>(py)
-    }
-
-    /// Get the NumPy ndarray uint8 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint8<'py>(&self, py: Python<'py>) -> Py<PyArray1<u8>> {
-        self.game_to_numpy_impl::<u8>(py)
-    }
-
-    /// Get the NumPy ndarray int16 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int16<'py>(&self, py: Python<'py>) -> Py<PyArray1<i16>> {
-        self.game_to_numpy_impl::<i16>(py)
-    }
-
-    /// Get the NumPy ndarray uint16 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint16<'py>(&self, py: Python<'py>) -> Py<PyArray1<u16>> {
-        self.game_to_numpy_impl::<u16>(py)
-    }
-
-    /// Get the NumPy ndarray int32 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int32<'py>(&self, py: Python<'py>) -> Py<PyArray1<i32>> {
-        self.game_to_numpy_impl::<i32>(py)
-    }
-
-    /// Get the NumPy ndarray uint32 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint32<'py>(&self, py: Python<'py>) -> Py<PyArray1<u32>> {
-        self.game_to_numpy_impl::<u32>(py)
-    }
-
-    /// Get the NumPy ndarray int64 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_int64<'py>(&self, py: Python<'py>) -> Py<PyArray1<i64>> {
-        self.game_to_numpy_impl::<i64>(py)
-    }
-
-    /// Get the NumPy ndarray uint64 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_uint64<'py>(&self, py: Python<'py>) -> Py<PyArray1<u64>> {
-        self.game_to_numpy_impl::<u64>(py)
-    }
-
-    /// Get the NumPy ndarray float32 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_float32<'py>(&self, py: Python<'py>) -> Py<PyArray1<f32>> {
-        self.game_to_numpy_impl::<f32>(py)
-    }
-
-    /// Get the NumPy ndarray float64 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D array representing the engine followed by the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    #[cfg(feature = "numpy")]
-    pub fn to_numpy_float64<'py>(&self, py: Python<'py>) -> Py<PyArray1<f64>> {
-        self.game_to_numpy_impl::<f64>(py)
-    }
-
-    /// Get the NumPy ndarray float16 representation of the entire Game state.
-    /// Because there is no way for engine and queue to have the same shape,
-    /// the returned array is a 1D NumPy array representing the game engine followed by
-    /// the queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn to_numpy_float16<'py>(&self, py: Python<'py>) -> Py<PyArray1<F16>> {
-        self.game_to_numpy_impl::<F16>(py)
-    }
-
-    /// Create a Game instance from a NumPy ndarray bool representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_bool<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<bool>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray bool representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_bool<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<bool>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<bool>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int8 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_int8<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<i8>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int8 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_int8<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i8>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<i8>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint8 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_uint8<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<u8>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint8 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_uint8<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u8>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<u8>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int16 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_int16<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<i16>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int16 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_int16<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i16>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<i16>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint16 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_uint16<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<u16>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint16 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_uint16<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u16>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<u16>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int32 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_int32<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<i32>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int32 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_int32<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i32>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<i32>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint32 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_uint32<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<u32>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint32 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_uint32<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u32>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<u32>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int64 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_int64<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<i64>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray int64 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_int64<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<i64>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<i64>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint64 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_uint64<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<u64>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray uint64 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_uint64<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<u64>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<u64>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray float32 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_float32<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<f32>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray float32 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_float32<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<f32>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<f32>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray float64 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_float64<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<f64>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray float64 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    #[cfg(feature = "numpy")]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_float64<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<f64>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<f64>(py, radius, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray float16 representation with explicit queue length.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - length (usize): The length of the piece queue.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn from_numpy_with_queue_length_float16<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_queue_length_impl::<F16>(py, length, arr)
-    }
-
-    /// Create a Game instance from a NumPy ndarray float16 representation with explicit radius.
-    /// The input array should represent the engine followed by the queue.
-    /// 
-    /// Arguments:
-    /// - radius (usize): The radius of the hexagonal grid.
-    /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
-    /// Returns:
-    /// - Game: A new Game instance initialized from the provided NumPy array.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    #[staticmethod]
-    pub fn from_numpy_with_radius_float16<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<F16>>) -> PyResult<Py<Game>>{
-        Self::game_from_numpy_with_radius_impl::<F16>(py, radius, arr)
     }
 
     /// Get the flat NumPy ndarray boolean representation of the Game queue.
@@ -7879,234 +5191,6 @@ impl Game {
     #[cfg(feature = "numpy")]
     pub fn queue_to_numpy_stacked(&self, py: Python) -> Py<PyArray2<bool>> {
         queue_to_numpy_stacked_impl::<bool>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray boolean representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_bool_flat(&self, py: Python) -> Py<PyArray1<bool>> {
-        queue_to_numpy_flat_impl::<bool>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray boolean representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_bool_stacked(&self, py: Python) -> Py<PyArray2<bool>> {
-        queue_to_numpy_stacked_impl::<bool>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray int8 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int8_flat(&self, py: Python) -> Py<PyArray1<i8>> {
-        queue_to_numpy_flat_impl::<i8>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray int8 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int8_stacked(&self, py: Python) -> Py<PyArray2<i8>> {
-        queue_to_numpy_stacked_impl::<i8>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray uint8 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint8_flat(&self, py: Python) -> Py<PyArray1<u8>> {
-        queue_to_numpy_flat_impl::<u8>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray uint8 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint8_stacked(&self, py: Python) -> Py<PyArray2<u8>> {
-        queue_to_numpy_stacked_impl::<u8>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray int16 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int16_flat(&self, py: Python) -> Py<PyArray1<i16>> {
-        queue_to_numpy_flat_impl::<i16>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray int16 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int16_stacked(&self, py: Python) -> Py<PyArray2<i16>> {
-        queue_to_numpy_stacked_impl::<i16>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray uint16 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint16_flat(&self, py: Python) -> Py<PyArray1<u16>> {
-        queue_to_numpy_flat_impl::<u16>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray uint16 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint16_stacked(&self, py: Python) -> Py<PyArray2<u16>> {
-        queue_to_numpy_stacked_impl::<u16>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray int32 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int32_flat(&self, py: Python) -> Py<PyArray1<i32>> {
-        queue_to_numpy_flat_impl::<i32>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray int32 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int32_stacked(&self, py: Python) -> Py<PyArray2<i32>> {
-        queue_to_numpy_stacked_impl::<i32>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray uint32 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint32_flat(&self, py: Python) -> Py<PyArray1<u32>> {
-        queue_to_numpy_flat_impl::<u32>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray uint32 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint32_stacked(&self, py: Python) -> Py<PyArray2<u32>> {
-        queue_to_numpy_stacked_impl::<u32>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray int64 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int64_flat(&self, py: Python) -> Py<PyArray1<i64>> {
-        queue_to_numpy_flat_impl::<i64>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray int64 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_int64_stacked(&self, py: Python) -> Py<PyArray2<i64>> {
-        queue_to_numpy_stacked_impl::<i64>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray uint64 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint64_flat(&self, py: Python) -> Py<PyArray1<u64>> {
-        queue_to_numpy_flat_impl::<u64>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray uint64 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_uint64_stacked(&self, py: Python) -> Py<PyArray2<u64>> {
-        queue_to_numpy_stacked_impl::<u64>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray float32 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_float32_flat(&self, py: Python) -> Py<PyArray1<f32>> {
-        queue_to_numpy_flat_impl::<f32>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray float32 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_float32_stacked(&self, py: Python) -> Py<PyArray2<f32>> {
-        queue_to_numpy_stacked_impl::<f32>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray float64 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_float64_flat(&self, py: Python) -> Py<PyArray1<f64>> {
-        queue_to_numpy_flat_impl::<f64>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray float64 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    #[cfg(feature = "numpy")]
-    pub fn queue_to_numpy_float64_stacked(&self, py: Python) -> Py<PyArray2<f64>> {
-        queue_to_numpy_stacked_impl::<f64>(py, &self._Game__queue)
-    }
-
-    /// Get the flat NumPy ndarray float16 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn queue_to_numpy_float16_flat(&self, py: Python) -> Py<PyArray1<F16>> {
-        queue_to_numpy_flat_impl::<F16>(py, &self._Game__queue)
-    }
-
-    /// Get the stacked NumPy ndarray float16 representation of the Game queue.
-    /// 
-    /// Returns:
-    /// - numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.
-    /// Warning:
-    /// - The 'half' feature, which add support for float16, is still experimental and may not be stable. On machines that does
-    /// not support float16 or installed with a version of numpy that does not support float16, this function may lead to
-    /// undefined behavior or crashes. Testing show that on some systems, this can result in memory misinterpretation issues
-    /// causing incorrect values to be read, and on other systems, it cause the entire program to halt but not crash.
-    /// Use with caution.
-    #[cfg(all(feature = "numpy", feature = "half"))]
-    pub fn queue_to_numpy_float16_stacked(&self, py: Python) -> Py<PyArray2<F16>> {
-        queue_to_numpy_stacked_impl::<F16>(py, &self._Game__queue)
     }
 
     /* ------------------------------------- HPYHEX-RS ------------------------------------- */
@@ -8178,6 +5262,7 @@ impl Game {
     /// - ValueError: If the engine radius is less than 2 or if the queue size is less than 1.
     /// - TypeError: If the engine is not a HexEngine instance or an integer, or if the queue is not a list of Piece instances or an integer, or if initial_turn or initial_score is not a non-negative integer.
     #[new]
+    #[pyo3(signature = (engine, queue, initial_turn=None, initial_score=None))]
     pub fn new(
         engine: &pyo3::Bound<'_, pyo3::PyAny>,
         queue: &pyo3::Bound<'_, pyo3::PyAny>,
@@ -8404,7 +5489,7 @@ impl Game {
     /// - queue (list[Piece]): The list of pieces currently in the queue.
     #[getter]
     fn queue<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        let list = PyList::empty_bound(py);
+        let list = PyList::empty(py);
         for piece in &self._Game__queue {
             match Py::new(py, piece.clone()) {
                 Ok(obj) => {
@@ -8418,3 +5503,158 @@ impl Game {
         Ok(list)
     }
 }
+
+/// NumPy conversions of Game state
+/// 
+/// The methods are:
+/// - `to_numpy_{dtype}`
+/// - `queue_to_numpy_{dtype}_{flat,stacked}`
+/// - `from_numpy_with_queue_length_{dtype}`
+/// - `from_numpy_with_radius_{dtype}`
+#[cfg(feature = "numpy")]
+macro_rules! game_numpy_methods {
+    ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
+        #[pymethods]
+        impl Game { $(
+            #[doc = concat!("Get the NumPy ndarray ", dtype_doc!(label, $kind, $name), " representation of the entire Game state.")]
+            /// Because there is no way for engine and queue to have the same shape,
+            /// the returned array is a 1D array representing the engine followed by the queue.
+            ///
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array representing the game engine followed by the queue.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<to_numpy_ $name>]<'py>(&self, py: Python<'py>) -> Py<PyArray1<$ty>> {
+                self.game_to_numpy_impl::<$ty>(py)
+            }
+
+            #[doc = concat!("Get the flat NumPy ndarray ", dtype_doc!(label, $kind, $name), " representation of the Game queue.")]
+            ///
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 1D NumPy array of shape (n * 7,) representing the game queue.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<queue_to_numpy_ $name _flat>](&self, py: Python) -> Py<PyArray1<$ty>> {
+                queue_to_numpy_flat_impl::<$ty>(py, &self._Game__queue)
+            }
+
+            #[doc = concat!("Get the stacked NumPy ndarray ", dtype_doc!(label, $kind, $name), " representation of the Game queue.")]
+            ///
+            /// Returns:
+            #[doc = concat!(
+                "- numpy.ndarray: A 2D NumPy array of shape (n, 7) representing the game queue.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<queue_to_numpy_ $name _stacked>](&self, py: Python) -> Py<PyArray2<$ty>> {
+                queue_to_numpy_stacked_impl::<$ty>(py, &self._Game__queue)
+            }
+
+            #[doc = concat!("Create a Game instance from a NumPy ndarray ", stringify!($name), " representation with explicit queue length.")]
+            /// The input array should represent the engine followed by the queue.
+            ///
+            /// Arguments:
+            /// - length (usize): The length of the piece queue.
+            /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+            /// Returns:
+            #[doc = concat!(
+                "- Game: A new Game instance initialized from the provided NumPy array.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<from_numpy_with_queue_length_ $name>]<'py>(py: Python<'py>, length: usize, arr: Bound<'_, PyArray1<$ty>>) -> PyResult<Py<Game>> {
+                Self::game_from_numpy_with_queue_length_impl::<$ty>(py, length, arr)
+            }
+
+            #[doc = concat!("Create a Game instance from a NumPy ndarray ", stringify!($name), " representation with explicit radius.")]
+            /// The input array should represent the engine followed by the queue.
+            ///
+            /// Arguments:
+            /// - radius (usize): The radius of the hexagonal grid.
+            /// - arr (numpy.ndarray): A 1D NumPy array representing the game engine followed by the queue.
+            /// Returns:
+            #[doc = concat!(
+                "- Game: A new Game instance initialized from the provided NumPy array.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            #[staticmethod]
+            pub fn [<from_numpy_with_radius_ $name>]<'py>(py: Python<'py>, radius: usize, arr: Bound<'_, PyArray1<$ty>>) -> PyResult<Py<Game>> {
+                Self::game_from_numpy_with_radius_impl::<$ty>(py, radius, arr)
+            }
+        )* }
+    }};
+}
+
+#[cfg(feature = "numpy")]
+with_numpy_dtypes!(game_numpy_methods; [bool int8 uint8 int16 uint16 int32 uint32 int64 uint64 float16 float32 float64]);
+
+/// `move_with_numpy_mask_{dtype}` and `move_with_numpy_max_{dtype}`
+#[cfg(feature = "numpy")]
+macro_rules! game_move_methods {
+    ($(($name:ident, $ty:ident, $kind:ident, $cfg:meta))*) => { pastey::paste! {
+        #[pymethods]
+        impl Game { $(
+            #[doc = concat!("Make a move in the game using a NumPy ndarray ", dtype_doc!(label, $kind, $name), " mask.")]
+            /// The mask should be a 2D array where the first dimension corresponds to the piece index
+            /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+            #[doc = concat!("A ", dtype_doc!(selected, $kind), " value in the mask indicates the position where the piece should be placed.")]
+            ///
+            /// The mask MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine,
+            #[doc = concat!(
+                "and there MUST be exactly one ", dtype_doc!(selected, $kind), " value in the entire mask. If there are multiple or no ",
+                dtype_doc!(selected, $kind), " values,",
+            )]
+            /// an error will be raised.
+            ///
+            /// Arguments:
+            /// - array (numpy.ndarray): A 2D NumPy array representing the move mask.
+            /// Returns:
+            /// - bool: True if the move was successfully made, False otherwise.
+            /// Raises:
+            #[doc = concat!(
+                "- ValueError: If the input array shape does not match the expected shape or if the mask does not contain exactly one ",
+                dtype_doc!(selected, $kind), " value,",
+            )]
+            #[doc = concat!(
+                "  or if the move is invalid due to collisions or out-of-bounds placement.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<move_with_numpy_mask_ $name>](&mut self, py: Python, array: Bound<'_, PyArray2<$ty>>) -> PyResult<bool> {
+                self.move_with_numpy_mask::<$ty>(py, array)
+            }
+
+            #[doc = concat!("Make a move in the game by selecting the maximum value in a NumPy ", stringify!($name), " ndarray.")]
+            /// The array should be a 2D array where the first dimension corresponds to the piece index
+            /// in the queue and the second dimension corresponds to the coordinate index on the engine.
+            /// The position of the maximum value in the array indicates where the piece should be placed.
+            ///
+            /// The array MUST be of shape (M, N), where M is the length of the queue and N is the length of the engine.
+            /// If there are multiple maximum values, the first occurrence will be used.
+            ///
+            /// Arguments:
+            /// - array (numpy.ndarray): A 2D NumPy array representing the move values.
+            /// Returns:
+            /// - bool: True if the move was successfully made, False otherwise.
+            /// Raises:
+            #[doc = concat!(
+                "- ValueError: If the input array shape does not match the expected shape or if the move is invalid due to collisions or out-of-bounds placement.",
+                dtype_doc!(warning, $kind),
+            )]
+            #[cfg($cfg)]
+            pub fn [<move_with_numpy_max_ $name>](&mut self, py: Python, array: Bound<'_, PyArray2<$ty>>) -> PyResult<bool> {
+                self.move_with_numpy_max::<$ty>(py, array)
+            }
+        )* }
+    }};
+}
+
+// Numpy dtypes
+#[cfg(feature = "numpy")]
+with_numpy_dtypes!(game_move_methods; [bool int8 uint8 int16 uint16 int32 uint32 float16 float32 float64]);

@@ -37,7 +37,6 @@ build-half:
 
 # Build for all supported python versions
 build-all:
-	@maturin build --release --interpreter python3.8 --out dist/ --features numpy
 	@maturin build --release --interpreter python3.9 --out dist/ --features numpy
 	@maturin build --release --interpreter python3.10 --out dist/ --features numpy
 	@maturin build --release --interpreter python3.11 --out dist/ --features numpy

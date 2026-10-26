@@ -6,7 +6,7 @@ edition = "2024"
 [features]
 default = []
 numpy = ["dep:numpy"]
-half = ["dep:half"]
+half = ["dep:half", "numpy?/half"]
 full = ["numpy", "half"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,10 +16,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 half = { version = "2.7.1", optional = true }
-numpy = { version = "0.21", optional = true }
+numpy = { version = "0.30", optional = true }
 once_cell = "1.21.3"
-pyo3 = { version = "0.21", features = ["extension-module"] }
+pastey = "0.2.3"
+pyo3 = { version = "0.30", features = ["extension-module", "multiple-pymethods"] }
 rand = "0.10.3"
 
 [build-dependencies]
-pyo3-build-config = "0.21"
+pyo3-build-config = "0.30"
